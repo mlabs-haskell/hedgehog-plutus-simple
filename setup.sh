@@ -23,3 +23,8 @@ mv liquidity-bridge.cabal $CABAL_FILE
 sed -i "s|${OLD_GITHUB_LINK}|${NEW_GITHUB_LINK}|g" $CABAL_FILE
 sed -i "s|liquidity-bridge|${PROJECT_NAME}|g" $CABAL_FILE
 sed -i "s|LiquidityBridge|${CLASS_NAME}|g" $CABAL_FILE
+
+# Modify hie.yaml, ci.nix, and integrate.yaml
+sed -i "s|liquidity-bridge|${PROJECT_NAME}|g" hie.yaml
+sed -i "s|liquidity-bridge|${PROJECT_NAME}|g" nix/ci.nix
+sed -i "s|liquidity-bridge|${PROJECT_NAME}|g" .github/workflows/integrate.yaml

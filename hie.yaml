@@ -3,20 +3,5 @@ cradle:
     - path: "./src"
       component: "lib:liquidity-bridge"
 
-    - path: "./liquidity-bridge-server"
-      component: "lib:liquidity-bridge-server-lib"
-
-    - path: "./liquidity-bridge-pab"
-      component: "lib:liquidity-bridge-pab-lib"
-
     - path: "./test"
-      component: "test:liquidity-bridge-pab"
-
-    - path: "./executables/LiquidityBridge"
-      component: "exe:liquidity-bridge"
-
-    - path: "./executables/LiquidityBridgeServer"
-      component: "exe:liquidity-bridge-server"
-
-    - path: "./executables/LiquidityBridgePAB"
-      component: "exe:liquidity-bridge-pab"
+      component: "test:liquidity-bridge"
