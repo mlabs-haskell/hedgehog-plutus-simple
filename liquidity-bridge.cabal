@@ -1,0 +1,275 @@
+cabal-version:      3.0
+name:               liquidity-bridge
+version:            0.1
+synopsis:
+  Ethereum to Cardano LP Liquidity Bridge
+
+description:
+  Transfers LP tokens from Ethereum to Cardano, caching in the tokens on Ethereum and minting new ones for a Cardano dex pair.
+
+homepage:
+  https://github.com/mlabs-haskell/CardStarter-LiquidityBridge
+
+bug-reports:
+  https://github.com/mlabs-haskell/CardStarter-LiquidityBridge
+
+license:
+license-file:
+author:             MLabs
+maintainer:         samuel@mlabs.city
+copyright:          TODO
+category:           CardStarter
+build-type:         Simple
+tested-with:        GHC ==8.10.4
+extra-source-files: README.md
+
+source-repository head
+  type:     git
+  location:
+    https://github.com/mlabs-haskell/CardStarter-LiquidityBridge
+
+-- Common sections
+
+common common-lang
+  ghc-options:
+    -Wall -Wcompat -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wredundant-constraints -Werror
+    -fobject-code -fno-ignore-interface-pragmas
+    -fno-omit-interface-pragmas -fplugin=RecordDotPreprocessor
+
+  build-depends:
+    , base                     ^>=4.14
+    , record-dot-preprocessor
+    , record-hasfield
+
+  default-extensions:
+    NoImplicitPrelude
+    BangPatterns
+    BinaryLiterals
+    ConstraintKinds
+    DataKinds
+    DeriveFunctor
+    DeriveGeneric
+    DeriveTraversable
+    DerivingStrategies
+    DerivingVia
+    DuplicateRecordFields
+    EmptyCase
+    FlexibleContexts
+    FlexibleInstances
+    GADTs
+    GeneralizedNewtypeDeriving
+    HexFloatLiterals
+    ImportQualifiedPost
+    InstanceSigs
+    KindSignatures
+    LambdaCase
+    MultiParamTypeClasses
+    NumericUnderscores
+    OverloadedStrings
+    ScopedTypeVariables
+    StandaloneDeriving
+    TupleSections
+    TypeApplications
+    TypeOperators
+    TypeSynonymInstances
+    UndecidableInstances
+
+  default-language:   Haskell2010
+
+-- Libraries
+
+library
+  import:          common-lang
+  exposed-modules:
+    LiquidityBridge
+    LiquidityBridge.Config
+    LiquidityBridge.PaymentConfirmation
+    LiquidityBridge.Schema
+
+  build-depends:
+    , aeson               ^>=1.5.0.0
+    , bytestring          ^>=0.10.12.0
+    , cardano-prelude
+    , containers
+    , data-default-class
+    , freer-extras
+    , freer-simple
+    , lens
+    , playground-common
+    , plutus-contract
+    , plutus-core
+    , plutus-ledger
+    , plutus-ledger-api
+    , plutus-pab
+    , plutus-tx
+    , plutus-tx-plugin
+    , prettyprinter
+    , row-types
+    , serialise
+    , servant
+    , servant-server
+    , text                ^>=1.2.4.0
+    , vector              ^>=0.12.1.2
+    , wai
+    , warp
+
+  hs-source-dirs:  src
+
+library liquidity-bridge-server-lib
+  import:          common-lang
+  exposed-modules:
+    LiquidityBridgeServer
+    LiquidityBridgeServer.CardanoInterface
+    LiquidityBridgeServer.CardanoRequests
+    LiquidityBridgeServer.Config
+    LiquidityBridgeServer.CustomJSON
+    LiquidityBridgeServer.EthereumInterface
+    LiquidityBridgeServer.EthereumLogData
+    LiquidityBridgeServer.EthereumRequests
+    LiquidityBridgeServer.EthereumTypes
+    LiquidityBridgeServer.EthereumValues
+    LiquidityBridgeServer.Requests
+
+  build-depends:
+    , aeson
+    , aeson-casing
+    , bytestring            ^>=0.10.12.0
+    , cardano-prelude
+    , composition-prelude
+    , concurrent-extra
+    , config-schema
+    , config-value
+    , containers
+    , cryptonite
+    , directory
+    , extra
+    , filepath
+    , http-conduit
+    , liquidity-bridge
+    , network
+    , plutus-contract
+    , plutus-ledger
+    , plutus-ledger-api
+    , plutus-pab
+    , plutus-tx
+    , safe-exceptions
+    , split
+    , strict
+    , text                  ^>=1.2.4.0
+    , unordered-containers
+    , utf8-string
+    , vector
+    , websockets
+    , wuss
+
+  hs-source-dirs:  liquidity-bridge-server
+
+library liquidity-bridge-pab-lib
+  import:          common-lang
+  exposed-modules:
+    LiquidityBridgePAB
+    LiquidityBridgePAB.Logging
+
+  other-modules:   Plutus.PAB.PrettyLogger
+  build-depends:
+    , aeson               ^>=1.5.0.0
+    , ansi-terminal
+    , bytestring          ^>=0.10.12.0
+    , cardano-prelude
+    , containers
+    , data-default
+    , data-default-class
+    , freer-extras
+    , freer-simple
+    , lens
+    , liquidity-bridge
+    , playground-common
+    , plutus-contract
+    , plutus-core
+    , plutus-ledger
+    , plutus-ledger-api
+    , plutus-pab
+    , plutus-tx
+    , plutus-tx-plugin
+    , prettyprinter
+    , row-types
+    , serialise
+    , servant
+    , servant-server
+    , text                ^>=1.2.4.0
+    , vector              ^>=0.12.1.2
+    , wai
+    , warp
+
+  hs-source-dirs:  liquidity-bridge-pab
+
+test-suite liquidity-bridge-test
+  import:         common-lang
+  type:           exitcode-stdio-1.0
+  main-is:        Spec.hs
+  other-modules:
+    Spec.LiquidityBridge.PaymentConfirmation
+    Spec.LiquidityBridgeServer.CardanoRequests
+    Spec.LiquidityBridgeServer.EthereumTypes
+    Spec.LiquidityBridgeServer.EthereumValues
+    Spec.LiquidityBridgeServer.QuickCheckHelper
+
+  ghc-options:    -fplugin-opt PlutusTx.Plugin:defer-errors
+  build-depends:
+    , aeson                        ^>=1.5.0.0
+    , base
+    , base-compat
+    , bytestring                   ^>=0.10.12.0
+    , cardano-prelude
+    , containers
+    , data-default-class
+    , either
+    , freer-extras
+    , freer-simple
+    , lens
+    , liquidity-bridge
+    , liquidity-bridge-server-lib
+    , playground-common
+    , plutus-contract
+    , plutus-core
+    , plutus-ledger
+    , plutus-ledger-api
+    , plutus-pab
+    , plutus-tx
+    , plutus-tx-plugin
+    , prettyprinter
+    , QuickCheck
+    , quickcheck-instances
+    , row-types
+    , serialise
+    , servant
+    , servant-server
+    , tasty
+    , tasty-quickcheck
+    , text                         ^>=1.2.4.0
+    , vector                       ^>=0.12.1.2
+    , wai
+    , warp
+
+  hs-source-dirs: test
+
+-- Executables
+
+executable liquidity-bridge
+  import:         common-lang
+  build-depends:  liquidity-bridge
+  main-is:        Main.hs
+  hs-source-dirs: executables/LiquidityBridge
+
+executable liquidity-bridge-server
+  import:         common-lang
+  build-depends:  liquidity-bridge-server-lib
+  main-is:        Main.hs
+  hs-source-dirs: executables/LiquidityBridgeServer
+
+executable liquidity-bridge-pab
+  import:         common-lang
+  build-depends:  liquidity-bridge-pab-lib
+  main-is:        Main.hs
+  hs-source-dirs: executables/LiquidityBridgePAB

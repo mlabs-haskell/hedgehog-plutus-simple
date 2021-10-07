@@ -1,0 +1,27 @@
+digraph PaymentConfirmationSundae {
+  rankdir = LR;
+
+  wallet_in
+    [ shape=record
+    , label=
+        "{{ Centralized server wallet
+          | PubKeyHash: Recipient Wallet
+          | Amount: 10
+          | TokenInfo: (Token1, Token2)
+         }}"
+    ];
+
+  wallet_out
+    [ shape=record
+    , label=
+        "{{ Recipient Wallet
+          | bToken1: 10
+          | bToken2: 10
+         }}"
+    ];
+
+  tx [label="Tx"];
+
+  wallet_in -> tx;
+  tx -> wallet_out;
+}
