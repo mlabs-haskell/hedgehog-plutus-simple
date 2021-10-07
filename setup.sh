@@ -11,4 +11,7 @@ fi
 PROJECTNAME=$1
 CLASSNAME=$2
 
-mv liquidity-bridge.cabal "${PROJECTNAME}.cabal"
+# Modify the cabal file
+CABALFILE="${PROJECTNAME}.cabal"
+mv liquidity-bridge.cabal $CABALFILE
+
