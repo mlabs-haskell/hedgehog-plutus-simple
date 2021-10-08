@@ -37,5 +37,8 @@ mv src/LiquidityBridge.hs src/${MODULE_NAME}.hs
 echo "package cardano-crypto-praos" >> cabal.project.local
 echo "  flags: -external-libsodium-vrf" >> cabal.project.local
 
-# Perform initial setup
+# Make sure the permissions on format.sh are correct
+chmod 755 .github/format.sh
+
+# Perform first build and test
 nix-shell --run "cabal build && cabal test"

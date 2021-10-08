@@ -1,5 +1,5 @@
 with import ./nix { };
-(plutus.plutus.haskell.project.shellFor (pab.env_variables // {
+(plutus.plutus.haskell.project.shellFor ({
 
   # Select packages who's dependencies should be added to the shell env
   packages = ps:
@@ -47,13 +47,10 @@ with import ./nix { };
       # Graphviz Diagrams for documentation
       graphviz
 
-      ### Pab
-      pab.plutus_pab_client
-
       ### Example contracts
       plutus.plutus-pab-examples
 
-    ] ++ (builtins.attrValues pab.plutus_pab_exes);
+    ];
 
   buildInputs = (with plutus.pkgs;
     [ zlib pkg-config libsodium-vrf R ]
