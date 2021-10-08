@@ -14,23 +14,30 @@ fi
 PROJECT_NAME=$1
 MODULE_NAME=$2
 
+# Sed runs differently on Mac and Linux. Tell which one we're on
+SED_COMMAND="sed -i "
+if [[ $OSTYPE == 'darwin'* ]]
+  then
+    SED_COMMAND="sed -i'' "
+fi
+
 # Modify the cabal file
 CABAL_FILE="${PROJECT_NAME}.cabal"
 NEW_GITHUB_LINK="https://github.com/mlabs-haskell/${PROJECT_NAME}"
 OLD_GITHUB_LINK="https://github.com/mlabs-haskell/CardStarter-LiquidityBridge"
 
 mv liquidity-bridge.cabal $CABAL_FILE
-sed -i "s|${OLD_GITHUB_LINK}|${NEW_GITHUB_LINK}|g" $CABAL_FILE
-sed -i "s|liquidity-bridge|${PROJECT_NAME}|g" $CABAL_FILE
-sed -i "s|LiquidityBridge|${MODULE_NAME}|g" $CABAL_FILE
+$SED_COMMAND "s|${OLD_GITHUB_LINK}|${NEW_GITHUB_LINK}|g" $CABAL_FILE
+$SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" $CABAL_FILE
+$SED_COMMAND "s|LiquidityBridge|${MODULE_NAME}|g" $CABAL_FILE
 
 # Modify hie.yaml, ci.nix, and integrate.yaml
-sed -i "s|liquidity-bridge|${PROJECT_NAME}|g" hie.yaml
-sed -i "s|liquidity-bridge|${PROJECT_NAME}|g" nix/ci.nix
-sed -i "s|liquidity-bridge|${PROJECT_NAME}|g" .github/workflows/integrate.yaml
+$SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" hie.yaml
+$SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" nix/ci.nix
+$SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" .github/workflows/integrate.yaml
 
 # Modify the dummy source file
-sed -i "s|LiquidityBridge|${MODULE_NAME}|" src/LiquidityBridge.hs
+$SED_COMMAND "s|LiquidityBridge|${MODULE_NAME}|" src/LiquidityBridge.hs
 mv src/LiquidityBridge.hs src/${MODULE_NAME}.hs
 
 # Create the cabal.project.local file with the sodium flag
