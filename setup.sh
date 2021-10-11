@@ -31,9 +31,10 @@ $SED_COMMAND "s|${OLD_GITHUB_LINK}|${NEW_GITHUB_LINK}|g" $CABAL_FILE
 $SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" $CABAL_FILE
 $SED_COMMAND "s|LiquidityBridge|${MODULE_NAME}|g" $CABAL_FILE
 
-# Modify hie.yaml, ci.nix, and integrate.yaml
+# Modify hie.yaml, ci.nix, haskell.nix, and integrate.yaml
 $SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" hie.yaml
 $SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" nix/ci.nix
+$SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" nix/haskell.nix
 $SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" .github/workflows/integrate.yaml
 
 # Modify the dummy source file
@@ -49,3 +50,6 @@ chmod 755 .github/format.sh
 
 # Perform first build and test
 nix-shell --run "cabal build && cabal test"
+
+# Perform CI actions
+nix-build nix/ci.nix
