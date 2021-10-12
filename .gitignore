@@ -49,11 +49,3 @@ cabal.project.local*
 
 # Notes
 *.txt
-
-# Instance data
-.ethmarker*
-.dexmaphash
-
-geth-node/chaindata/geth/*
-geth-node/chaindata/history
-*.ipc

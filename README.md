@@ -2,7 +2,10 @@
 This project contains the build systems and scripts needed to scaffold a plutus project quickly.
 
 ## Running
-To get everything set up, copy the contents of this repo to your new project. Then run `./setup.sh <project-name> <ModuleName>`, e.g., `./setup.sh gero-gov GeroGov`.
+To get everything set up, copy the contents of this repo to your new project. You will then need to run the setup.sh script, which can take 0, 2, or 3 arguments.
+* When given 0 arguments, it will prompt you to provide the project name, module name, and github URL. 
+* When given 2 arguments, the first should be the project name, and the second should be the module name, e.g., `./setup.sh gero-gov GeroGov`. In this case, you will still be prompted for a github URL. 
+* Finally, you may provide all three pieces of information at the command line, e.g., `./setup.sh gero-gov GeroGov https://github.com/mlabs-haskell/gero-gov`.
 
 ## Potential Issues
 * If you submit your pull request, but get an error on the GitHub CIs saying something to the effect of "Binary cache mlabs doesn't exist or it's private," or that MLabs.cachix.com doesn't exist, then the cachix key is not setup, and you or whoever owns your repository will have to add that.

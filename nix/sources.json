@@ -193,18 +193,6 @@
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz",
         "version": "20.09"
     },
-    "npmlock2nix": {
-        "branch": "master",
-        "description": null,
-        "homepage": null,
-        "owner": "Tweag",
-        "repo": "npmlock2nix",
-        "rev": "fc3e7a257fca27c8f6d4f1b9e7a3f5b738953cdc",
-        "sha256": "13lkw2saa1m8x4l7rbqrh93fhl0py2vciglj93yncnw6jccjr8km",
-        "type": "tarball",
-        "url": "https://github.com/Tweag/npmlock2nix/archive/fc3e7a257fca27c8f6d4f1b9e7a3f5b738953cdc.tar.gz",
-        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
-    },
     "optparse-applicative": {
         "branch": "main",
         "description": "Applicative option parser",

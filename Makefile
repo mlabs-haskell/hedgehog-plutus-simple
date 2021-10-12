@@ -32,8 +32,6 @@ usage:
 	@echo "  lint                -- Check the sources with hlint"
 	@echo "  readme_contents     -- Add table of contents to README"
 	@echo "  update_plutus       -- Update plutus version with niv"
-	@echo "  run_geth            -- Run the geth node"
-	@echo "  clear_geth          -- Deletes the geth test chain"
 	@echo "  clear_build         -- Deletes the build files for this specific project"
 	@echo "  diagrams            -- Build SVG diagrams from graphviz dot diagrams"
 	@echo "  diagram_pngs        -- Build PNG images from graphviz dot diagrams"
@@ -146,22 +144,6 @@ update_plutus:
 	@echo "Make sure to update the plutus rev in stack.yaml with:"
 	@echo "    commit: $(PLUTUS_REV)"
 	@echo "This may require further resolution of dependency versions."
-
-################################################################################
-# Geth
-
-run_geth:
-ifneq ("$(wildcard chaindata/geth/nodekey)","")
-	cd geth-node && ./run.sh
-else
-	@echo "No chain data detected, initializing..."
-	cd geth-node && ./create.sh && ./run.sh
-endif
-
-clear_geth:
-	@[ ! -e geth-node/chaindata/geth ] || rm -r geth-node/chaindata/geth
-	@[ ! -e geth-node/chaindata/history ] || rm geth-node/chaindata/history
-	@echo "Deleted GEth chain data"
 
 ################################################################################
 # Utils

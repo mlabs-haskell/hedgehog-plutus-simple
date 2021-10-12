@@ -5,14 +5,44 @@ set -e
 
 # Get the project and module names from command line args
 # Probably want to make it so that we only need to provide one later
-if [ $# != 2 ]
-  then
-    echo "Run this with two args: the project name and the module name."
-    echo "E.g.: ${0} liquidity-bridge LiquidityBridge"
+case $# in
+  0)
+    read -p "Enter the project name (e.g. gero-gov): " PROJECT_NAME
+    read -p "Enter the module name (e.g. GeroGov): " MODULE_NAME
+    NEW_GITHUB_LINK="https://github.com/mlabs-haskell/${PROJECT_NAME}"
+    read -p "Enter the name of the github link (default: ${NEW_GITHUB_LINK}): " github_input
+    if [[ $github_input != "" ]]
+    then
+      NEW_GITHUB_LINK=$github_input
+    fi
+  ;;
+
+  2)
+    PROJECT_NAME=$1
+    MODULE_NAME=$2
+    NEW_GITHUB_LINK="https://github.com/mlabs-haskell/${PROJECT_NAME}"
+    read -p "Enter the name of the github link (default: ${NEW_GITHUB_LINK}): " github_input
+    if [[ $github_input != "" ]]
+    then
+      NEW_GITHUB_LINK=$github_input
+    fi
+  ;;
+
+  3)
+    PROJECT_NAME=$1
+    MODULE_NAME=$2
+    NEW_GITHUB_LINK=$3
+  ;;
+
+  *)
+    echo "You may run this script with 0, 2, or 3 arguments"
+    echo "E.g.:"
+    echo "    ${0}"
+    echo "    ${0} gero-gov GeroGov"
+    echo "    ${0} gero-gov GeroGov https://github.com/mlabs-haskell/gero-gov"
     exit 1
-fi
-PROJECT_NAME=$1
-MODULE_NAME=$2
+  ;;
+esac
 
 # Sed runs differently on Mac and Linux. Tell which one we're on
 SED_COMMAND="sed -i "
@@ -23,7 +53,6 @@ fi
 
 # Modify the cabal file
 CABAL_FILE="${PROJECT_NAME}.cabal"
-NEW_GITHUB_LINK="https://github.com/mlabs-haskell/${PROJECT_NAME}"
 OLD_GITHUB_LINK="https://github.com/mlabs-haskell/CardStarter-LiquidityBridge"
 
 mv liquidity-bridge.cabal $CABAL_FILE
