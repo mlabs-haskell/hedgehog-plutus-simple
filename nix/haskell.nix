@@ -37,42 +37,9 @@ in pkgs.haskell-nix.cabalProject rec {
   # Using this allows us to leave these nix-specific hashes _out_ of cabal.project
   # Normally, they'd be placed under the `source-repository-package` section as a comment like so:
   # `--sha256: ...`
-  sha256map = {
-    # Enforce we are using the same hash as niv has
-    # i.e. this will now fail to nix-build if you bump it but don't bump the `cabal.project`.
-    "https://github.com/input-output-hk/plutus.git"."${sources.plutus.rev}" =
-      sources.plutus.sha256;
-    "https://github.com/Quid2/flat.git"."${sources.flat.rev}" =
-      sources.flat.sha256;
-    "https://github.com/shmish111/purescript-bridge.git"."${sources.purescript-bridge.rev}" =
-      sources.purescript-bridge.sha256;
-    "https://github.com/shmish111/servant-purescript.git"."${sources.servant-purescript.rev}" =
-      sources.servant-purescript.sha256;
-    "https://github.com/input-output-hk/cardano-base"."${sources.cardano-base.rev}" =
-      sources.cardano-base.sha256;
-    "https://github.com/input-output-hk/cardano-crypto.git"."${sources.cardano-crypto.rev}" =
-      sources.cardano-crypto.sha256;
-    "https://github.com/raduom/cardano-ledger-specs"."${sources.cardano-ledger-specs.rev}" =
-      sources.cardano-ledger-specs.sha256;
-    "https://github.com/input-output-hk/cardano-wallet"."${sources.cardano-wallet.rev}" =
-      sources.cardano-wallet.sha256;
-    "https://github.com/input-output-hk/cardano-prelude"."${sources.cardano-prelude.rev}" =
-      sources.cardano-prelude.sha256;
-    "https://github.com/input-output-hk/cardano-addresses"."${sources.cardano-addresses.rev}" =
-      sources.cardano-addresses.sha256;
-    "https://github.com/input-output-hk/goblins"."${sources.goblins.rev}" =
-      sources.goblins.sha256;
-    "https://github.com/input-output-hk/iohk-monitoring-framework"."${sources.iohk-monitoring-framework.rev}" =
-      sources.iohk-monitoring-framework.sha256;
-    "https://github.com/input-output-hk/ouroboros-network"."${sources.ouroboros-network.rev}" =
-      sources.ouroboros-network.sha256;
-    "https://github.com/input-output-hk/cardano-node.git"."${sources.cardano-node.rev}" =
-      sources.cardano-node.sha256;
-    "https://github.com/input-output-hk/Win32-network"."${sources.Win32-network.rev}" =
-      sources.Win32-network.sha256;
-    "https://github.com/input-output-hk/hedgehog-extras"."${sources.hedgehog-extras.rev}" =
-      sources.hedgehog-extras.sha256;
-    "https://github.com/input-output-hk/optparse-applicative"."${sources.optparse-applicative.rev}" =
-      sources.optparse-applicative.sha256;
-  };
+  sha256map = pkgs.lib.foldr (data: tab: with data; tab // {
+      "https://github.com/${owner}/${repo}"."${rev}" = sha256;
+      "https://github.com/${owner}/${repo}.git"."${rev}" = sha256;
+    }
+  ) {} (pkgs.lib.attrValues sources);
 }

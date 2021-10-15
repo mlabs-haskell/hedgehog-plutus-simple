@@ -1,45 +1,56 @@
-with import ./nix { };
-(plutus.plutus.haskell.project.shellFor ({
+{ sourcesFile ? ./nix/sources.json, system ? builtins.currentSystem
+, sources ? import ./nix/sources.nix { inherit system sourcesFile; }
+, plutus ? import sources.plutus { }
+, plutusShell ? import "${sources.plutus}/shell.nix" { }
+, deferPluginErrors ? true, doCoverage ? true }@args:
 
-  # Select packages who's dependencies should be added to the shell env
-  packages = ps:
-    [
-      # criterion 
-      # tasty-quickcheck
-    ];
+let
+  project = import ./default.nix args;
+  inherit (plutus) pkgs;
+  pab = import ./nix/pab.nix { inherit plutus; };
 
-  # Select packages which should be added to the shell env, with their dependencies
-  # Should try and get the extra cardano dependencies in here...
-  additional = ps:
-    with ps; [
-      plutus-pab
-      plutus-tx
-      plutus-tx-plugin
-      plutus-contract
-      plutus-ledger-api
-      pab.plutus_ledger_with_docs
-      plutus-core
-      playground-common
-      prettyprinter-configurable
-      plutus-use-cases
-    ];
+in project.shellFor {
+  packages = ps: [];
 
+  tools.cabal = "latest";
   withHoogle = true;
 
-  # Extra haskell tools (arg passed on to mkDerivation)
-  # Using the plutus.pkgs to use nixpkgs version from plutus (nixpkgs-unstable, mostly)
-  propagatedBuildInputs = with pkgs;
+  # Solution in https://github.com/input-output-hk/plutus-starter/commit/3ab180a1c1079c83aeae61d8c6df28e9840aa9cc ?
+  # https://github.com/PrivateStorageio/PaymentServer/blob/main/nix/default.nix
+  # Define a Nixpkgs overlay with `m` defined such that `ieee` can be added
+  # to `additional`, which is needed when `exactDeps = true;`.
+
+  # exactDeps = true;
+
+  /* Is this needed?
+
+     inputsFrom = [ plutusShell ];
+
+     additional = ps: with ps; [
+       pab.plutus_ledger_with_docs
+       playground-common
+       plutus-contract
+       plutus-core
+       plutus-ledger-api
+       plutus-pab
+       plutus-tx
+       plutus-tx-plugin
+       plutus-use-cases
+       prettyprinter-configurable
+     ];
+  */
+
+  nativeBuildInputs = with pkgs;
     [
       # Haskell Tools
-      stack
-      cabal-install
-      plutus.plutus.hlint
-      haskellPackages.fourmolu
       entr
+      ghcid
       git
-      ghc
+      haskellPackages.fourmolu
       nixfmt
       plutus.plutus.haskell-language-server
+      plutus.plutus.hlint
+      stack
 
       # hls doesn't support preprocessors yet so this has to exist in PATH
       haskellPackages.record-dot-preprocessor
@@ -47,13 +58,7 @@ with import ./nix { };
       # Graphviz Diagrams for documentation
       graphviz
 
-      ### Example contracts
-      plutus.plutus-pab-examples
-
-    ];
-
-  buildInputs = (with plutus.pkgs;
-    [ zlib pkg-config libsodium-vrf R ]
-    ++ (lib.optionals (!stdenv.isDarwin) [ systemd ]));
-
-}))
+      pkg-config
+      libsodium-vrf
+    ] ++ (lib.optionals (!stdenv.isDarwin) [ rPackages.plotly R systemdMinimal ]);
+}
