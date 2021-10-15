@@ -88,3 +88,6 @@ nix-shell --run "cabal build && cabal test"
 
 # Perform CI actions
 nix-build nix/ci.nix
+
+echo "Successfully renamed and built project. A commit containing the changes has already been added (but not pushed)."
+echo "Happy coding!"
