@@ -79,6 +79,10 @@ echo "  flags: -external-libsodium-vrf" >> cabal.project.local
 # Make sure the permissions on format.sh are correct
 chmod 755 .github/format.sh
 
+# Commit the changes so gitclean doesn't delete renamed files
+git add $CABAL_FILE hie.yaml nix/ Makefile .github/ src/ test/ liquidity-bridge.cabal
+git commit -m "Initialise project name"
+
 # Perform first build and test
 nix-shell --run "cabal build && cabal test"
 

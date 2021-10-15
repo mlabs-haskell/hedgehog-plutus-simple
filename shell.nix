@@ -60,5 +60,6 @@ in project.shellFor {
 
       pkg-config
       libsodium-vrf
+      zlib
     ] ++ (lib.optionals (!stdenv.isDarwin) [ rPackages.plotly R systemdMinimal ]);
 }
