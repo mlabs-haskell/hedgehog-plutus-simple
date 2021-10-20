@@ -24,7 +24,7 @@ in
           owner = if matchN 2 == null then matchN 4 else matchN 1;
           repo  = if matchN 2 == null then matchN 5 else matchN 2;
       # in builtins.trace "matches = ${owner}/${repo}" repo;
-      in repo;
+      in {owner=owner; name=repo;};
 
-    repos = builtins.map (repo: { name = extractSourceNameForNiv repo.url; tag = repo.ref; }) sourceRepoData;
+    repos = builtins.map (repo: extractSourceNameForNiv repo.url // { tag = repo.ref; }) sourceRepoData;
   in repos
