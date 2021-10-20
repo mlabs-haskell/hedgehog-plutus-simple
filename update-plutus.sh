@@ -35,13 +35,11 @@ PACKAGES_START=$(echo "$PLUTUS_CABAL" | grep -n -m 1 "packages:" | cut -d: -f1)
 PACKAGES=$(echo "$PLUTUS_CABAL" | tail -n +"$PACKAGES_START")
 PACKAGES=${PACKAGES:9}
 
-NEWL=$'\n'
-
 # Combines all the strings together to create new project.cabal
-NEW_CABAL=$INDEX$NEWL$NEWL$OWN_PACKAGES$NEWL$PLUTUS_SOURCE$PACKAGES
+NEW_CABAL="${INDEX}\n\n${OWN_PACKAGES}\n${PLUTUS_SOURCE}${PACKAGES}"
 
 # Write cabal.project to file
-echo "$NEW_CABAL" > './cabal.project'
+echo -e "$NEW_CABAL" > './cabal.project'
 echo "Successfully updated cabal.project, updating sources..."
 
 # Updates sources.json using Kirills script (which now also updates owner)
