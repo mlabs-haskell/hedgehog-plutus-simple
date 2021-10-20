@@ -1,4 +1,4 @@
-# Nix tools for LQUSD
+# Nix tools
 
 This directory contains all of the nix helper functions used to build our dependencies.
 
