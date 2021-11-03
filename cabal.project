@@ -1,52 +1,65 @@
--- Bump this if you need newer packages
 index-state: 2021-08-14T00:00:00Z
 
 packages: ./.
 
-source-repository-package
-  type: git
-  location: https://github.com/input-output-hk/plutus.git
-  tag: 58c093a49eb7a369865e361179d649264fc817a4
-  subdir: doc
-          fake-pab
-          freer-extras
-          marlowe
-          marlowe-actus
-          marlowe-playground-server
-          marlowe-dashboard-server
-          marlowe-symbolic
-          playground-common
-          plutus-benchmark
-          plutus-chain-index
-          plutus-contract
-          plutus-core
-          plutus-errors
-          plutus-ledger
-          plutus-ledger-api
-          plutus-metatheory
-          plutus-pab
-          plutus-playground-server
-          plutus-tx
-          plutus-tx-plugin
-          plutus-use-cases
-          prettyprinter-configurable
-          quickcheck-dynamic
-          web-ghc
-          word-array
-          stubs/plutus-ghc-stub
-
--- We never, ever, want this.
+-- You never, ever, want this.
 write-ghc-environment-files: never
 
 -- Always build tests and benchmarks.
 tests: true
 benchmarks: true
 
--- The only sensible test display option
-test-show-details: streaming
+source-repository-package
+  type: git
+  location: https://github.com/input-output-hk/plutus.git
+  subdir:
+    plutus-core
+    plutus-ledger-api
+    plutus-tx
+    plutus-tx-plugin
+    word-array
+    prettyprinter-configurable
+    stubs/plutus-ghc-stub
+  tag: 3f8c1e22292d68d92f01f9a62a60621df01cdd4e
+
+source-repository-package
+  type: git
+  location: https://github.com/input-output-hk/plutus-apps.git
+  subdir:
+    doc
+    freer-extras
+    playground-common
+    plutus-chain-index
+    plutus-contract
+    plutus-ledger
+    plutus-pab
+    plutus-playground-server
+    plutus-use-cases
+    quickcheck-dynamic
+    web-ghc
+  tag: 4a109e91c79c7a881aac3a6564bbd377141cd2db
+
+-- The following sections are copied from the 'plutus' repository cabal.project at the revision
+-- given above.
+-- This is necessary because the  plutus' libraries depend on a number of other libraries which are
+-- not on Hackage, and so need to be pulled in as `source-repository-package`s themselves. Make sure to
+-- re-update this section from the template when you do an upgrade.
+
+---------- *replace here* ----------------------------------------------------------------------
+
+-- This is also needed so evenful-sql-common will build with a
+-- newer version of persistent. See stack.yaml for the mirrored
+-- configuration.
+package eventful-sql-common
+  ghc-options: -XDerivingStrategies -XStandaloneDeriving -XUndecidableInstances -XDataKinds -XFlexibleInstances -XMultiParamTypeClasses
+
+-- See the note on nix/pkgs/default.nix:agdaPackages for why this is here.
+-- (NOTE this will change to ieee754 in newer versions of nixpkgs).
+extra-packages: ieee, filemanip
+
 
 allow-newer:
-           -- Pins to an old version of Template Haskell, unclear if/when it will be updated
+           -- Copied from plutus-core
            size-based:template-haskell
            , ouroboros-consensus-byron:formatting
            , beam-core:aeson
@@ -54,6 +67,7 @@ allow-newer:
            , beam-sqlite:dlist
            , beam-migrate:aeson
 
+-- Copied from plutus-core
 constraints:
   -- big breaking change here, inline-r doens't have an upper bound
   singletons < 3.0
@@ -61,10 +75,6 @@ constraints:
   -- ones they reuse the one from 'some', but there isn't e.g. a proper version
   -- constraint from dependent-sum-template (which is the library we actually use).
   , dependent-sum > 0.6.2.0
-
--- See the note on nix/pkgs/default.nix:agdaPackages for why this is here.
--- (NOTE this will change to ieee754 in newer versions of nixpkgs).
-extra-packages: ieee, filemanip
 
 -- These packages appear in our dependency tree and are very slow to build.
 -- Empirically, turning off optimization shaves off ~50% build time.
@@ -79,8 +89,8 @@ package ouroboros-consensus-cardano
 package cardano-api
   optimization: False
 
--- https://github.com/Quid2/flat/pull/22 fixes a potential exception
--- when decoding invalid (e.g. malicious) text literals.
+
+-- Copied from plutus-core
 source-repository-package
   type: git
   location: https://github.com/Quid2/flat.git
@@ -89,23 +99,25 @@ source-repository-package
 -- Needs some patches, but upstream seems to be fairly dead (no activity in > 1 year)
 source-repository-package
   type: git
-  location: https://github.com/shmish111/purescript-bridge.git
+  location: https://github.com/input-output-hk/purescript-bridge.git
   tag: 6a92d7853ea514be8b70bab5e72077bf5a510596
 
 source-repository-package
   type: git
-  location: https://github.com/shmish111/servant-purescript.git
-  tag: a76104490499aa72d40c2790d10e9383e0dbde63
+  location: https://github.com/input-output-hk/servant-purescript.git
+  tag: a0c7c7e37c95564061247461aef4be505a853538
 
+-- Copied from plutus-core
 source-repository-package
   type: git
   location: https://github.com/input-output-hk/cardano-crypto.git
   tag: 07397f0e50da97eaa0575d93bee7ac4b2b2576ec
 
+-- Copied from plutus-core
 source-repository-package
   type: git
   location: https://github.com/input-output-hk/cardano-base
-  tag: 592aa61d657ad5935a33bace1243abce3728b643
+  tag: 4ea7e2d927c9a7f78ddc69738409a5827ab66b98
   subdir:
     base-deriving-via
     binary
@@ -118,6 +130,7 @@ source-repository-package
     slotting
     strict-containers
 
+-- Copied from plutus-core
 source-repository-package
   type: git
   location: https://github.com/input-output-hk/cardano-prelude
@@ -147,10 +160,11 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/input-output-hk/ouroboros-network
-  tag: 5d37a927046bc7da2887830d8e35cf604622ce09
+  tag: 1f4973f36f689d6da75b5d351fb124d66ef1057d
   subdir:
     monoidal-synchronisation
     typed-protocols
+    typed-protocols-cborg
     typed-protocols-examples
     ouroboros-network
     ouroboros-network-testing
@@ -190,32 +204,31 @@ source-repository-package
 
 source-repository-package
   type: git
-  location: https://github.com/raduom/cardano-ledger-specs
-  tag: ef6bb99782d61316da55470620c7da994cc352b2
+  location: https://github.com/input-output-hk/cardano-ledger-specs
+  tag: bf008ce028751cae9fb0b53c3bef20f07c06e333
   subdir:
-    byron/chain/executable-spec
-    byron/crypto
-    byron/crypto/test
-    byron/ledger/executable-spec
     byron/ledger/impl
-    byron/ledger/impl/test
-    semantics/executable-spec
-    cardano-protocol-tpraos
-    semantics/small-steps-test
-    shelley/chain-and-ledger/dependencies/non-integer
-    shelley/chain-and-ledger/executable-spec
-    shelley/chain-and-ledger/shelley-spec-ledger-test
-    shelley-ma/impl
     cardano-ledger-core
-    alonzo/impl
+    cardano-protocol-tpraos
+    eras/alonzo/impl
+    eras/byron/chain/executable-spec
+    eras/byron/crypto
+    eras/byron/crypto/test
+    eras/byron/ledger/executable-spec
+    eras/byron/ledger/impl/test
+    eras/shelley/impl
+    eras/shelley-ma/impl
+    libs/non-integral
+    libs/small-steps
+    semantics/small-steps-test
 
--- A lot of plutus dependencies have to be synchronized with the dependencies of
+-- A lot of plutus-apps dependencies have to be synchronized with the dependencies of
 -- cardano-node. If you update cardano-node, please make sure that all dependencies
 -- of cardano-node are also updated.
 source-repository-package
   type: git
   location: https://github.com/input-output-hk/cardano-node.git
-  tag: 191b91eec3c7d845a55347781329d50bf36871d7
+  tag: b6ca519f97a0e795611a63174687e6bb70c9f752
   subdir:
     cardano-api
     cardano-node
@@ -234,10 +247,6 @@ source-repository-package
 
 source-repository-package
   type: git
-  location: https://github.com/input-output-hk/hedgehog-extras
-  tag: edf6945007177a638fbeb8802397f3a6f4e47c14
-
-source-repository-package
-  type: git
   location: https://github.com/input-output-hk/goblins
   tag: cde90a2b27f79187ca8310b6549331e59595e7ba
+
