@@ -1,8 +1,10 @@
 { sourcesFile ? ./sources.json, system ? builtins.currentSystem
 , sources ? import ./sources.nix { inherit system sourcesFile; }
-, plutus ? import sources.plutus { }, deferPluginErrors ? true
+, plutus ? import sources.plutus { }
+, plutus-apps ? import sources.plutus-apps { }
+, deferPluginErrors ? true
 , doCoverage ? false }:
-let inherit (plutus) pkgs;
+let inherit (plutus-apps) pkgs;
 in pkgs.haskell-nix.cabalProject rec {
   src = pkgs.haskell-nix.haskellLib.cleanGit {
     name = "liquidity-bridge";

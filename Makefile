@@ -30,6 +30,7 @@ usage:
 	@echo "  nixfmt              -- Apply nix formatting with nixfmt"
 	@echo "  nixfmt_check        -- Check nix files for format errors"
 	@echo "  lint                -- Check the sources with hlint"
+	@echo "  ci                  -- Execute CI action"
 	@echo "  readme_contents     -- Add table of contents to README"
 	@echo "  update_plutus       -- Update plutus version with niv"
 	@echo "  clear_build         -- Deletes the build files for this specific project"
@@ -107,6 +108,10 @@ format: requires_nix_shell
 # Check formatting (without making changes)
 format_check: requires_nix_shell
 	fourmolu --mode check --check-idempotence $(FORMAT_EXTENSIONS) $(FORMAT_SOURCES)
+
+# Execute CI
+ci: 
+	nix-build ./nix/ci.nix
 
 # Nix files to format
 NIX_SOURCES := $(shell git ls-tree -r HEAD --full-tree --name-only | grep -E '.*\.nix' )

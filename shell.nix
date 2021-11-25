@@ -1,24 +1,20 @@
 with import ./nix { };
-(plutus.plutus.haskell.project.shellFor ({
+(plutus-apps.plutus-apps.haskell.project.shellFor ({
 
   # Select packages who's dependencies should be added to the shell env
-  packages = ps:
-    [
-      # criterion 
-      # tasty-quickcheck
-    ];
+  packages = ps: [ ];
 
   # Select packages which should be added to the shell env, with their dependencies
   # Should try and get the extra cardano dependencies in here...
   additional = ps:
     with ps; [
-      plutus-pab
       plutus-tx
       plutus-tx-plugin
-      plutus-contract
       plutus-ledger-api
       pab.plutus_ledger_with_docs
+      plutus-pab
       plutus-core
+      plutus-contract
       playground-common
       prettyprinter-configurable
       plutus-use-cases
@@ -33,12 +29,13 @@ with import ./nix { };
       # Haskell Tools
       stack
       cabal-install
-      plutus.plutus.hlint
       haskellPackages.fourmolu
       entr
       git
       ghc
       nixfmt
+      plutus.plutus.hlint
+
       plutus.plutus.haskell-language-server
 
       # hls doesn't support preprocessors yet so this has to exist in PATH
@@ -48,11 +45,10 @@ with import ./nix { };
       graphviz
 
       ### Example contracts
-      plutus.plutus-pab-examples
-
+      plutus-apps.plutus-pab-examples
     ];
 
-  buildInputs = (with plutus.pkgs;
+  buildInputs = (with plutus-apps.pkgs;
     [ zlib pkg-config libsodium-vrf R ]
     ++ (lib.optionals (!stdenv.isDarwin) [ systemd ]));
 
