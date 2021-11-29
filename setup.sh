@@ -80,7 +80,11 @@ echo "  flags: -external-libsodium-vrf" >> cabal.project.local
 chmod 755 .github/format.sh
 
 # Commit the changes so gitclean doesn't delete renamed files
-git add $CABAL_FILE hie.yaml nix/ Makefile .github/ src/ test/ liquidity-bridge.cabal
+git add $CABAL_FILE hie.yaml nix/ Makefile .github/ src/ test/
+
+# If the liquidity-bridge.cabal file was tracked, we need to tell git that it was renamed
+git add liquidity-bridge.cabal 2>/dev/null || true
+
 git commit -m "Initialise project name"
 
 # Perform first build and test
