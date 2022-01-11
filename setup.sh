@@ -60,10 +60,9 @@ $SED_COMMAND "s|${OLD_GITHUB_LINK}|${NEW_GITHUB_LINK}|g" $CABAL_FILE
 $SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" $CABAL_FILE
 $SED_COMMAND "s|LiquidityBridge|${MODULE_NAME}|g" $CABAL_FILE
 
-# Modify hie.yaml, ci.nix, haskell.nix, Makefile, and integrate.yaml
+# Modify hie.yaml, flake.nix, Makefile, and integrate.yaml
 $SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" hie.yaml
-$SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" nix/ci.nix
-$SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" nix/haskell.nix
+$SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" flake.nix
 $SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" Makefile
 $SED_COMMAND "s|liquidity-bridge|${PROJECT_NAME}|g" .github/workflows/integrate.yaml
 
@@ -80,7 +79,7 @@ echo "  flags: -external-libsodium-vrf" >> cabal.project.local
 chmod 755 .github/format.sh
 
 # Commit the changes so gitclean doesn't delete renamed files
-git add $CABAL_FILE hie.yaml nix/ Makefile .github/ src/ test/
+git add $CABAL_FILE hie.yaml flake.nix Makefile .github/ src/ test/
 
 # If the liquidity-bridge.cabal file was tracked, we need to tell git that it was renamed
 git add liquidity-bridge.cabal 2>/dev/null || true
@@ -88,10 +87,12 @@ git add liquidity-bridge.cabal 2>/dev/null || true
 git commit -m "Initialise project name"
 
 # Perform first build and test
-nix-shell --run "cabal build && cabal test"
+nix develop --command bash -c "cabal build && cabal test"
 
 # Perform CI actions
-nix-build nix/ci.nix
+nix build .#check.x86_64-linux
+nix develop --command make lint
+nix develop --command make format
 
 echo "Successfully renamed and built project. A commit containing the changes has already been added (but not pushed)."
 echo "Happy coding!"
