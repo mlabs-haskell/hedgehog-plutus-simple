@@ -4,7 +4,7 @@
 
 .PHONY: hoogle pab_servers_all pab_servers_all pab_db clean_db \
 	build test accept_pirs watch ghci readme_contents \
-	format lint requires_nix_shell 
+	format lint requires_nix_shell shell hls_shell code
 
 usage:
 	@echo "usage: make <command> [OPTIONS]"
@@ -31,6 +31,9 @@ usage:
 	@echo "  nixfmt_check        -- Check nix files for format errors"
 	@echo "  lint                -- Check the sources with hlint"
 	@echo "  ci                  -- Execute CI action"
+	@echo "  shell							 -- Start a Nix shell"
+	@echo "  hls_shell					 -- Start a Nix shell with HLS ready to launch an editor"
+	@echo "  code							   -- Start Visual Studio Code in a Nix environment"
 	@echo "  readme_contents     -- Add table of contents to README"
 	@echo "  update_plutus       -- Update plutus version with niv"
 	@echo "  clear_build         -- Deletes the build files for this specific project"
@@ -113,6 +116,18 @@ format_check: requires_nix_shell
 ci: 
 	nix-build ./nix/ci.nix
 
+NIX_SHELL = nix develop
+HLS_SHELL = $(NIX_SHELL) -c nix-shell -p bashInteractive haskell-language-server
+
+shell:
+	$(NIX_SHELL)
+
+hls_shell:
+	$(HLS_SHELL)
+
+code:
+	$(HLS_SHELL) --run "code ."
+
 # Nix files to format
 NIX_SOURCES := $(shell git ls-tree -r HEAD --full-tree --name-only | grep -E '.*\.nix' )
 
@@ -132,8 +147,8 @@ readme_contents:
 
 # Target to use as dependency to fail if not inside nix-shell
 requires_nix_shell:
-	@ [ "$(IN_NIX_SHELL)" ] || echo "The $(MAKECMDGOALS) target must be run from inside nix-shell"
-	@ [ "$(IN_NIX_SHELL)" ] || (echo "    run 'nix-shell --pure' first" && false)
+	@ [ "$(IN_NIX_SHELL)" ] || echo "The $(MAKECMDGOALS) target must be run from inside a nix shell"
+	@ [ "$(IN_NIX_SHELL)" ] || (echo "    run 'nix develop' first" && false)
 
 
 PLUTUS_BRANCH = $(shell jq '.plutus.branch' ./nix/sources.json )
