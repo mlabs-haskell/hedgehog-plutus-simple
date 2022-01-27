@@ -3,7 +3,8 @@
 
   inputs.nixpkgs.follows = "plutarch/nixpkgs";
   inputs.haskell-nix.follows = "plutarch/haskell-nix";
-  inputs.plutarch.url = "github:Plutonomicon/plutarch?ref=las/2";
+  inputs.plutarch.url = "github:Plutonomicon/plutarch";
+  inputs.plutarch.inputs.nixpkgs.follows = "plutarch/haskell-nix/nixpkgs-unstable";
 
   outputs = inputs@{ self, nixpkgs, haskell-nix, plutarch, ... }:
     let
@@ -15,7 +16,6 @@
       nixpkgsFor' = system: import nixpkgs { inherit system; inherit (haskell-nix) config; };
 
       ghcVersion = "ghc921";
-      tools.fourmolu = { };
 
       projectFor = system:
         let pkgs = nixpkgsFor system; in
@@ -40,12 +40,7 @@
             # Eventually we will probably want to build these with haskell.nix.
             nativeBuildInputs = [ pkgs'.fd pkgs'.cabal-install pkgs'.hlint pkgs'.haskellPackages.cabal-fmt pkgs'.nixpkgs-fmt ];
 
-            # FIXME: add HLS back https://github.com/Plutonomicon/plutarch/pull/127
-            # tools = {
-            #   haskell-language-server = {};  # Must use haskell.nix, because the compiler version should match
-            # };
-
-            inherit tools;
+            inherit (plutarch) tools;
 
             additional = ps: [
               ps.plutarch
@@ -61,7 +56,7 @@
         in
         pkgs.runCommand "format-check"
           {
-            nativeBuildInputs = [ pkgs'.fd pkgs'.haskellPackages.cabal-fmt pkgs'.nixpkgs-fmt (pkgs.haskell-nix.tools ghcVersion { inherit (tools) fourmolu; }).fourmolu ];
+            nativeBuildInputs = [ pkgs'.fd pkgs'.haskellPackages.cabal-fmt pkgs'.nixpkgs-fmt (pkgs.haskell-nix.tools ghcVersion { inherit (plutarch.tools) fourmolu; }).fourmolu ];
           } ''
           export LC_CTYPE=C.UTF-8
           export LC_ALL=C.UTF-8

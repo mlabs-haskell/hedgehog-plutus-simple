@@ -36,7 +36,6 @@ common common-lang
 
   build-depends:      base >=4.14
   default-extensions:
-    NoStarIsType
     BangPatterns
     BinaryLiterals
     ConstrainedClassMethods
@@ -72,12 +71,15 @@ common common-lang
     MultiParamTypeClasses
     NamedFieldPuns
     NamedWildCards
+    NoStarIsType
     NumericUnderscores
+    OverloadedRecordDot
     OverloadedStrings
     PartialTypeSignatures
     PatternGuards
     PolyKinds
     PostfixOperators
+    QualifiedDo
     RankNTypes
     RelaxedPolyRec
     ScopedTypeVariables
@@ -90,7 +92,6 @@ common common-lang
     TypeOperators
     TypeSynonymInstances
     ViewPatterns
-    QualifiedDo
 
   default-language:   Haskell2010
 
