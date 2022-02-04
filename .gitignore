@@ -9,6 +9,8 @@ result-*
 
 # direnv
 #.envrc
+.direnv
+
 *.sw*
 */Session.vim
 
