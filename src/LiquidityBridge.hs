@@ -1,7 +1,6 @@
 module LiquidityBridge (exampleFunction) where
 
 import Plutarch.Monadic qualified as P
-import Data.Text
 
 exampleFunction :: Term s (PInteger :--> PInteger)
 exampleFunction = plam $ \x -> P.do
