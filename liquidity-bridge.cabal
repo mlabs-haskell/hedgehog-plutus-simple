@@ -29,12 +29,16 @@ source-repository head
 common common-lang
   ghc-options:
     -Wall -Wcompat -Wincomplete-uni-patterns -Wno-unused-do-bind
-    -Wno-partial-type-signatures -Wmissing-export-lists -Werror
+    -Wno-partial-type-signatures -Wmissing-export-lists 
     -Wincomplete-record-updates -Wmissing-deriving-strategies
     -Wno-name-shadowing -Wunused-foralls -fprint-explicit-foralls
-    -fprint-explicit-kinds
+    -fprint-explicit-kinds -fwarn-missing-import-lists
+
+  mixins:             base hiding (Prelude)
+                    , pprelude (PPrelude as Prelude)
 
   build-depends:      base >=4.14
+                    , pprelude
   default-extensions:
     BangPatterns
     BinaryLiterals
@@ -99,6 +103,11 @@ library
   import:          common-lang
   exposed-modules: LiquidityBridge
   build-depends:   plutarch
+  hs-source-dirs:  src
+library pprelude
+  build-depends:   base
+                 , plutarch
+  exposed-modules: PPrelude
   hs-source-dirs:  src
 
 test-suite liquidity-bridge-test
