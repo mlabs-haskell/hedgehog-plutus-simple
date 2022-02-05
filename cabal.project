@@ -1,6 +1,3 @@
 packages: ./.
 
 tests: true
-
-package test-ghc-options
-  ghc-options: -Werror
