@@ -429,7 +429,7 @@
         ],
         "nixpkgs-2003": "nixpkgs-2003",
         "nixpkgs-2105": "nixpkgs-2105",
-        "nixpkgs-2111": "nixpkgs-2111",
+        "nixpkgs-2111": "nixpkgs-2111_2",
         "nixpkgs-unstable": "nixpkgs-unstable",
         "old-ghc-nix": "old-ghc-nix",
         "stackage": "stackage"
@@ -672,6 +672,22 @@
     },
     "nixpkgs-2111": {
       "locked": {
+        "lastModified": 1643421252,
+        "narHash": "sha256-icSgAFt+EVW2etGE5Orm8fIf8NeL0OR7luQgXOAdkow=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "46450f2f65f117459157e4ea90e39c6601e38109",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-21.11-darwin",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs-2111_2": {
+      "locked": {
         "lastModified": 1640283207,
         "narHash": "sha256-SCwl7ZnCfMDsuSYvwIroiAlk7n33bW8HFfY8NvKhcPA=",
         "owner": "NixOS",
@@ -895,6 +911,7 @@
           "plutarch",
           "nixpkgs"
         ],
+        "nixpkgs-2111": "nixpkgs-2111",
         "plutarch": "plutarch"
       }
     },

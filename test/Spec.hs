@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Test.Tasty
+import Test.Tasty (TestTree, testGroup, defaultMain)
 import Prelude (IO)
 
 -- | @since 0.1
