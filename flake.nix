@@ -42,7 +42,7 @@
 
             # We use the ones from Nixpkgs, since they are cached reliably.
             # Eventually we will probably want to build these with haskell.nix.
-            nativeBuildInputs = [pkgs'.git pkgs'.haskellPackages.apply-refact pkgs'.fd pkgs'.cabal-install pkgs'.hlint pkgs'.haskellPackages.cabal-fmt pkgs'.nixpkgs-fmt ];
+            nativeBuildInputs = [ pkgs'.git pkgs'.haskellPackages.apply-refact pkgs'.fd pkgs'.cabal-install pkgs'.hlint pkgs'.haskellPackages.cabal-fmt pkgs'.nixpkgs-fmt ];
 
             inherit (plutarch) tools;
 
