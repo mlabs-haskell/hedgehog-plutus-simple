@@ -90,9 +90,9 @@ git commit -m "Initialise project name"
 nix develop --command bash -c "cabal build && cabal test"
 
 # Perform CI actions
-nix build .#check.x86_64-linux
 nix develop --command make lint
 nix develop --command make format
+nix build .#check.x86_64-linux
 
 echo "Successfully renamed and built project. A commit containing the changes has already been added (but not pushed)."
 echo "Happy coding!"

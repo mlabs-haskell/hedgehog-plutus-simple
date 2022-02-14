@@ -54,8 +54,12 @@ code:
 NIX_SOURCES := $(shell fd -enix)
 CABAL_SOURCES := $(shell fd -ecabal)
 
-# Check with hlint, currently I couldn't get --refactor to work
+# Apply hlint suggestions
 lint: requires_nix_shell
+	find -name '*.hs' -not -path './dist-*/*' -exec hlint --refactor --refactor-options="--inplace" {} \;
+
+# Check hlint suggestions
+lint_check: requires_nix_shell
 	hlint $(FORMAT_SOURCES)
 
 readme_contents:

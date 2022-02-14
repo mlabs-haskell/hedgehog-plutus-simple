@@ -42,7 +42,7 @@
 
             # We use the ones from Nixpkgs, since they are cached reliably.
             # Eventually we will probably want to build these with haskell.nix.
-            nativeBuildInputs = [ pkgs'.fd pkgs'.cabal-install pkgs'.hlint pkgs'.haskellPackages.cabal-fmt pkgs'.nixpkgs-fmt ];
+            nativeBuildInputs = [ pkgs'.git pkgs'.haskellPackages.apply-refact pkgs'.fd pkgs'.cabal-install pkgs'.hlint pkgs'.haskellPackages.cabal-fmt pkgs'.nixpkgs-fmt ];
 
             inherit (plutarch) tools;
 
@@ -60,7 +60,7 @@
         in
         pkgs.runCommand "format-check"
           {
-            nativeBuildInputs = [ pkgs'.fd pkgs'.haskellPackages.cabal-fmt pkgs'.nixpkgs-fmt (pkgs.haskell-nix.tools ghcVersion { inherit (plutarch.tools) fourmolu; }).fourmolu ];
+            nativeBuildInputs = [ pkgs'.git pkgs'.fd pkgs'.haskellPackages.cabal-fmt pkgs'.nixpkgs-fmt (pkgs.haskell-nix.tools ghcVersion { inherit (plutarch.tools) fourmolu; }).fourmolu ];
           } ''
           export LC_CTYPE=C.UTF-8
           export LC_ALL=C.UTF-8
