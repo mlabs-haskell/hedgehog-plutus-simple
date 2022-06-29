@@ -1,4 +1,4 @@
-module LiquidityBridge (exampleFunction) where
+module Hedgehog (exampleFunction) where
 
 import Plutarch.Monadic qualified as P
 
