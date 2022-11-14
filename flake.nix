@@ -1,100 +1,18 @@
 {
   description = "hedgehog-plutus-simple";
 
+  nixConfig = {
+    extra-experimental-features = [ "nix-command" "flakes" "ca-derivations" ];
+    extra-substituters = [ "https://cache.iog.io" "https://public-plutonomicon.cachix.org" ];
+    extra-trusted-public-keys = [ "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=" "public-plutonomicon.cachix.org-1:3AKJMhCLn32gri1drGuaZmFrmnue+KkKrhhubQk/CWc=" ];
+    allow-import-from-derivation = "true";
+    bash-prompt = "\\[\\e[0m\\][\\[\\e[0;2m\\]nix \\[\\e[0;1m\\]plutarch \\[\\e[0;93m\\]\\w\\[\\e[0m\\]]\\[\\e[0m\\]$ \\[\\e[0m\\]";
+  };
+
   inputs = {
-    haskell-nix.url = "github:input-output-hk/haskell.nix/ac825b91c202947ec59b1a477003564cc018fcec";
-    haskell-nix.inputs.nixpkgs.follows = "haskell-nix/nixpkgs-unstable";
-    nixpkgs.follows = "haskell-nix/nixpkgs";
+    tooling.url = "github:mlabs-haskell/mlabs-tooling.nix";
 
-    iohk-nix.url = "github:input-output-hk/iohk-nix";
-
-    flake-compat = {
-      url = "git+https://github.com/edolstra/flake-compat";
-      flake = false;
-    };
-
-    # all inputs below here are for pinning with haskell.nix
-    cardano-addresses = {
-      url =
-        "github:input-output-hk/cardano-addresses/71006f9eb956b0004022e80aadd4ad50d837b621";
-      flake = false;
-    };
-    cardano-base = {
-      url =
-        "github:input-output-hk/cardano-base/41545ba3ac6b3095966316a99883d678b5ab8da8";
-      flake = false;
-    };
-    cardano-config = {
-      url =
-        "github:input-output-hk/cardano-config/e9de7a2cf70796f6ff26eac9f9540184ded0e4e6";
-      flake = false;
-    };
-    cardano-crypto = {
-      url =
-        "github:input-output-hk/cardano-crypto/f73079303f663e028288f9f4a9e08bcca39a923e";
-      flake = false;
-    };
-    cardano-ledger = {
-      url =
-        "github:input-output-hk/cardano-ledger/1a9ec4ae9e0b09d54e49b2a40c4ead37edadcce5";
-      flake = false;
-    };
-    cardano-node = {
-      url =
-        "github:input-output-hk/cardano-node/814df2c146f5d56f8c35a681fe75e85b905aed5d";
-      flake = false;
-    };
-    cardano-prelude = {
-      url =
-        "github:input-output-hk/cardano-prelude/bb4ed71ba8e587f672d06edf9d2e376f4b055555";
-      flake = false;
-    };
-    cardano-wallet = {
-      url =
-        "github:j-mueller/cardano-wallet/a5085acbd2670c24251cf8d76a4e83c77a2679ba";
-      flake = false;
-    };
-    flat = {
-      url =
-        "github:input-output-hk/flat/ee59880f47ab835dbd73bea0847dab7869fc20d8";
-      flake = false;
-    };
-    goblins = {
-      url =
-        "github:input-output-hk/goblins/cde90a2b27f79187ca8310b6549331e59595e7ba";
-      flake = false;
-    };
-    iohk-monitoring-framework = {
-      url =
-        "github:input-output-hk/iohk-monitoring-framework/46f994e216a1f8b36fe4669b47b2a7011b0e153c";
-      flake = false;
-    };
-    optparse-applicative = {
-      url =
-        "github:input-output-hk/optparse-applicative/7497a29cb998721a9068d5725d49461f2bba0e7a";
-      flake = false;
-    };
-    ouroboros-network = {
-      url =
-        "github:input-output-hk/ouroboros-network/d2d219a86cda42787325bb8c20539a75c2667132";
-      flake = false;
-    };
-    plutus = {
-      url =
-        "github:input-output-hk/plutus/d4f933d25ecc35a9c5bb057f5cf462112129cfdb";
-      flake = false;
-    };
-    plutus-apps = {
-      url =
-        "github:input-output-hk/plutus-apps/c8cbde61c9cf52e7d07aec51957b63d7a90123ff";
-      flake = false;
-    };
-    Win32-network = {
-      url =
-        "github:input-output-hk/Win32-network/3825d3abf75f83f406c1f7161883c438dac7277d";
-      flake = false;
-    };
-    plutus-simple-model.url = "git+https://github.com/mlabs-haskell/plutus-simple-model?ref=main&rev=c99dfc852cda9f3b8d88c0d63ac4e8ae52ae69fa";
+    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model/fa0aa0382ecabf6fcbef8c7b9c35d85ff7b57765";
   };
 
   outputs = inputs@{ self, tooling, plutus-simple-model, ... }: tooling.lib.mkFlake { inherit self; }
