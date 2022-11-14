@@ -5,7 +5,7 @@ pkgs.haskell-nix.cabalProject {
 
   name = "hedgehog-plutus-simple";
 
-  compiler-nix-name = "ghc8107";
+  compiler-nix-name = "ghc921";
 
   shell = {
     inputsFrom = [ pkgs.libsodium-vrf ];
