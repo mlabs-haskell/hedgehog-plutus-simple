@@ -20,6 +20,10 @@
       imports = [
         (tooling.lib.mkHaskellFlakeModule1 {
           project.src = ./.;
+
+          project.extraHackage = [
+            "${plutus-simple-model}"
+          ];
         })
       ];
     };

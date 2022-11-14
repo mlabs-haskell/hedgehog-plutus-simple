@@ -104,16 +104,4 @@ library
     , plutus-simple-model
     , hedgehog
   hs-source-dirs:  src
-
-test-suite hedgehog-plutus-simple-test
-  import:         common-lang
-  type:           exitcode-stdio-1.0
-  main-is:        Spec.hs
-  build-depends:
-    , hedgehog-plutus-simple
-    , QuickCheck
-    , quickcheck-instances
-    , tasty
-    , tasty-quickcheck
-
-  hs-source-dirs: test
+  
