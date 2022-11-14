@@ -97,56 +97,12 @@
     plutus-simple-model.url = "git+https://github.com/mlabs-haskell/plutus-simple-model?ref=main&rev=c99dfc852cda9f3b8d88c0d63ac4e8ae52ae69fa";
   };
 
-
-  outputs = { self, nixpkgs, haskell-nix, iohk-nix, ... }@inputs:
-    let
-      defaultSystems = [ "x86_64-linux" "x86_64-darwin" ];
-
-      perSystem = nixpkgs.lib.genAttrs defaultSystems;
-
-      nixpkgsFor = system:
-        import nixpkgs {
-          overlays = [ haskell-nix.overlay iohk-nix.overlays.crypto ];
-          inherit (haskell-nix) config;
-          inherit system;
-        };
-
-      nixpkgsFor' = system: import nixpkgs { inherit system; };
-
-      projectFor = system:
-        let
-          pkgs = nixpkgsFor system;
-          pkgs' = nixpkgsFor' system;
-          plutus = import inputs.plutus { inherit system; };
-          src = ./.;
-        in import ./nix/haskell.nix { inherit src inputs pkgs pkgs' system; };
-
-    in {
-      flake = perSystem (system: (projectFor system).flake { });
-
-      defaultPackage = perSystem (system:
-        let lib = "hedgehog-plutus-simple:lib:hedgehog-plutus-simple";
-        in self.flake.${system}.packages.${lib});
-
-      packages = perSystem (system: self.flake.${system}.packages);
-
-      apps = perSystem (system: self.flake.${system}.apps);
-
-      devShell = perSystem (system: self.flake.${system}.devShell);
-
-      # This will build all of the project's executables and the tests
-      check = perSystem (system:
-        (nixpkgsFor system).runCommand "combined-check" {
-          nativeBuildInputs = builtins.attrValues self.checks.${system}
-            ++ builtins.attrValues self.flake.${system}.packages
-            ++ [ self.flake.${system}.devShell.inputDerivation ];
-        } "touch $out");
-
-      # NOTE `nix flake check` will not work at the moment due to use of
-      # IFD in haskell.nix
-      #
-      # Includes all of the packages in the `checks`, otherwise only the
-      # test suite would be included
-      checks = perSystem (system: self.flake.${system}.checks);
+  outputs = inputs@{ self, tooling, plutus-simple-model, ... }: tooling.lib.mkFlake { inherit self; }
+    {
+      imports = [
+        (tooling.lib.mkHaskellFlakeModule1 {
+          project.src = ./.;
+        })
+      ];
     };
 }
