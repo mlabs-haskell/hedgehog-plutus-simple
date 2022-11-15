@@ -37,4 +37,4 @@ testLimits initFunds cfg tfmLog act =
 
 
 runAction :: Value -> MockConfig -> Run a -> (Maybe String, Mock)
-runAction funds cfg act = runMock(act >> checkErrors) (initMock cfg funds)
+runAction funds cfg act = runMock (act >> checkErrors) (initMock cfg funds)
