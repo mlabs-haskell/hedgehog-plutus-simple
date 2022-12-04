@@ -20,7 +20,7 @@ ghci: requires_nix_shell
 FORMAT_SOURCES := $(shell git ls-tree -r HEAD --full-tree --name-only | grep -E '.*\.hs' )
 
 # Extensions we need to tell fourmolu about
-FORMAT_EXTENSIONS := -o -XQualifiedDo -o -XTemplateHaskell -o -XTypeApplications -o -XImportQualifiedPost -o -XPatternSynonyms
+FORMAT_EXTENSIONS := -o -XTemplateHaskell -o -XTypeApplications -o -XImportQualifiedPost -o -XPatternSynonyms
 
 # Run fourmolu formatter
 format: requires_nix_shell

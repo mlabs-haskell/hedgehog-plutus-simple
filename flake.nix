@@ -1,98 +1,30 @@
 {
   description = "hedgehog-plutus-simple";
 
-  inputs.nixpkgs.follows = "plutarch/nixpkgs";
-  inputs.haskell-nix.follows = "plutarch/haskell-nix";
-  # temporary fix for nix versions that have the transitive follows bug 
-  # see https://github.com/NixOS/nix/issues/6013
-  inputs.nixpkgs-2111 = { url = "github:NixOS/nixpkgs/nixpkgs-21.11-darwin"; };
+  nixConfig = {
+    extra-experimental-features = [ "nix-command" "flakes" "ca-derivations" ];
+    extra-substituters = [ "https://cache.iog.io" "https://public-plutonomicon.cachix.org" ];
+    extra-trusted-public-keys = [ "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=" "public-plutonomicon.cachix.org-1:3AKJMhCLn32gri1drGuaZmFrmnue+KkKrhhubQk/CWc=" ];
+    allow-import-from-derivation = "true";
+    bash-prompt = "\\[\\e[0m\\][\\[\\e[0;2m\\]nix \\[\\e[0;1m\\]hps \\[\\e[0;93m\\]\\w\\[\\e[0m\\]]\\[\\e[0m\\]$ \\[\\e[0m\\]";
+  };
 
-  inputs.plutarch.url = "github:Plutonomicon/plutarch";
-  inputs.plutarch.inputs.nixpkgs.follows = "plutarch/haskell-nix/nixpkgs-unstable";
+  inputs = {
+    tooling.url = "github:mlabs-haskell/mlabs-tooling.nix";
 
-  outputs = inputs@{ self, nixpkgs, haskell-nix, plutarch, ... }:
-    let
-      supportedSystems = with nixpkgs.lib.systems.supported; tier1 ++ tier2 ++ tier3;
+    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model/fa0aa0382ecabf6fcbef8c7b9c35d85ff7b57765";
+  };
 
-      perSystem = nixpkgs.lib.genAttrs supportedSystems;
-
-      nixpkgsFor = system: import nixpkgs { inherit system; overlays = [ haskell-nix.overlay ]; inherit (haskell-nix) config; };
-      nixpkgsFor' = system: import nixpkgs { inherit system; inherit (haskell-nix) config; };
-
-      ghcVersion = "ghc921";
-
-      projectFor = system:
-        let pkgs = nixpkgsFor system; in
-        let pkgs' = nixpkgsFor' system; in
-        (nixpkgsFor system).haskell-nix.cabalProject' {
-          src = ./.;
-          compiler-nix-name = ghcVersion;
-          inherit (plutarch) cabalProjectLocal;
-          extraSources = plutarch.extraSources ++ [
-            {
-              src = inputs.plutarch;
-              subdirs = [ "." ];
-            }
-          ];
-          modules = [ (plutarch.haskellModule system) ];
-          shell = {
-            withHoogle = true;
-
-            exactDeps = true;
-
-            # We use the ones from Nixpkgs, since they are cached reliably.
-            # Eventually we will probably want to build these with haskell.nix.
-            nativeBuildInputs = [ pkgs'.git pkgs'.haskellPackages.apply-refact pkgs'.fd pkgs'.cabal-install pkgs'.hlint pkgs'.haskellPackages.cabal-fmt pkgs'.nixpkgs-fmt ];
-
-            inherit (plutarch) tools;
-
-            additional = ps: [
-              ps.plutarch
-              ps.tasty-quickcheck
-            ];
-          };
-        };
-
-      formatCheckFor = system:
-        let
-          pkgs = nixpkgsFor system;
-          pkgs' = nixpkgsFor' system;
-        in
-        pkgs.runCommand "format-check"
-          {
-            nativeBuildInputs = [ pkgs'.git pkgs'.fd pkgs'.haskellPackages.cabal-fmt pkgs'.nixpkgs-fmt (pkgs.haskell-nix.tools ghcVersion { inherit (plutarch.tools) fourmolu; }).fourmolu ];
-          } ''
-          export LC_CTYPE=C.UTF-8
-          export LC_ALL=C.UTF-8
-          export LANG=C.UTF-8
-          cd ${self}
-          make format_check
-          mkdir $out
-        ''
-      ;
-    in
+  outputs = inputs@{ self, tooling, plutus-simple-model, ... }: tooling.lib.mkFlake { inherit self; }
     {
-      project = perSystem projectFor;
-      flake = perSystem (system: (projectFor system).flake { });
+      imports = [
+        (tooling.lib.mkHaskellFlakeModule1 {
+          project.src = ./.;
 
-      packages = perSystem (system: self.flake.${system}.packages);
-      checks = perSystem (system:
-        self.flake.${system}.checks
-        // {
-          formatCheck = formatCheckFor system;
-        }
-      );
-      check = perSystem (system:
-        (nixpkgsFor system).runCommand "combined-test"
-          {
-            checksss = builtins.attrValues self.checks.${system};
-          } ''
-          echo $checksss
-          touch $out
-        ''
-      );
-      devShell = perSystem (system: self.flake.${system}.devShell);
+          project.extraHackage = [
+            "${plutus-simple-model}"
+          ];
+        })
+      ];
     };
 }
-
-
