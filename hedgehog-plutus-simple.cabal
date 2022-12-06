@@ -98,3 +98,15 @@ library
     , plutus-simple-model
 
   hs-source-dirs:  src
+
+executable examples
+  import: common-lang
+  main-is: Main.hs
+  hs-source-dirs: examples
+  other-modules:
+    StateMachine
+  build-depends:
+    , hedgehog
+    , plutus-ledger-api
+    , plutus-simple-model
+    , containers

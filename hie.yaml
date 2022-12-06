@@ -5,3 +5,6 @@ cradle:
 
     - path: "./test"
       component: "test:hedgehog-plutus-simple"
+
+    - path: "./examples"
+      component: "hedgehog-plutus-simple:examples"
