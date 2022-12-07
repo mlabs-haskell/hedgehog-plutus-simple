@@ -1,6 +1,6 @@
 module Main(main) where
 
-import StateMachine(auctionTests)
+import Auction.StateMachine(auctionTests)
 import Hedgehog (checkSequential)
 import Control.Monad (void)
 

@@ -104,9 +104,11 @@ executable examples
   main-is: Main.hs
   hs-source-dirs: examples
   other-modules:
-    StateMachine
+    Auction.StateMachine
+    Auction.PSM
   build-depends:
     , hedgehog
     , plutus-ledger-api
     , plutus-simple-model
     , containers
+    , mtl
