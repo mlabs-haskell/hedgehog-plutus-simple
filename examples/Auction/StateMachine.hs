@@ -1,5 +1,7 @@
+{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 module Auction.StateMachine
   (auctionTests
+  ,auctionTest
   )
   where
 
@@ -7,9 +9,12 @@ import Hedgehog
     ( forAll,
       property,
       executeSequential,
+      concrete,
+      annotateShow,
+      failure,
       MonadGen,
       Property,
-      Callback(Update),
+      Callback(Update, Require,Ensure),
       Command(Command),
       Concrete(Concrete),
       Symbolic,
@@ -18,23 +23,26 @@ import Hedgehog
       FunctorB,
       TraversableB,
       Rec(Rec),
-      Var(Var)
-
+      Var(Var),
+      (===),
     )
 import Hedgehog.Internal.Distributive(MonadTransDistributive(distributeT))
 
 import Control.Monad.State.Strict (StateT,state,runState, evalStateT)
+import Control.Monad(liftM2)
 import Data.Functor ((<&>))
 import Data.Kind (Type)
+import Data.List (sort)
 import Data.Map (Map)
 import GHC.Generics (Generic)
 import Plutus.Model (Mock,Run(Run),initMock, adaValue, defaultBabbage,checkErrors)
 import PlutusLedgerApi.V2 (PubKeyHash)
+--import Debug.Trace(traceShow)
 
+import qualified Auction.PSM as PSM
 import qualified Data.Map as Map
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Internal.Range as Range
-import qualified Auction.PSM as PSM
 
 newtype User = User{name::String}
   deriving stock (Eq,Ord,Show)
@@ -43,17 +51,16 @@ data AuctionState v
   = AuctionState
     { currentBid :: Maybe (User,Int)
     , winner :: Maybe User
-    , balances :: Map User Int
-    , userKeys :: Map User (Var PubKeyHash v)
+    , users :: Map User (Int,Var PubKeyHash v)
     }
+    deriving stock (Eq,Ord,Show)
 
 initialState :: AuctionState v
 initialState =
   AuctionState
     { currentBid = Nothing
     , winner = Nothing
-    , balances = Map.empty
-    , userKeys = Map.empty
+    , users = Map.empty
     }
 
 data AddUser v
@@ -66,9 +73,9 @@ instance TraversableB AddUser
 addUser :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
 addUser =
   let
-    gen :: AuctionState Symbolic -> Maybe (m (AddUser v))
+    gen :: AuctionState Symbolic -> Maybe (m (AddUser Symbolic))
     gen s = Just $ AddUser <$>
-      Gen.filterT (\user -> user `notElem` (Map.keys $ userKeys s))
+      Gen.filterT (\user -> user `notElem` (Map.keys $ users s))
       (User <$> Gen.list (Range.linear 0 100) Gen.alpha)
       <*> Gen.int (Range.linear 0 1_000_000_000)
 
@@ -77,9 +84,9 @@ addUser =
   in
     Command gen execute
       [ Update $ \s (AddUser user startBal) pkh ->
-        s{userKeys = Map.insert user pkh (userKeys s)
-         ,balances = Map.insert user startBal (balances s)
+        s{users = Map.insert user (startBal,pkh) (users s)
          }
+      , Require $ \input (AddUser u _) -> u `notElem` (Map.keys $ users input)
       ]
 
 data Bid v
@@ -94,13 +101,10 @@ bid =
   let
     gen :: AuctionState Symbolic -> Maybe (m (Bid Symbolic))
     gen s =
-      case Map.toList (balances s) of
+      case Map.toList (users s) of
         [] -> Nothing
-        users -> Just $ do
-          (user,bal) <- Gen.element users
-          pkh <- case Map.lookup user (userKeys s) of
-                   Just pkh -> pure pkh
-                   Nothing -> error "no key for user"
+        us -> Just $ do
+          (user,(bal,pkh)) <- Gen.element us
           Bid user pkh <$>
             Gen.int (Range.linear 1 bal)
     execute :: Bid Concrete -> (PropertyT RunIO) ()
@@ -145,6 +149,34 @@ end =
          }
       ]
 
+type RunIO = StateT Mock IO
+
+data Check (v :: Type -> Type) =
+  Check [Var PubKeyHash v]
+  deriving stock (Eq,Show,Generic)
+
+instance FunctorB Check
+instance TraversableB Check
+
+-- TODO afaict this has to be a command
+-- it'd be better if it could be a common callback
+-- but the callbacks can't use Run
+validate :: forall m . MonadGen m => Command m (PropertyT RunIO) AuctionState
+validate =
+  let
+    gen :: AuctionState Symbolic -> Maybe (m (Check Symbolic))
+    gen s = Just $ pure $ Check (snd <$> Map.elems (users s))
+
+    execute :: Check Concrete -> PropertyT RunIO [(PubKeyHash,Int)]
+    execute (Check keys) = liftRun $ PSM.getBals $ concrete <$> keys
+      in
+        Command gen execute
+          [ Ensure $ \inp out _ bs -> do
+            inp === out
+            sort [ (pkh,bal) | (bal,(Var (Concrete pkh))) <- Map.elems (users out) ]
+              === sort bs
+          ]
+
 auctionTests :: Group
 auctionTests = Group "auction tests" [("auction test",auctionTest)]
 
@@ -155,15 +187,19 @@ auctionTest =
       Gen.sequential
       (Range.linear 1 100)
       initialState
-      [addUser,bid,end]
+      [addUser,bid,end,validate]
     execRun mock $ executeSequential initialState actions
       where
-        mock = initMock defaultBabbage (adaValue 1_000_000_000)
-
-type RunIO = StateT Mock IO
+        mock = initMock defaultBabbage (adaValue 1_000_000_000_000)
 
 liftRun :: Run a -> PropertyT RunIO a
-liftRun (Run act) = state $ runState act
+liftRun (Run act) = do
+  let Run checkErrors' = checkErrors
+  (res,errs) <- state $ runState (liftM2 (,) act checkErrors')
+  case errs of
+    Just err -> annotateShow err *> failure
+    Nothing -> pure res
 
 execRun :: Mock -> PropertyT RunIO a -> PropertyT IO a
-execRun m act = evalStateT (distributeT (act <* liftRun checkErrors)) m
+execRun m act = evalStateT (distributeT act) m
+
