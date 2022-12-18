@@ -12,7 +12,7 @@
   inputs = {
     tooling.url = "github:mlabs-haskell/mlabs-tooling.nix";
 
-    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model/fa0aa0382ecabf6fcbef8c7b9c35d85ff7b57765";
+    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model";
   };
 
   outputs = inputs@{ self, tooling, plutus-simple-model, ... }: tooling.lib.mkFlake { inherit self; }

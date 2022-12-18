@@ -1,7 +1,2 @@
 cradle:
   cabal:
-    - path: "./src"
-      component: "lib:hedgehog-plutus-simple"
-
-    - path: "./test"
-      component: "test:hedgehog-plutus-simple"

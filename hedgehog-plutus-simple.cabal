@@ -91,10 +91,36 @@ common common-lang
 
 library
   import:          common-lang
-  exposed-modules: Hedgehog.Plutus.Simple
+  exposed-modules:
+    Hedgehog.Plutus.Model
+    Hedgehog.Plutus.Simple
+    Hedgehog.Plutus.Tx
+
   build-depends:
+    , cardano-ledger-core
+    , combinat
+    , containers
     , hedgehog
     , plutus-ledger-api
     , plutus-simple-model
+    , plutus-tx
+    , singletons
+    , singletons-th
+    , vector
 
   hs-source-dirs:  src
+
+test-suite tests
+  import:         common-lang
+  type:           exitcode-stdio-1.0
+  main-is:        Main.hs
+  build-depends:
+    , containers
+    , hedgehog
+    , hedgehog-plutus-simple
+    , mtl
+    , plutus-simple-model
+    , random
+    , vector
+
+  hs-source-dirs: test
