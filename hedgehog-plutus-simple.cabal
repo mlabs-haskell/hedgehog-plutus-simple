@@ -92,12 +92,14 @@ common common-lang
 library
   import:          common-lang
   exposed-modules:
-    Hedgehog.Plutus.Model
+    Hedgehog.Plutus.Objective
     Hedgehog.Plutus.Simple
-    Hedgehog.Plutus.Tx
 
   build-depends:
+    , cardano-ledger-alonzo
+    , cardano-ledger-babbage
     , cardano-ledger-core
+    , cardano-ledger-shelley
     , combinat
     , containers
     , hedgehog
