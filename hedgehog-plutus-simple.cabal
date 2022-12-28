@@ -94,6 +94,8 @@ library
   exposed-modules:
     Hedgehog.Plutus.Objective
     Hedgehog.Plutus.Simple
+    Hedgehog.Plutus.TxObjectives
+    Hedgehog.Plutus.TxSequence
 
   build-depends:
     , cardano-ledger-alonzo
