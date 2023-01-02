@@ -31,6 +31,7 @@ import Plutus.Model.V2 (
   valueAt,
  )
 import PlutusLedgerApi.V1 (TxOutRef)
+import PlutusLedgerApi.V1.Value (leq)
 
 addUser :: Int -> Run PubKeyHash
 addUser = newUser . adaValue . fromIntegral
@@ -44,7 +45,12 @@ getBals keys = (zip keys <$>) $
 start :: PubKeyHash -> Run TxOutRef
 start pkh = do
   auctionValidator <- getAuctionValidator
-  let val = adaValue 1_000
+  bal <- valueAt pkh
+  let val = adaValue 1
+  -- TODO make this a random token or something probably
+  if (bal `leq` val)
+    then fail $ "user didn't have enough ada user had " <> show bal <> "needed" <> show val
+    else pure ()
   us <- spend pkh val
   let
     tx =

@@ -144,9 +144,10 @@ instance TraversableB Start
 start :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
 start =
   let gen :: AuctionState Symbolic -> Maybe (m (Start Symbolic))
-      gen s = case filter ((> 1_000_000) . fst . snd) $ Map.toList (users s) of
-        [] -> Nothing
-        us -> Just $ Start . second snd <$> Gen.element us
+      gen s =
+        case filter ((> 1) . fst . snd) $ Map.toList (users s) of
+          [] -> Nothing
+          us -> Just $ Start . second snd <$> Gen.element us
 
       execute :: Start Concrete -> PropertyT RunIO TxOutRef
       execute (Start (_, Var (Concrete pkh))) = liftRun $ PSM.start pkh
@@ -157,6 +158,10 @@ start =
             s
               { currentBid = Just (user, 0)
               }
+        , Require $ \input (Start (u, _)) ->
+            case Map.lookup u (users input) of
+              Just (bal, _) -> bal > 1
+              Nothing -> False
         ]
 
 data End (v :: Type -> Type)
