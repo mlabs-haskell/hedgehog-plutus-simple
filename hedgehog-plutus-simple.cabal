@@ -109,8 +109,11 @@ executable examples
 
   build-depends:
     , containers
+    , data-default
     , hedgehog
     , mtl
+    , plutarch
     , plutus-ledger-api
     , plutus-simple-model
     , strict-containers
+    , text

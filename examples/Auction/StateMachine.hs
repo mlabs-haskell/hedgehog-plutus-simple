@@ -28,6 +28,7 @@ import Hedgehog (
  )
 import Hedgehog.Internal.Distributive (MonadTransDistributive (distributeT))
 
+import Control.Arrow (second)
 import Control.Monad (liftM2)
 import Control.Monad.State.Strict (StateT, evalStateT, runState, state)
 import Data.Functor ((<&>))
@@ -38,12 +39,11 @@ import GHC.Generics (Generic)
 import Plutus.Model (Mock, Run (Run), adaValue, checkErrors, defaultBabbage, initMock)
 import PlutusLedgerApi.V2 (PubKeyHash)
 
--- import Debug.Trace(traceShow)
-
 import Auction.PSM qualified as PSM
 import Data.Map qualified as Map
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Internal.Range qualified as Range
+import PlutusLedgerApi.V2.Contexts (TxOutRef)
 
 newtype User = User {name :: String}
   deriving stock (Eq, Ord, Show)
@@ -116,20 +116,26 @@ bid =
         gen
         execute
         [ Update $ \s (Bid newBidder _pkh newAmt) _ ->
-            let acceptBid = s {currentBid = Just (newBidder, newAmt)}
-                rejectBid = s
-             in case currentBid s of
-                  Nothing ->
-                    case winner s of
-                      Just _ -> rejectBid -- auction over
-                      Nothing -> acceptBid -- fisrt bid
-                  Just (_, oldAmt)
-                    | oldAmt < newAmt -> acceptBid
-                    | otherwise -> rejectBid
+            let
+              acceptBid =
+                s
+                  { currentBid =
+                      Just (newBidder, newAmt)
+                  }
+              rejectBid = s
+             in
+              case currentBid s of
+                Nothing ->
+                  case winner s of
+                    Just _ -> rejectBid -- auction over
+                    Nothing -> acceptBid -- fisrt bid
+                Just (_, oldAmt)
+                  | oldAmt < newAmt -> acceptBid
+                  | otherwise -> rejectBid
         ]
 
 data Start (v :: Type -> Type)
-  = Start
+  = Start (User, Var PubKeyHash v)
   deriving stock (Eq, Show, Generic)
 
 instance FunctorB Start
@@ -137,17 +143,19 @@ instance TraversableB Start
 
 start :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
 start =
-  let gen :: AuctionState Symbolic -> Maybe (m (Start v))
-      gen _ = Just $ pure Start
+  let gen :: AuctionState Symbolic -> Maybe (m (Start Symbolic))
+      gen s = case filter ((> 1_000_000) . fst . snd) $ Map.toList (users s) of
+        [] -> Nothing
+        us -> Just $ Start . second snd <$> Gen.element us
 
-      execute :: Start Concrete -> PropertyT RunIO ()
-      execute _ = liftRun $ PSM.start undefined
+      execute :: Start Concrete -> PropertyT RunIO TxOutRef
+      execute (Start (_, Var (Concrete pkh))) = liftRun $ PSM.start pkh
    in Command
         gen
         execute
-        [ Update $ \s _i _o ->
+        [ Update $ \s (Start (user, _)) _o ->
             s
-              { currentBid = undefined
+              { currentBid = Just (user, 0)
               }
         ]
 
@@ -187,6 +195,7 @@ instance TraversableB Check
 -- TODO afaict this has to be a command
 -- it'd be better if it could be a common callback
 -- but the callbacks can't use Run
+-- I should try keeping the PSM state in a variable
 validate :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
 validate =
   let gen :: AuctionState Symbolic -> Maybe (m (Check Symbolic))

@@ -7,21 +7,30 @@ module Auction.PSM (
 ) where
 
 import Control.Monad (forM)
+import Data.Default (def)
+import Data.Text (unpack)
+
+import Plutarch.Prelude (PUnit (PUnit), pcon, plam)
+
+import Plutus.Model.Validator.V2 (mkTypedValidatorPlutarch)
 import PlutusLedgerApi.V2 (PubKeyHash)
 
+import Plutus.Model (utxoAt)
 import Plutus.Model.V2 (
   DatumMode (InlineDatum),
   Run,
-  TypedValidator (TypedValidator),
+  TypedValidator,
   adaOf,
   adaValue,
   getLovelace,
   newUser,
   payToScript,
+  spend,
   submitTx,
-  toV2,
+  userSpend,
   valueAt,
  )
+import PlutusLedgerApi.V1 (TxOutRef)
 
 addUser :: Int -> Run PubKeyHash
 addUser = newUser . adaValue . fromIntegral
@@ -32,19 +41,24 @@ getBals keys = (zip keys <$>) $
     val <- valueAt key
     pure $ fromIntegral $ getLovelace $ adaOf val
 
-start :: PubKeyHash -> Run ()
+start :: PubKeyHash -> Run TxOutRef
 start pkh = do
-  let tx =
-        payToScript @Auction
-          (TypedValidator $ toV2 $ undefined)
-          -- It seems like it's not possible to use plutarch here
+  auctionValidator <- getAuctionValidator
+  let val = adaValue 1_000
+  us <- spend pkh val
+  let
+    tx =
+      userSpend us
+        <> payToScript @Auction
+          auctionValidator
           (InlineDatum Nothing)
-          (adaValue 1_000_000)
-  outs <- getOutputs tx
+          val
   submitTx pkh tx
-  pure outs
-  where
-    getOutputs = undefined
+  utxos <- utxoAt auctionValidator
+  pure $ fst $ head $ utxos
+
+-- TODO it would be nice if PSM could give you more info
+-- on submitTx ie. outputs with txids
 
 -- The internal implementation
 -- in psm seems to require hidden functions
@@ -57,3 +71,9 @@ end = pure ()
 
 type Auction =
   TypedValidator (Maybe ()) ()
+
+getAuctionValidator :: Run Auction
+getAuctionValidator =
+  case mkTypedValidatorPlutarch def (plam $ \_ _ _ -> pcon PUnit) of
+    Right v -> pure v
+    Left t -> fail $ unpack t
