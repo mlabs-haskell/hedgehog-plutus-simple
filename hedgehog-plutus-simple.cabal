@@ -100,15 +100,17 @@ library
   hs-source-dirs:  src
 
 executable examples
-  import: common-lang
-  main-is: Main.hs
+  import:         common-lang
+  main-is:        Main.hs
   hs-source-dirs: examples
   other-modules:
-    Auction.StateMachine
     Auction.PSM
+    Auction.StateMachine
+
   build-depends:
+    , containers
     , hedgehog
+    , mtl
     , plutus-ledger-api
     , plutus-simple-model
-    , containers
-    , mtl
+    , strict-containers
