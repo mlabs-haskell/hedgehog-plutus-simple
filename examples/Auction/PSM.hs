@@ -13,11 +13,11 @@ import Data.Text (unpack)
 import Plutarch.Prelude (PUnit (PUnit), pcon, plam)
 
 import Plutus.Model.Validator.V2 (mkTypedValidatorPlutarch)
-import PlutusLedgerApi.V2 (PubKeyHash)
+import PlutusLedgerApi.V2 (PubKeyHash, singleton)
 
-import Plutus.Model (utxoAt)
-import Plutus.Model.V2 (
-  DatumMode (InlineDatum),
+import Plutus.Model (mintValue, utxoAt)
+import Plutus.Model.V1 (
+  DatumMode (HashDatum),
   Run,
   TypedValidator,
   adaOf,
@@ -25,13 +25,17 @@ import Plutus.Model.V2 (
   getLovelace,
   newUser,
   payToScript,
-  spend,
+  -- spend,
   submitTx,
-  userSpend,
+  -- userSpend,
   valueAt,
  )
 import PlutusLedgerApi.V1 (TxOutRef)
-import PlutusLedgerApi.V1.Value (leq)
+
+-- import PlutusLedgerApi.V2.Value (leq)
+
+import Plutus.Model.V1 (TypedPolicy, scriptCurrencySymbol)
+import Plutus.Model.Validator.V1 (mkTypedPolicyPlutarch)
 
 addUser :: Int -> Run PubKeyHash
 addUser = newUser . adaValue . fromIntegral
@@ -45,19 +49,19 @@ getBals keys = (zip keys <$>) $
 start :: PubKeyHash -> Run TxOutRef
 start pkh = do
   auctionValidator <- getAuctionValidator
-  bal <- valueAt pkh
-  let val = adaValue 1
-  -- TODO make this a random token or something probably
-  if (bal `leq` val)
-    then fail $ "user didn't have enough ada user had " <> show bal <> "needed" <> show val
-    else pure ()
-  us <- spend pkh val
+  mp <- getTrivialMP
+  let cs = scriptCurrencySymbol mp
+  let val = singleton cs "" 1
+  -- us <- spend pkh val
   let
     tx =
-      userSpend us
+      -- userSpend us
+      mintValue mp () val
         <> payToScript @Auction
           auctionValidator
-          (InlineDatum Nothing)
+          (HashDatum Nothing)
+          -- TODO I'd like to use inline datum
+          -- but V2 causes an error for some reason
           val
   submitTx pkh tx
   utxos <- utxoAt auctionValidator
@@ -81,5 +85,13 @@ type Auction =
 getAuctionValidator :: Run Auction
 getAuctionValidator =
   case mkTypedValidatorPlutarch def (plam $ \_ _ _ -> pcon PUnit) of
+    Right v -> pure v
+    Left t -> fail $ unpack t
+
+type TrivialToken = TypedPolicy ()
+
+getTrivialMP :: Run TrivialToken
+getTrivialMP =
+  case mkTypedPolicyPlutarch def (plam $ \_ _ -> pcon PUnit) of
     Right v -> pure v
     Left t -> fail $ unpack t

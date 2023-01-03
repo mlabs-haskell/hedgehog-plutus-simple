@@ -79,7 +79,7 @@ addUser =
             <$> Gen.filterT
               (\user -> user `notElem` (Map.keys $ users s))
               (User <$> Gen.list (Range.linear 0 100) Gen.alpha)
-            <*> Gen.int (Range.linear 0 1_000_000_000)
+            <*> Gen.int (Range.linear 1_000_000 1_000_000_000)
 
       execute :: AddUser Concrete -> PropertyT RunIO PubKeyHash
       execute (AddUser _user startBal) = liftRun $ PSM.addUser startBal
@@ -145,7 +145,7 @@ start :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
 start =
   let gen :: AuctionState Symbolic -> Maybe (m (Start Symbolic))
       gen s =
-        case filter ((> 1) . fst . snd) $ Map.toList (users s) of
+        case filter (enoughForFees . fst . snd) $ Map.toList (users s) of
           [] -> Nothing
           us -> Just $ Start . second snd <$> Gen.element us
 
@@ -160,9 +160,12 @@ start =
               }
         , Require $ \input (Start (u, _)) ->
             case Map.lookup u (users input) of
-              Just (bal, _) -> bal > 1
+              Just (bal, _) -> enoughForFees bal
               Nothing -> False
         ]
+
+enoughForFees :: Int -> Bool
+enoughForFees = (> 1_000_000)
 
 data End (v :: Type -> Type)
   = End
