@@ -29,28 +29,29 @@ import Hedgehog (
 import Hedgehog.Internal.Distributive (MonadTransDistributive (distributeT))
 
 import Control.Arrow (second)
-import Control.Monad (liftM2)
+import Control.Monad (guard, liftM2)
 import Control.Monad.State.Strict (StateT, evalStateT, runState, state)
-import Data.Functor ((<&>))
 import Data.Kind (Type)
 import Data.List (sort)
 import Data.Map (Map)
+import Data.Maybe (isJust, isNothing)
 import GHC.Generics (Generic)
 import Plutus.Model (Mock, Run (Run), adaValue, checkErrors, defaultBabbage, initMock)
-import PlutusLedgerApi.V2 (PubKeyHash)
+import PlutusLedgerApi.V1 (PubKeyHash)
+import PlutusLedgerApi.V1.Contexts (TxOutRef)
 
 import Auction.PSM qualified as PSM
 import Data.Map qualified as Map
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Internal.Range qualified as Range
-import PlutusLedgerApi.V2.Contexts (TxOutRef)
 
 newtype User = User {name :: String}
   deriving stock (Eq, Ord, Show)
 
 data AuctionState v = AuctionState
-  { currentBid :: Maybe (User, Int)
-  , winner :: Maybe User
+  { currentBid :: Maybe (User, User, Int, Var TxOutRef v)
+  , -- auction owner, current bidder, bid, current utxo
+    winner :: Maybe User
   , users :: Map User (Int, Var PubKeyHash v)
   }
   deriving stock (Eq, Ord, Show)
@@ -93,8 +94,14 @@ addUser =
         , Require $ \input (AddUser u _) -> u `notElem` (Map.keys $ users input)
         ]
 
-data Bid v
-  = Bid User (Var PubKeyHash v) Int
+data Bid v = Bid
+  { newBidder :: User
+  , newPkh :: Var PubKeyHash v
+  , amt :: Int
+  , oldRef :: Var TxOutRef v
+  , refundPkh :: Var PubKeyHash v
+  , refundAmt :: Int
+  }
   deriving stock (Eq, Show, Generic)
 
 instance FunctorB Bid
@@ -104,34 +111,48 @@ bid :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
 bid =
   let gen :: AuctionState Symbolic -> Maybe (m (Bid Symbolic))
       gen s =
-        case Map.toList (users s) of
-          [] -> Nothing
-          us -> Just $ do
-            (user, (bal, pkh)) <- Gen.element us
-            Bid user pkh
-              <$> Gen.int (Range.linear 1 bal)
-      execute :: Bid Concrete -> (PropertyT RunIO) ()
-      execute (Bid _user (Var (Concrete pkh)) amt) = liftRun $ PSM.bid pkh amt
+        case currentBid s of
+          Nothing -> Nothing
+          Just (_, currentBidder, amt, _) ->
+            case filter (\(newBidder, (bal, _)) -> bal > amt && newBidder /= currentBidder) $ Map.toList (users s) of
+              [] -> Nothing
+              us -> do
+                (_, u, refundAmt, ref) <- currentBid s
+                (_, refundPkh) <- Map.lookup u (users s)
+                pure $ do
+                  (user, (bal, pkh)) <- Gen.element us
+                  amt <- Gen.int (Range.linear (amt + 1) bal)
+                  pure $ Bid user pkh amt ref refundPkh refundAmt
+      execute :: Bid Concrete -> (PropertyT RunIO) TxOutRef
+      execute
+        ( Bid
+            _user
+            (Var (Concrete pkh))
+            amt
+            (Var (Concrete ref))
+            (Var (Concrete refundPkh))
+            refundAmt
+          ) =
+          liftRun $ PSM.bid ref pkh amt refundPkh refundAmt
    in Command
         gen
         execute
-        [ Update $ \s (Bid newBidder _pkh newAmt) _ ->
-            let
-              acceptBid =
-                s
-                  { currentBid =
-                      Just (newBidder, newAmt)
-                  }
-              rejectBid = s
-             in
-              case currentBid s of
-                Nothing ->
-                  case winner s of
-                    Just _ -> rejectBid -- auction over
-                    Nothing -> acceptBid -- fisrt bid
-                Just (_, oldAmt)
-                  | oldAmt < newAmt -> acceptBid
-                  | otherwise -> rejectBid
+        [ Update $ \s (Bid newBidder _ newAmt _ _ _) newRef ->
+            case currentBid s of
+              Nothing -> s
+              Just (owner, _, oldAmt, _)
+                | oldAmt < newAmt ->
+                    s
+                      { currentBid = Just (owner, newBidder, newAmt, newRef)
+                      }
+                | otherwise -> s
+        , Require $ \input (Bid {newBidder, amt, refundAmt}) -> isJust $ do
+            (_, currentBidder, curAmt, _) <- currentBid input
+            bal <- fst <$> Map.lookup newBidder (users input)
+            guard $ currentBidder /= newBidder
+            guard $ bal > amt
+            guard $ refundAmt == curAmt
+            guard $ amt > curAmt
         ]
 
 data Start (v :: Type -> Type)
@@ -154,14 +175,16 @@ start =
    in Command
         gen
         execute
-        [ Update $ \s (Start (user, _)) _o ->
+        [ Update $ \s (Start (user, _)) o ->
             s
-              { currentBid = Just (user, 0)
+              { currentBid = Just (user, user, 0, o)
               }
         , Require $ \input (Start (u, _)) ->
             case Map.lookup u (users input) of
               Just (bal, _) -> enoughForFees bal
               Nothing -> False
+        , Require $ \input _ ->
+            isNothing (currentBid input)
         ]
 
 enoughForFees :: Int -> Bool
@@ -169,6 +192,10 @@ enoughForFees = (> 1_000_000)
 
 data End (v :: Type -> Type)
   = End
+      (Var PubKeyHash v)
+      (Var PubKeyHash v)
+      Int
+      (Var TxOutRef v)
   deriving stock (Eq, Show, Generic)
 
 instance FunctorB End
@@ -176,18 +203,32 @@ instance TraversableB End
 
 end :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
 end =
-  let gen :: AuctionState Symbolic -> Maybe (m (End v))
-      gen _ = Just $ pure End
+  let gen :: AuctionState Symbolic -> Maybe (m (End Symbolic))
+      gen s = case currentBid s of
+        Just (owner', won', amt, ref) -> do
+          owner <- snd <$> Map.lookup owner' (users s)
+          won <- snd <$> Map.lookup won' (users s)
+          pure $ pure $ End owner won amt ref
+        _ -> Nothing
 
       execute :: End Concrete -> PropertyT RunIO ()
-      execute _ = liftRun PSM.end
+      execute
+        ( End
+            (Var (Concrete owner))
+            (Var (Concrete winer))
+            amt
+            (Var (Concrete ref))
+          ) =
+          liftRun $ PSM.end owner winer amt ref
    in Command
         gen
         execute
         [ Update $ \s _i _o ->
             s
               { currentBid = Nothing
-              , winner = currentBid s <&> fst
+              , winner = do
+                  (_, u, _, _) <- currentBid s
+                  pure u
               }
         ]
 
@@ -216,7 +257,14 @@ validate =
         execute
         [ Ensure $ \inp out _ bs -> do
             inp === out
-            sort [(pkh, bal) | (bal, (Var (Concrete pkh))) <- Map.elems (users out)]
+            sort
+              [ case currentBid inp of
+                Just (_, user, amt, _)
+                  | (snd <$> Map.lookup user (users inp)) == Just (Var $ Concrete pkh) ->
+                      (pkh, bal - amt)
+                _ -> (pkh, bal)
+              | (bal, (Var (Concrete pkh))) <- Map.elems (users out)
+              ]
               === sort bs
         ]
 
@@ -235,7 +283,7 @@ auctionTest =
         Gen.sequential
           (Range.linear 1 100)
           initialState
-          [addUser, bid, start, end, validate]
+          ([addUser, bid, start, validate] ++ [end | False])
     execRun mock $ executeSequential initialState actions
   where
     mock = initMock defaultBabbage (adaValue 1_000_000_000_000)
