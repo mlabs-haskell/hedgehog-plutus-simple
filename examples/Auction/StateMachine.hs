@@ -36,7 +36,14 @@ import Data.List (sort)
 import Data.Map (Map)
 import Data.Maybe (isJust, isNothing)
 import GHC.Generics (Generic)
-import Plutus.Model (Mock, Run (Run), adaValue, checkErrors, defaultBabbage, initMock)
+import Plutus.Model (
+  Mock,
+  Run (Run),
+  adaValue,
+  checkErrors,
+  defaultBabbage,
+  initMock,
+ )
 import PlutusLedgerApi.V1 (PubKeyHash)
 import PlutusLedgerApi.V1.Contexts (TxOutRef)
 
@@ -78,7 +85,7 @@ addUser =
         Just $
           AddUser
             <$> Gen.filterT
-              (\user -> user `notElem` (Map.keys $ users s))
+              (\user -> user `notElem` Map.keys (users s))
               (User <$> Gen.list (Range.linear 0 100) Gen.alpha)
             <*> Gen.int (Range.linear 1_000_000 1_000_000_000)
 
@@ -91,7 +98,8 @@ addUser =
             s
               { users = Map.insert user (startBal, pkh) (users s)
               }
-        , Require $ \input (AddUser u _) -> u `notElem` (Map.keys $ users input)
+        , Require $ \input (AddUser u _) ->
+            u `notElem` Map.keys (users input)
         ]
 
 data Bid v = Bid
@@ -114,15 +122,20 @@ bid =
         case currentBid s of
           Nothing -> Nothing
           Just (_, currentBidder, amt, _) ->
-            case filter (\(newBidder, (bal, _)) -> bal > amt && newBidder /= currentBidder) $ Map.toList (users s) of
-              [] -> Nothing
-              us -> do
-                (_, u, refundAmt, ref) <- currentBid s
-                (_, refundPkh) <- Map.lookup u (users s)
-                pure $ do
-                  (user, (bal, pkh)) <- Gen.element us
-                  amt <- Gen.int (Range.linear (amt + 1) bal)
-                  pure $ Bid user pkh amt ref refundPkh refundAmt
+            Map.toList (users s)
+              & filter
+                ( \(newBidder, (bal, _)) ->
+                    bal > amt && newBidder /= currentBidder
+                )
+              & \case
+                [] -> Nothing
+                us -> do
+                  (_, u, refundAmt, ref) <- currentBid s
+                  (_, refundPkh) <- Map.lookup u (users s)
+                  pure $ do
+                    (user, (bal, pkh)) <- Gen.element us
+                    amt <- Gen.int (Range.linear (amt + 1) bal)
+                    pure $ Bid user pkh amt ref refundPkh refundAmt
       execute :: Bid Concrete -> (PropertyT RunIO) TxOutRef
       execute
         ( Bid
@@ -149,13 +162,14 @@ bid =
         , Require $ \input (Bid {newBidder, amt, refundAmt}) -> isJust $ do
             (_, currentBidder, curAmt, _) <- currentBid input
             bal <- fst <$> Map.lookup newBidder (users input)
-            guard $ currentBidder /= newBidder
-            guard $ bal > amt
-            guard $ refundAmt == curAmt
-            guard $ amt > curAmt
+            guard $
+              currentBidder /= newBidder
+                && bal > amt
+                && amt > curAmt
+                && refundAmt == curAmt
         ]
 
-data Start (v :: Type -> Type)
+newtype Start (v :: Type -> Type)
   = Start (User, Var PubKeyHash v)
   deriving stock (Eq, Show, Generic)
 
@@ -218,8 +232,7 @@ end =
             (Var (Concrete winer))
             amt
             (Var (Concrete ref))
-          ) =
-          liftRun $ PSM.end owner winer amt ref
+          ) = liftRun $ PSM.end owner winer amt ref
    in Command
         gen
         execute
@@ -230,11 +243,15 @@ end =
                   (_, u, _, _) <- currentBid s
                   pure u
               }
+        , Require $ \input (End ownerPkh1 _ _ _) -> isJust $ do
+            (ownerU, _, _, _) <- currentBid input
+            ownerPkh2 <- snd <$> Map.lookup ownerU (users input)
+            guard $ ownerPkh2 == ownerPkh1
         ]
 
 type RunIO = StateT Mock IO
 
-data Check (v :: Type -> Type)
+newtype Check (v :: Type -> Type)
   = Check [Var PubKeyHash v]
   deriving stock (Eq, Show, Generic)
 
@@ -260,10 +277,11 @@ validate =
             sort
               [ case currentBid inp of
                 Just (_, user, amt, _)
-                  | (snd <$> Map.lookup user (users inp)) == Just (Var $ Concrete pkh) ->
+                  | (snd <$> Map.lookup user (users inp))
+                      == Just (Var $ Concrete pkh) ->
                       (pkh, bal - amt)
                 _ -> (pkh, bal)
-              | (bal, (Var (Concrete pkh))) <- Map.elems (users out)
+              | (bal, Var (Concrete pkh)) <- Map.elems (users out)
               ]
               === sort bs
         ]
@@ -283,7 +301,7 @@ auctionTest =
         Gen.sequential
           (Range.linear 1 100)
           initialState
-          ([addUser, bid, start, validate] ++ [end | False])
+          [addUser, bid, start, end, validate]
     execRun mock $ executeSequential initialState actions
   where
     mock = initMock defaultBabbage (adaValue 1_000_000_000_000)

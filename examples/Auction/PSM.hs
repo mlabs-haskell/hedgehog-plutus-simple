@@ -12,30 +12,26 @@ import Data.Text (unpack)
 
 import Plutarch.Prelude (PUnit (PUnit), pcon, plam)
 
-import Plutus.Model.Validator.V1 (mkTypedValidatorPlutarch)
-import PlutusLedgerApi.V1 (PubKeyHash, singleton)
-
 import Plutus.Model (mintValue, payToKey, utxoAt)
 import Plutus.Model.V1 (
   DatumMode (HashDatum),
   Run,
+  TypedPolicy,
   TypedValidator,
   adaOf,
   adaValue,
   getLovelace,
   newUser,
   payToScript,
+  scriptCurrencySymbol,
   spend,
+  spendScript,
   submitTx,
   userSpend,
   valueAt,
  )
-import PlutusLedgerApi.V1 (TxOutRef)
-
--- import PlutusLedgerApi.V2.Value (leq)
-
-import Plutus.Model.V1 (TypedPolicy, scriptCurrencySymbol, spendScript)
-import Plutus.Model.Validator.V1 (mkTypedPolicyPlutarch)
+import Plutus.Model.Validator.V1 (mkTypedPolicyPlutarch, mkTypedValidatorPlutarch)
+import PlutusLedgerApi.V1 (PubKeyHash, TxOutRef, singleton)
 
 addUser :: Int -> Run PubKeyHash
 addUser = newUser . adaValue . fromIntegral
@@ -63,7 +59,7 @@ start pkh = do
           val
   submitTx pkh tx
   utxos <- utxoAt auctionValidator
-  pure $ fst $ head $ utxos
+  pure $ fst $ head utxos
 
 -- TODO it would be nice if PSM could give you more info
 -- on submitTx ie. outputs with txids
@@ -85,7 +81,7 @@ bid oldRef pkh bidAmt refundPkh refundAmt = do
             auctionValidator
             oldRef
             ()
-            (Nothing)
+            Nothing
           <> payToKey
             refundPkh
             (singleton "" "" $ fromIntegral refundAmt)
@@ -97,7 +93,7 @@ bid oldRef pkh bidAmt refundPkh refundAmt = do
             (val <> token)
   submitTx pkh tx
   utxos <- utxoAt auctionValidator
-  pure $ fst $ head $ utxos
+  pure $ fst $ head utxos
 
 end :: PubKeyHash -> PubKeyHash -> Int -> TxOutRef -> Run ()
 end owner winer amt ref = do
