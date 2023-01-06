@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
-
 module Auction.StateMachine (
   auctionTests,
   auctionTest,
@@ -31,10 +29,11 @@ import Hedgehog.Internal.Distributive (MonadTransDistributive (distributeT))
 import Control.Arrow (second)
 import Control.Monad (guard, liftM2)
 import Control.Monad.State.Strict (StateT, evalStateT, runState, state)
+import Data.Function ((&))
 import Data.Kind (Type)
 import Data.List (sort)
 import Data.Map (Map)
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (fromMaybe, isJust, isNothing)
 import GHC.Generics (Generic)
 import Plutus.Model (
   Mock,
@@ -237,16 +236,29 @@ end =
         gen
         execute
         [ Update $ \s _i _o ->
-            s
-              { currentBid = Nothing
-              , winner = do
-                  (_, u, _, _) <- currentBid s
-                  pure u
-              }
-        , Require $ \input (End ownerPkh1 _ _ _) -> isJust $ do
-            (ownerU, _, _, _) <- currentBid input
+            let
+              (o, w, amt, _) = fromMaybe (error "end with no current bid") (currentBid s)
+             in
+              s
+                { currentBid = Nothing
+                , winner = Just w
+                , users =
+                    users s
+                      -- take money from winner
+                      & Map.updateWithKey
+                        (\_ (bal, pkh) -> Just (bal - amt, pkh))
+                        w
+                      -- add money to owner
+                      & Map.updateWithKey
+                        (\_ (bal, pkh) -> Just (bal + amt, pkh))
+                        o
+                }
+        , Require $ \input (End ownerPkh1 _ amt1 _) -> isJust $ do
+            (ownerU, _, amt2, _) <- currentBid input
             ownerPkh2 <- snd <$> Map.lookup ownerU (users input)
-            guard $ ownerPkh2 == ownerPkh1
+            guard $
+              ownerPkh2 == ownerPkh1
+                && amt1 == amt2
         ]
 
 type RunIO = StateT Mock IO
@@ -261,7 +273,10 @@ instance TraversableB Check
 -- TODO afaict this has to be a command
 -- it'd be better if it could be a common callback
 -- but the callbacks can't use Run
--- I should try keeping the PSM state in a variable
+-- Adding a Mcok to the return of Execute doesn't seem practical
+-- because you can't manipulate data inside a Var
+-- so there's no way to do (Var (a,b) v -> (Var a v,Var b v)) so you can't
+-- seperate the Mock from the other return of the execute
 validate :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
 validate =
   let gen :: AuctionState Symbolic -> Maybe (m (Check Symbolic))
@@ -301,10 +316,16 @@ auctionTest =
         Gen.sequential
           (Range.linear 1 100)
           initialState
-          [addUser, bid, start, end, validate]
+          [addUser, bid, start, validate, end]
     execRun mock $ executeSequential initialState actions
   where
     mock = initMock defaultBabbage (adaValue 1_000_000_000_000)
+
+-- TODO we could do parallel testing
+-- right now it fails with
+-- no valid interleaving
+-- The best solution is probably to make
+-- bids being rejected for being too little valid
 
 liftRun :: Run a -> PropertyT RunIO a
 liftRun (Run act) = do
