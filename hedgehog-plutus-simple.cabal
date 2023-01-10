@@ -70,7 +70,6 @@ common common-lang
     NumericUnderscores
     OverloadedRecordDot
     OverloadedStrings
-    PartialTypeSignatures
     PatternGuards
     PolyKinds
     PostfixOperators
@@ -91,10 +90,29 @@ common common-lang
 
 library
   import:          common-lang
-  exposed-modules: Hedgehog.Plutus.Simple
+  exposed-modules:
+    Hedgehog.Plutus.Adjunction
+    Hedgehog.Plutus.Simple
+    Hedgehog.Plutus.TestSingleScript
+    Hedgehog.Plutus.Tx
+    Hedgehog.Plutus.TxTest
+
   build-depends:
+    , array
+    , cardano-ledger-alonzo
+    , cardano-ledger-babbage
+    , cardano-ledger-core
+    , cardano-ledger-shelley
+    , cardano-slotting
+    , containers
     , hedgehog
+    , microlens
+    , plutus-core
     , plutus-ledger-api
     , plutus-simple-model
+    , plutus-tx
+    , text
+    , time
+    , vector
 
   hs-source-dirs:  src

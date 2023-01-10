@@ -12,10 +12,12 @@
   inputs = {
     tooling.url = "github:mlabs-haskell/mlabs-tooling.nix";
 
-    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model/fa0aa0382ecabf6fcbef8c7b9c35d85ff7b57765";
+    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model?ref=ari/expose-tx";
+
+    plutarch.url = "github:Plutonomicon/plutarch-plutus";
   };
 
-  outputs = inputs@{ self, tooling, plutus-simple-model, ... }: tooling.lib.mkFlake { inherit self; }
+  outputs = inputs@{ self, tooling, plutus-simple-model, plutarch, ... }: tooling.lib.mkFlake { inherit self; }
     {
       imports = [
         (tooling.lib.mkHaskellFlakeModule1 {
@@ -23,6 +25,7 @@
 
           project.extraHackage = [
             "${plutus-simple-model}"
+            "${plutarch}"
           ];
         })
       ];
