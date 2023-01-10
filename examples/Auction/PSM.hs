@@ -12,30 +12,26 @@ import Data.Text (unpack)
 
 import Plutarch.Prelude (PUnit (PUnit), pcon, plam)
 
-import Plutus.Model.Validator.V2 (mkTypedValidatorPlutarch)
-import PlutusLedgerApi.V2 (PubKeyHash, singleton)
-
-import Plutus.Model (mintValue, utxoAt)
+import Plutus.Model (mintValue, payToKey, utxoAt)
 import Plutus.Model.V1 (
   DatumMode (HashDatum),
   Run,
+  TypedPolicy,
   TypedValidator,
   adaOf,
   adaValue,
   getLovelace,
   newUser,
   payToScript,
-  -- spend,
+  scriptCurrencySymbol,
+  spend,
+  spendScript,
   submitTx,
-  -- userSpend,
+  userSpend,
   valueAt,
  )
-import PlutusLedgerApi.V1 (TxOutRef)
-
--- import PlutusLedgerApi.V2.Value (leq)
-
-import Plutus.Model.V1 (TypedPolicy, scriptCurrencySymbol)
-import Plutus.Model.Validator.V1 (mkTypedPolicyPlutarch)
+import Plutus.Model.Validator.V1 (mkTypedPolicyPlutarch, mkTypedValidatorPlutarch)
+import PlutusLedgerApi.V1 (PubKeyHash, TxOutRef, singleton)
 
 addUser :: Int -> Run PubKeyHash
 addUser = newUser . adaValue . fromIntegral
@@ -52,10 +48,8 @@ start pkh = do
   mp <- getTrivialMP
   let cs = scriptCurrencySymbol mp
   let val = singleton cs "" 1
-  -- us <- spend pkh val
   let
     tx =
-      -- userSpend us
       mintValue mp () val
         <> payToScript @Auction
           auctionValidator
@@ -65,7 +59,7 @@ start pkh = do
           val
   submitTx pkh tx
   utxos <- utxoAt auctionValidator
-  pure $ fst $ head $ utxos
+  pure $ fst $ head utxos
 
 -- TODO it would be nice if PSM could give you more info
 -- on submitTx ie. outputs with txids
@@ -73,11 +67,45 @@ start pkh = do
 -- The internal implementation
 -- in psm seems to require hidden functions
 
-bid :: PubKeyHash -> Int -> Run ()
-bid _ _ = pure ()
+bid :: TxOutRef -> PubKeyHash -> Int -> PubKeyHash -> Int -> Run TxOutRef
+bid oldRef pkh bidAmt refundPkh refundAmt = do
+  auctionValidator <- getAuctionValidator
+  let val = singleton "" "" $ fromIntegral bidAmt
+  us <- spend pkh val
+  mp <- getTrivialMP
+  let cs = scriptCurrencySymbol mp
+      token = singleton cs "" 1
+      tx =
+        userSpend us
+          <> spendScript
+            auctionValidator
+            oldRef
+            ()
+            Nothing
+          <> payToKey
+            refundPkh
+            (singleton "" "" $ fromIntegral refundAmt)
+          <> payToScript @Auction
+            auctionValidator
+            (HashDatum Nothing)
+            -- TODO I'd like to use inline datum
+            -- but V2 causes an error for some reason
+            (val <> token)
+  submitTx pkh tx
+  utxos <- utxoAt auctionValidator
+  pure $ fst $ head utxos
 
-end :: Run ()
-end = pure ()
+end :: PubKeyHash -> PubKeyHash -> Int -> TxOutRef -> Run ()
+end owner winer amt ref = do
+  auctionValidator <- getAuctionValidator
+  mp <- getTrivialMP
+  let cs = scriptCurrencySymbol mp
+      token = singleton cs "" 1
+      tx =
+        spendScript auctionValidator ref () Nothing
+          <> payToKey owner (singleton "" "" $ fromIntegral amt)
+          <> payToKey winer token
+  submitTx owner tx
 
 type Auction =
   TypedValidator (Maybe ()) ()
