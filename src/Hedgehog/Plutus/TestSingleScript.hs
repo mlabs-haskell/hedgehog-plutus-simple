@@ -38,6 +38,11 @@ import Plutus.Model.Mock.ProtocolParameters qualified as Model
 
 import Hedgehog.Plutus.Tx
 
+txRunScript ::
+  TxContext ->
+  Tx 'Unbalanced ->
+  ScriptPurpose ->
+  Maybe Plutus.EvaluationError
 txRunScript
   TxContext
     { mockchain =
@@ -100,7 +105,7 @@ txRunScript' ::
   , HasField
       "_costmdls"
       (Ledger.PParams era)
-      (Map Ledger.Language Ledger.CostModel)
+      Alonzo.CostModels
   ) =>
   Ledger.PParams era ->
   Ledger.EpochInfo (Either Text) ->
@@ -114,7 +119,11 @@ txRunScript' pparams ei sysS utxo tx sp = do
   sh <- sp `lookup` Alonzo.scriptsNeeded utxo tx
   (_, lang, scr') <- Alonzo.knownToNotBe1Phase scrs (sp, sh)
   rptr <- Ledger.strictMaybeToMaybe $ Ledger.rdptr (tx ^. Ledger.bodyTxL) sp
-  evalScript lang pparams (getField @"_costmdls" pparams Map.! lang) scr'
+  evalScript
+    lang
+    pparams
+    (Alonzo.unCostModels (getField @"_costmdls" pparams) Map.! lang)
+    scr'
     =<< txGetData pparams ei sysS tx utxo lang sp rptr
 
 txGetData ::

@@ -49,10 +49,14 @@ captures all failure cases.
 
 As a (partial) example, if your script requires a transaction to contain exactly
 one input with a specific datum `X`, then your `good` type will contain a field
-`xIn :: TxOutRef`, and your bad type a list type, `xIns :: [TxOutRef`],
+`xIn :: TxOutRef`, and your bad type a list type, `xIns :: [TxOutRef]`,
 capturing zero, one or multiple such inputs. In all but the most trivial cases,
 the `bad` type will cover good transctions as well, and will need to be
 protected by a smart constructor.
+
+Scripts that rely on other scripts can just include a spend of a script output
+and need not set up any of the conditions necessary to pass validation for that
+script - this creates the equivalent of a logical implication.
 
 The developer then tries to build good generators for the `good` and `bad`
 types. The model itself can be tested for consistency by testing that the
@@ -77,16 +81,17 @@ script `A` may introduce a component which is forbidden by script `B`. So
 another layer of adjunctions from `Either fullBad fullGood` to `Product '[forall
 good. good]` is needed to capture these potential conflict cases (while ignoring
 `bad` values for individual scripts, which are eliminated in the previous
-layer), Again, these can be round-trip tested for consistency, and then composed
-with the lower adjunctions to test these full transactions against actual
-scripts, using `plutus-simple-model`.
+layer), as well as tidy up the representation of these 'abstract transactions'.
+Again, these can be round-trip tested for consistency, and then composed with
+the lower adjunctions to test these full transactions against actual scripts,
+using `plutus-simple-model`.
 
 ## State machine layer
 
 `fullGood` types typically will form something like a sum type defining valid
 uses of your scripts. These will serve as the transitioms of your state machine.
 
-For state machine testing, the develooper define an ADT that specifies in
+For state machine testing, the developer define an ADT that specifies in
 abstract, the valid state of your machine. For example, an auction contract may
 look like:
 
