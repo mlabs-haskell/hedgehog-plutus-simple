@@ -55,18 +55,23 @@ newtype User = User {name :: String}
   deriving stock (Eq, Ord, Show)
 
 data AuctionState (v :: Type -> Type) = AuctionState
-  { currentBid :: Maybe (User, User, Int, Var TxOutRef v)
-  , -- auction owner, current bidder, bid, current utxo
-    winner :: Maybe User
+  { currentAuction :: Maybe (LiveAuction v)
   , users :: Map User (Int, Var PubKeyHash v)
+  }
+  deriving stock (Eq, Ord, Show)
+
+data LiveAuction (v :: Type -> Type) = LiveAuction
+  { owner :: User
+  , winner :: User
+  , bidAmt :: Int
+  , utxo :: Var TxOutRef v
   }
   deriving stock (Eq, Ord, Show)
 
 initialState :: AuctionState (v :: Type -> Type)
 initialState =
   AuctionState
-    { currentBid = Nothing
-    , winner = Nothing
+    { currentAuction = Nothing
     , users = Map.empty
     }
 
@@ -124,9 +129,9 @@ bid ::
 bid =
   let gen :: AuctionState Symbolic -> Maybe (m (Bid Symbolic))
       gen s =
-        case currentBid s of
+        case currentAuction s of
           Nothing -> Nothing
-          Just (_, currentBidder, amt, _) ->
+          Just (LiveAuction _ currentBidder amt _) ->
             Map.toList (users s)
               & filter
                 ( \(newBidder, (bal, _)) ->
@@ -135,7 +140,7 @@ bid =
               & \case
                 [] -> Nothing
                 us -> do
-                  (_, u, refundAmt, ref) <- currentBid s
+                  LiveAuction _ u refundAmt ref <- currentAuction s
                   (_, refundPkh) <- Map.lookup u (users s)
                   pure $ do
                     (user, (bal, pkh)) <- Gen.element us
@@ -156,16 +161,17 @@ bid =
         gen
         execute
         [ Update $ \s (Bid newBidder _ newAmt _ _ _) newRef ->
-            case currentBid s of
+            case currentAuction s of
               Nothing -> s
-              Just (owner, _, oldAmt, _)
+              Just (LiveAuction owner _ oldAmt _)
                 | oldAmt < newAmt ->
                     s
-                      { currentBid = Just (owner, newBidder, newAmt, newRef)
+                      { currentAuction =
+                          Just $ LiveAuction owner newBidder newAmt newRef
                       }
                 | otherwise -> s
         , Require $ \input (Bid {newBidder, amt, refundAmt}) -> isJust $ do
-            (_, currentBidder, curAmt, _) <- currentBid input
+            LiveAuction _ currentBidder curAmt _ <- currentAuction input
             bal <- fst <$> Map.lookup newBidder (users input)
             guard $
               currentBidder /= newBidder
@@ -199,14 +205,16 @@ start =
         execute
         [ Update $ \s (Start (user, _)) o ->
             s
-              { currentBid = Just (user, user, 0, o)
+              { currentAuction =
+                  Just $
+                    LiveAuction user user 0 o
               }
         , Require $ \input (Start (u, _)) ->
             case Map.lookup u (users input) of
               Just (bal, _) -> enoughForFees bal
               Nothing -> False
         , Require $ \input _ ->
-            isNothing (currentBid input)
+            isNothing (currentAuction input)
         ]
 
 enoughForFees :: Int -> Bool
@@ -229,11 +237,18 @@ end ::
   Command m (PropertyT RunIO) AuctionState
 end =
   let gen :: AuctionState Symbolic -> Maybe (m (End Symbolic))
-      gen s = case currentBid s of
-        Just (owner', won', amt, ref) -> do
-          owner <- snd <$> Map.lookup owner' (users s)
-          won <- snd <$> Map.lookup won' (users s)
-          pure $ pure $ End owner won amt ref
+      gen s = case currentAuction s of
+        Just
+          ( LiveAuction
+              { owner = owner'
+              , winner = won'
+              , bidAmt = amt
+              , utxo = ref
+              }
+            ) -> do
+            owner <- snd <$> Map.lookup owner' (users s)
+            won <- snd <$> Map.lookup won' (users s)
+            pure $ pure $ End owner won amt ref
         _ -> Nothing
 
       execute :: End Concrete -> PropertyT RunIO ()
@@ -249,11 +264,10 @@ end =
         execute
         [ Update $ \s _i _o ->
             let
-              (o, w, amt, _) = fromMaybe (error "end with no current bid") (currentBid s)
+              (LiveAuction o w amt _) = fromMaybe (error "end with no current bid") (currentAuction s)
              in
               s
-                { currentBid = Nothing
-                , winner = Just w
+                { currentAuction = Nothing
                 , users =
                     users s
                       -- take money from winner
@@ -266,7 +280,7 @@ end =
                         o
                 }
         , Require $ \input (End ownerPkh1 _ amt1 _) -> isJust $ do
-            (ownerU, _, amt2, _) <- currentBid input
+            LiveAuction ownerU _ amt2 _ <- currentAuction input
             ownerPkh2 <- snd <$> Map.lookup ownerU (users input)
             guard $
               ownerPkh2 == ownerPkh1
@@ -305,8 +319,8 @@ validate =
         [ Ensure $ \inp out _ bs -> do
             inp === out
             Vector.fromList
-              [ case currentBid inp of
-                Just (_, user, amt, _)
+              [ case currentAuction inp of
+                Just (LiveAuction _ user amt _)
                   | (snd <$> Map.lookup user (users inp))
                       == Just (Var $ Concrete pkh) ->
                       (pkh, bal - amt)
