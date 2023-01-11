@@ -1,6 +1,5 @@
 module Auction.StateMachine (
   auctionTests,
-  auctionTest,
 ) where
 
 import Hedgehog (
@@ -54,7 +53,7 @@ import Hedgehog.Internal.Range qualified as Range
 newtype User = User {name :: String}
   deriving stock (Eq, Ord, Show)
 
-data AuctionState v = AuctionState
+data AuctionState (v :: Type -> Type) = AuctionState
   { currentBid :: Maybe (User, User, Int, Var TxOutRef v)
   , -- auction owner, current bidder, bid, current utxo
     winner :: Maybe User
@@ -62,7 +61,7 @@ data AuctionState v = AuctionState
   }
   deriving stock (Eq, Ord, Show)
 
-initialState :: AuctionState v
+initialState :: AuctionState (v :: Type -> Type)
 initialState =
   AuctionState
     { currentBid = Nothing
@@ -70,14 +69,17 @@ initialState =
     , users = Map.empty
     }
 
-data AddUser v
+data AddUser (v :: Type -> Type)
   = AddUser User Int
   deriving stock (Eq, Show, Generic)
 
 instance FunctorB AddUser
 instance TraversableB AddUser
 
-addUser :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
+addUser ::
+  forall (m :: Type -> Type).
+  MonadGen m =>
+  Command m (PropertyT RunIO) AuctionState
 addUser =
   let gen :: AuctionState Symbolic -> Maybe (m (AddUser Symbolic))
       gen s =
@@ -101,7 +103,7 @@ addUser =
             u `notElem` Map.keys (users input)
         ]
 
-data Bid v = Bid
+data Bid (v :: Type -> Type) = Bid
   { newBidder :: User
   , newPkh :: Var PubKeyHash v
   , amt :: Int
@@ -114,7 +116,10 @@ data Bid v = Bid
 instance FunctorB Bid
 instance TraversableB Bid
 
-bid :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
+bid ::
+  forall (m :: Type -> Type).
+  MonadGen m =>
+  Command m (PropertyT RunIO) AuctionState
 bid =
   let gen :: AuctionState Symbolic -> Maybe (m (Bid Symbolic))
       gen s =
@@ -175,7 +180,10 @@ newtype Start (v :: Type -> Type)
 instance FunctorB Start
 instance TraversableB Start
 
-start :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
+start ::
+  forall (m :: Type -> Type).
+  MonadGen m =>
+  Command m (PropertyT RunIO) AuctionState
 start =
   let gen :: AuctionState Symbolic -> Maybe (m (Start Symbolic))
       gen s =
@@ -214,7 +222,10 @@ data End (v :: Type -> Type)
 instance FunctorB End
 instance TraversableB End
 
-end :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
+end ::
+  forall (m :: Type -> Type).
+  MonadGen m =>
+  Command m (PropertyT RunIO) AuctionState
 end =
   let gen :: AuctionState Symbolic -> Maybe (m (End Symbolic))
       gen s = case currentBid s of
@@ -277,7 +288,10 @@ instance TraversableB Check
 -- because you can't manipulate data inside a Var
 -- so there's no way to do (Var (a,b) v -> (Var a v,Var b v)) so you can't
 -- seperate the Mock from the other return of the execute
-validate :: forall m. MonadGen m => Command m (PropertyT RunIO) AuctionState
+validate ::
+  forall (m :: Type -> Type).
+  MonadGen m =>
+  Command m (PropertyT RunIO) AuctionState
 validate =
   let gen :: AuctionState Symbolic -> Maybe (m (Check Symbolic))
       gen s = Just $ pure $ Check (snd <$> Map.elems (users s))
@@ -301,6 +315,7 @@ validate =
               === sort bs
         ]
 
+-- | Hedgehog state machine tests for the auction example
 auctionTests :: Group
 auctionTests =
   Group
@@ -327,7 +342,7 @@ auctionTest =
 -- The best solution is probably to make
 -- bids being rejected for being too little valid
 
-liftRun :: Run a -> PropertyT RunIO a
+liftRun :: Run (a :: Type) -> PropertyT RunIO (a :: Type)
 liftRun (Run act) = do
   let Run checkErrors' = checkErrors
   (res, errs) <- state $ runState (liftM2 (,) act checkErrors')
@@ -335,5 +350,5 @@ liftRun (Run act) = do
     Just err -> annotateShow err *> failure
     Nothing -> pure res
 
-execRun :: Mock -> PropertyT RunIO a -> PropertyT IO a
+execRun :: forall (a :: Type). Mock -> PropertyT RunIO a -> PropertyT IO a
 execRun m act = evalStateT (distributeT act) m

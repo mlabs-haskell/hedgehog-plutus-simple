@@ -33,15 +33,23 @@ import Plutus.Model.V1 (
 import Plutus.Model.Validator.V1 (mkTypedPolicyPlutarch, mkTypedValidatorPlutarch)
 import PlutusLedgerApi.V1 (PubKeyHash, TxOutRef, singleton)
 
+-- | create a new user with a given balance (in lovelace)
 addUser :: Int -> Run PubKeyHash
 addUser = newUser . adaValue . fromIntegral
 
+{- | given a list of PubKeyHashs
+ returns the lovelace balance at each PubKeyHash
+ paired with the PubKeyHash
+-}
 getBals :: [PubKeyHash] -> Run [(PubKeyHash, Int)]
 getBals keys = (zip keys <$>) $
   forM keys $ \key -> do
     val <- valueAt key
     pure $ fromIntegral $ getLovelace $ adaOf val
 
+{- | given a pubKeyHash starts an auction as that user
+ returns the txOutRef of the auction utxo
+-}
 start :: PubKeyHash -> Run TxOutRef
 start pkh = do
   auctionValidator <- getAuctionValidator
@@ -67,6 +75,14 @@ start pkh = do
 -- The internal implementation
 -- in psm seems to require hidden functions
 
+{- | bid takes the txOutRef of the current auction utxo
+ the pubKeyHash of the current bidder
+ the new bid amount (in lovelace)
+ the previous pubKeyHash to be refunded
+ and the amount (in lovelace to refund to that pubKeyHash)
+ submits a tx creating a new bid and refunding the previous bidder
+ and returning the txoutref of the new auction utxo
+-}
 bid :: TxOutRef -> PubKeyHash -> Int -> PubKeyHash -> Int -> Run TxOutRef
 bid oldRef pkh bidAmt refundPkh refundAmt = do
   auctionValidator <- getAuctionValidator
@@ -95,6 +111,13 @@ bid oldRef pkh bidAmt refundPkh refundAmt = do
   utxos <- utxoAt auctionValidator
   pure $ fst $ head utxos
 
+{- | given the auction owner's pubKeyHash
+ the auction winer's pubKeyHash
+ the final bid amount in lovelace
+ and the TxOutRef of the final utxo
+ ends the auction paying the final bid to the owner
+ and giving the auctioned token to the winner
+-}
 end :: PubKeyHash -> PubKeyHash -> Int -> TxOutRef -> Run ()
 end owner winer amt ref = do
   auctionValidator <- getAuctionValidator
