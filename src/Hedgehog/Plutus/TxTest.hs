@@ -8,12 +8,21 @@ import Hedgehog qualified
 import Hedgehog.Plutus.Adjunction
 import Hedgehog.Plutus.Tx
 
-newtype TxTest bad good = TxTest (Adjunction (Either bad good) (Tx 'Unbalanced))
+data ScriptTx = ScriptTx
+  { scriptTxPurpose :: ScriptPurpose
+  , scriptTx :: Tx 'Unbalanced
+  -- ^ The remainder of the transaction, not including the purposes's mint/spend
+  }
+
+txForScriptTx :: TxContext -> ScriptTx -> Tx 'Unbalanced
+txForScriptTx ctx (ScriptTx sp tx) = tx <> scriptPurposeTx ctx sp
+
+newtype TxTest bad good = TxTest (Adjunction (Either bad good) ScriptTx)
 
 txTest ::
-  (bad -> Tx 'Unbalanced) ->
-  (good -> Tx 'Unbalanced) ->
-  (Tx 'Unbalanced -> Either bad good) ->
+  (bad -> ScriptTx) ->
+  (good -> ScriptTx) ->
+  (ScriptTx -> Either bad good) ->
   TxTest bad good
 txTest b g r =
   TxTest $
@@ -26,20 +35,20 @@ txTestBad ::
   forall (bad :: Type) (good :: Type).
   TxTest bad good ->
   bad ->
-  Tx 'Unbalanced
+  ScriptTx
 txTestBad (TxTest Adjunction {left}) = left . Left
 
 txTestGood ::
   forall (bad :: Type) (good :: Type).
   TxTest bad good ->
   good ->
-  Tx 'Unbalanced
+  ScriptTx
 txTestGood (TxTest Adjunction {left}) = left . Right
 
 txTestRight ::
   forall (bad :: Type) (good :: Type).
   TxTest bad good ->
-  Tx 'Unbalanced ->
+  ScriptTx ->
   Either bad good
 txTestRight (TxTest Adjunction {right}) = right
 

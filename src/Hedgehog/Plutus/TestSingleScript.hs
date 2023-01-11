@@ -1,9 +1,12 @@
-module Hedgehog.Plutus.TestSingleScript where
+module Hedgehog.Plutus.TestSingleScript (
+  testSingleScriptBad,
+  testSingleScriptGood,
+) where
 
 import Data.Kind (Type)
 import GHC.Records (HasField (getField))
 
-import Data.Maybe (maybeToList)
+import Data.Maybe (isNothing, maybeToList)
 import Data.Proxy (Proxy (Proxy))
 
 import Data.Map.Strict (Map)
@@ -29,19 +32,45 @@ import Cardano.Ledger.Shelley.UTxO qualified as Ledger
 import Cardano.Ledger.Slot qualified as Ledger
 import Cardano.Slotting.EpochInfo qualified as Cardano
 import Cardano.Slotting.Time qualified as Cardano
+import PlutusCore.Evaluation.Machine.Exception qualified as PLC
 import PlutusLedgerApi.Common qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus hiding (evaluateScriptCounting)
+import UntypedPlutusCore.Evaluation.Machine.Cek qualified as UPLC
 
 import Plutus.Model qualified as Model
 import Plutus.Model.Fork.Ledger.TimeSlot qualified as Fork
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
 
+import Hedgehog ((===))
+import Hedgehog qualified
+
 import Hedgehog.Plutus.Tx
+import Hedgehog.Plutus.TxTest
+
+testSingleScriptBad ::
+  (Hedgehog.MonadTest m) =>
+  TxContext ->
+  TxTest bad good ->
+  bad ->
+  m ()
+testSingleScriptBad txc tt bad =
+  Hedgehog.evalMaybe (txRunScript txc $ txTestBad tt bad) >>= \case
+    Plutus.CekError ewc ->
+      PLC._ewcError ewc === PLC.UserEvaluationError UPLC.CekEvaluationFailure
+    _ -> Hedgehog.failure
+
+testSingleScriptGood ::
+  (Hedgehog.MonadTest m) =>
+  TxContext ->
+  TxTest bad good ->
+  good ->
+  m ()
+testSingleScriptGood txc tt good =
+  Hedgehog.assert $ isNothing (txRunScript txc $ txTestGood tt good)
 
 txRunScript ::
   TxContext ->
-  Tx 'Unbalanced ->
-  ScriptPurpose ->
+  ScriptTx ->
   Maybe Plutus.EvaluationError
 txRunScript
   TxContext
@@ -58,8 +87,7 @@ txRunScript
             }
         }
     }
-  tx
-  sp = case mockConfigProtocol of
+  ScriptTx {scriptTx, scriptTxPurpose} = case mockConfigProtocol of
     Model.AlonzoParams params ->
       go (Proxy @(Alonzo.AlonzoEra Crypto.StandardCrypto)) params
     Model.BabbageParams params ->
@@ -74,7 +102,7 @@ txRunScript
         , HasField
             "_costmdls"
             (Ledger.PParams era)
-            (Map Ledger.Language Ledger.CostModel)
+            Alonzo.CostModels
         ) =>
         Proxy era ->
         Ledger.PParams era ->
@@ -95,7 +123,7 @@ txRunScript
           )
           _
           _
-          (toLedgerScriptPurpose sp)
+          (toLedgerScriptPurpose scriptTxPurpose)
 
 txRunScript' ::
   ( Alonzo.ExtendedUTxO era
