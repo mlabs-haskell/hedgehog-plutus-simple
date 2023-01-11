@@ -30,9 +30,9 @@ import Control.Monad (guard, liftM2)
 import Control.Monad.State.Strict (StateT, evalStateT, runState, state)
 import Data.Function ((&))
 import Data.Kind (Type)
-import Data.List (sort)
 import Data.Map (Map)
 import Data.Maybe (fromMaybe, isJust, isNothing)
+import Data.Vector (Vector)
 import GHC.Generics (Generic)
 import Plutus.Model (
   Mock,
@@ -47,6 +47,7 @@ import PlutusLedgerApi.V1.Contexts (TxOutRef)
 
 import Auction.PSM qualified as PSM
 import Data.Map qualified as Map
+import Data.Vector qualified as Vector
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Internal.Range qualified as Range
 
@@ -275,7 +276,7 @@ end =
 type RunIO = StateT Mock IO
 
 newtype Check (v :: Type -> Type)
-  = Check [Var PubKeyHash v]
+  = Check (Vector (Var PubKeyHash v))
   deriving stock (Eq, Show, Generic)
 
 instance FunctorB Check
@@ -294,16 +295,16 @@ validate ::
   Command m (PropertyT RunIO) AuctionState
 validate =
   let gen :: AuctionState Symbolic -> Maybe (m (Check Symbolic))
-      gen s = Just $ pure $ Check (snd <$> Map.elems (users s))
+      gen s = Just $ pure $ Check (snd <$> Vector.fromList (Map.elems (users s)))
 
-      execute :: Check Concrete -> PropertyT RunIO [(PubKeyHash, Int)]
+      execute :: Check Concrete -> PropertyT RunIO (Vector (PubKeyHash, Int))
       execute (Check keys) = liftRun $ PSM.getBals $ concrete <$> keys
    in Command
         gen
         execute
         [ Ensure $ \inp out _ bs -> do
             inp === out
-            sort
+            Vector.fromList
               [ case currentBid inp of
                 Just (_, user, amt, _)
                   | (snd <$> Map.lookup user (users inp))
@@ -312,7 +313,7 @@ validate =
                 _ -> (pkh, bal)
               | (bal, Var (Concrete pkh)) <- Map.elems (users out)
               ]
-              === sort bs
+              === bs
         ]
 
 -- | Hedgehog state machine tests for the auction example

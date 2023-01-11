@@ -9,6 +9,8 @@ module Auction.PSM (
 import Control.Monad (forM)
 import Data.Default (def)
 import Data.Text (unpack)
+import Data.Vector (Vector)
+import Data.Vector qualified as Vector
 
 import Plutarch.Prelude (PUnit (PUnit), pcon, plam)
 
@@ -41,8 +43,8 @@ addUser = newUser . adaValue . fromIntegral
  returns the lovelace balance at each PubKeyHash
  paired with the PubKeyHash
 -}
-getBals :: [PubKeyHash] -> Run [(PubKeyHash, Int)]
-getBals keys = (zip keys <$>) $
+getBals :: Vector PubKeyHash -> Run (Vector (PubKeyHash, Int))
+getBals keys = (Vector.zip keys <$>) $
   forM keys $ \key -> do
     val <- valueAt key
     pure $ fromIntegral $ getLovelace $ adaOf val

@@ -117,3 +117,4 @@ executable examples
     , plutus-simple-model
     , strict-containers
     , text
+    , vector
