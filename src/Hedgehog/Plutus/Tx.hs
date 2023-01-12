@@ -8,7 +8,7 @@ import Data.Coerce (coerce)
 import Data.Foldable (foldMap')
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
-import Data.Maybe (isNothing)
+import Data.Maybe (catMaybes, isNothing)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Vector (Vector)
@@ -122,9 +122,14 @@ balanceTx mock tx = do
       ((`Map.lookup` Model.mockUtxos mock) . txInRef)
   let valueOut = Vector.foldMap' txOutValue (txOutputs tx)
   let valueIn = foldMap' Plutus.txOutValue inputs
-  let extra = Plutus.unionWith (\a b -> max (a - b) 0) valueIn valueOut
-  let deficit = Plutus.unionWith (\a b -> max (a - b) 0) valueOut valueIn
-  (payDeficet, moreChange) <- tryPayAs mock balanceingKeys deficit
+  let extra = posDif valueIn valueOut
+  let deficit = posDif valueOut valueIn
+  let alreadySpending =
+        catMaybes
+          [ Map.lookup (txInRef txin) (Model.mockUtxos mock)
+          | txin <- Set.toList $ txInputs tx
+          ]
+  (payDeficet, moreChange) <- tryPayAs mock balanceingKeys deficit alreadySpending
   let change = extra <> moreChange
   pure $
     unsafeBalance $
@@ -157,8 +162,9 @@ tryPayAs ::
   Model.Mock ->
   [PubKeyHash] ->
   Value ->
+  [Plutus.TxOut] ->
   Maybe (Tx 'Unbalanced, Value)
-tryPayAs mock keys val = fst $ (`Model.runMock` mock) $ do
+tryPayAs mock keys val dontSpend = fst $ (`Model.runMock` mock) $ do
   refs <- concat <$> mapM (Model.txOutRefAt . Plutus.pubKeyHashAddress) keys
   mUtxos <-
     gets
@@ -167,7 +173,7 @@ tryPayAs mock keys val = fst $ (`Model.runMock` mock) $ do
             ( \txo ->
                 isNothing (Plutus.txOutReferenceScript txo)
                   && (== Plutus.NoOutputDatum) (Plutus.txOutDatum txo)
-                  -- && isNothing (Plutus.txOutDatum txo)
+                  && txo `notElem` dontSpend
             )
           . Model.mockUtxos
       )
@@ -192,11 +198,12 @@ tryPayAs mock keys val = fst $ (`Model.runMock` mock) $ do
       where
         refVal = Plutus.txOutValue out
         intersect = Plutus.unionWith min remaining refVal
-        remaining' = Plutus.unionWith (-) remaining intersect
-        change' =
-          Plutus.unionWith (+) change $
-            Plutus.unionWith (-) refVal intersect
-        asTxIn = TxIn outRef Nothing
+        remaining' = posDif remaining intersect
+        change' = change <> posDif refVal intersect
+        asTxIn = TxIn outRef Nothing -- TODO is Nothing correct here?
+
+posDif :: Plutus.Value -> Plutus.Value -> Plutus.Value
+posDif = Plutus.unionWith (fmap (max 0) . (-))
 
 {- | Generate a @plutus-simple-model@ 'Model.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
