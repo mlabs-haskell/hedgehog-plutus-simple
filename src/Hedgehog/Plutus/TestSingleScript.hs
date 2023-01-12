@@ -50,8 +50,8 @@ import Hedgehog.Plutus.TxTest
 testSingleScriptBad ::
   (Hedgehog.MonadTest m) =>
   TxContext ->
-  TxTest bad good ->
-  bad ->
+  TxTest ingrs ->
+  Bad ingrs ->
   m ()
 testSingleScriptBad txc tt bad =
   Hedgehog.evalMaybe (txRunScript txc $ txTestBad tt bad) >>= \case
@@ -62,8 +62,8 @@ testSingleScriptBad txc tt bad =
 testSingleScriptGood ::
   (Hedgehog.MonadTest m) =>
   TxContext ->
-  TxTest bad good ->
-  good ->
+  TxTest ingrs ->
+  ingrs ->
   m ()
 testSingleScriptGood txc tt good =
   Hedgehog.assert $ isNothing (txRunScript txc $ txTestGood tt good)

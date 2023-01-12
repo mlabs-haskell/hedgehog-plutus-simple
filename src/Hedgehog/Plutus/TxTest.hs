@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeFamilyDependencies #-}
+
 module Hedgehog.Plutus.TxTest where
 
 import Data.Kind (Type)
@@ -14,16 +16,18 @@ data ScriptTx = ScriptTx
   -- ^ The remainder of the transaction, not including the purposes's mint/spend
   }
 
+data family Bad ingrs
+
 txForScriptTx :: TxContext -> ScriptTx -> Tx 'Unbalanced
 txForScriptTx ctx (ScriptTx sp tx) = tx <> scriptPurposeTx ctx sp
 
-newtype TxTest bad good = TxTest (Adjunction (Either bad good) ScriptTx)
+newtype TxTest ingrs = TxTest (Adjunction (Either (Bad ingrs) ingrs) ScriptTx)
 
 txTest ::
-  (bad -> ScriptTx) ->
-  (good -> ScriptTx) ->
-  (ScriptTx -> Either bad good) ->
-  TxTest bad good
+  (Bad ingrs -> ScriptTx) ->
+  (ingrs -> ScriptTx) ->
+  (ScriptTx -> Either (Bad ingrs) ingrs) ->
+  TxTest ingrs
 txTest b g r =
   TxTest $
     Adjunction
@@ -32,38 +36,48 @@ txTest b g r =
       }
 
 txTestBad ::
-  forall (bad :: Type) (good :: Type).
-  TxTest bad good ->
-  bad ->
+  forall (ingrs :: Type).
+  TxTest ingrs ->
+  Bad ingrs ->
   ScriptTx
 txTestBad (TxTest Adjunction {left}) = left . Left
 
 txTestGood ::
-  forall (bad :: Type) (good :: Type).
-  TxTest bad good ->
-  good ->
+  forall (ingrs :: Type).
+  TxTest ingrs ->
+  ingrs ->
   ScriptTx
 txTestGood (TxTest Adjunction {left}) = left . Right
 
 txTestRight ::
-  forall (bad :: Type) (good :: Type).
-  TxTest bad good ->
+  forall (ingrs :: Type).
+  TxTest ingrs ->
   ScriptTx ->
-  Either bad good
+  Either (Bad ingrs) ingrs
 txTestRight (TxTest Adjunction {right}) = right
 
 txTestTestBad ::
-  forall (m :: Type -> Type) (bad :: Type) (good :: Type).
-  (Hedgehog.MonadTest m, Eq bad, Show bad, Eq good, Show good) =>
-  TxTest bad good ->
-  bad ->
+  forall (m :: Type -> Type) (ingrs :: Type).
+  ( Hedgehog.MonadTest m
+  , Eq ingrs
+  , Show ingrs
+  , Eq (Bad ingrs)
+  , Show (Bad ingrs)
+  ) =>
+  TxTest ingrs ->
+  Bad ingrs ->
   m ()
 txTestTestBad tt bad = txTestRight tt (txTestBad tt bad) === Left bad
 
 txTestTestGood ::
-  forall (m :: Type -> Type) (bad :: Type) (good :: Type).
-  (Hedgehog.MonadTest m, Eq bad, Show bad, Eq good, Show good) =>
-  TxTest bad good ->
-  good ->
+  forall (m :: Type -> Type) (ingrs :: Type).
+  ( Hedgehog.MonadTest m
+  , Eq ingrs
+  , Show ingrs
+  , Eq (Bad ingrs)
+  , Show (Bad ingrs)
+  ) =>
+  TxTest ingrs ->
+  ingrs ->
   m ()
 txTestTestGood tt good = txTestRight tt (txTestGood tt good) === Right good
