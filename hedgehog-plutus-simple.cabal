@@ -107,6 +107,7 @@ library
     , containers
     , hedgehog
     , microlens
+    , mtl
     , plutus-core
     , plutus-ledger-api
     , plutus-simple-model
