@@ -6,9 +6,10 @@ import Control.Monad (forM, guard)
 import Control.Monad.State.Strict (gets)
 import Data.Coerce (coerce)
 import Data.Foldable (foldMap')
+import Data.Functor (($>))
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
-import Data.Maybe (catMaybes, isNothing)
+import Data.Maybe (catMaybes, isNothing, listToMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Vector (Vector)
@@ -116,12 +117,12 @@ balanceTx mock tx = do
   -- It probably doesn't make sense to balance a transaction
   -- as every user at once in most cases
   -- so we should probably make this an argument to balance
-  inputs <-
-    forM
-      (Set.toList $ txInputs tx)
-      ((`Map.lookup` Model.mockUtxos mock) . txInRef)
-  let valueOut = Vector.foldMap' txOutValue (txOutputs tx)
-  let valueIn = foldMap' Plutus.txOutValue inputs
+  let valueOut = getValueOut tx
+  valueIn <- getValueIn mock tx
+  -- TODO we may want to change this to something like
+  -- Either FailReason (Tx 'Balanced)
+  -- to distinguish things like failure by tx lookup
+  -- and failure by not enough value at keys
   let extra = posDif valueIn valueOut
   let deficit = posDif valueOut valueIn
   let alreadySpending =
@@ -131,28 +132,38 @@ balanceTx mock tx = do
           ]
   (payDeficet, moreChange) <- tryPayAs mock balanceingKeys deficit alreadySpending
   let change = extra <> moreChange
-  pure $
-    unsafeBalance $
-      tx
-        <> payDeficet
-        <> mempty
-          { txOutputs =
-              pure $
-                TxOut
-                  { txOutAddress = Plutus.pubKeyHashAddress (head balanceingKeys)
-                  , -- This head is where we could put in randomness if we
-                    -- decide that makes sense
-                    txOutValue = change
-                  , txOutDatum = Nothing
-                  , txOutReferenceScript = Nothing
-                  }
-          }
-  where
-    -- TODO this should probably be replaced
-    -- with a function that checks the balance and
-    -- returns a Maybe
-    unsafeBalance :: Tx 'Unbalanced -> Tx 'Balanced
-    unsafeBalance = coerce
+  payOutKey <- listToMaybe balanceingKeys
+  -- This ^ is where we could add actual randomness if we decide that makes sense
+  checkBalance mock $
+    tx
+      <> payDeficet
+      <> mempty
+        { txOutputs =
+            pure $
+              TxOut
+                { txOutAddress = Plutus.pubKeyHashAddress payOutKey
+                , txOutValue = change
+                , txOutDatum = Nothing
+                , txOutReferenceScript = Nothing
+                }
+        }
+
+checkBalance :: Model.Mock -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
+checkBalance mock tx = do
+  valueIn <- getValueIn mock tx
+  let valueOut = getValueOut tx
+  guard (valueIn == valueOut) $> coerce tx
+
+getValueIn :: Model.Mock -> Tx b -> Maybe Value
+getValueIn mock tx = do
+  inputs <-
+    forM
+      (Set.toList $ txInputs tx)
+      ((`Map.lookup` Model.mockUtxos mock) . txInRef)
+  pure $ foldMap' Plutus.txOutValue inputs
+
+getValueOut :: Tx b -> Value
+getValueOut tx = Vector.foldMap' txOutValue (txOutputs tx)
 
 -- based on `split'` in psm
 -- the (b :: Balanced) is polymorphic because
