@@ -154,7 +154,7 @@ checkBalance mock tx = do
   let valueOut = getValueOut tx
   guard (valueIn == valueOut) $> coerce tx
 
-getValueIn :: Model.Mock -> Tx b -> Maybe Value
+getValueIn :: forall (b :: Balanced). Model.Mock -> Tx b -> Maybe Value
 getValueIn mock tx = do
   inputs <-
     forM
@@ -170,7 +170,7 @@ getValueIn mock tx = do
           ]
   pure $ minted <> sentIn
 
-getValueOut :: Tx b -> Value
+getValueOut :: forall (b :: Balanced). Tx b -> Value
 getValueOut tx =
   let
     sentOut = Vector.foldMap' txOutValue (txOutputs tx)
@@ -185,9 +185,6 @@ getValueOut tx =
     sentOut <> burned
 
 -- based on `split'` in psm
--- the (b :: Balanced) is polymorphic because
--- while the Tx returned is not balanced it's intended
--- for use in creating a balanced transaction
 tryPayAs ::
   Model.Mock ->
   [PubKeyHash] ->
