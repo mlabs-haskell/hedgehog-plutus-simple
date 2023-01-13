@@ -18,7 +18,7 @@ import Data.Vector qualified as Vector
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.Core qualified as Ledger
 import PlutusCore qualified as PLC
-import PlutusLedgerApi.V1 (PubKeyHash, Value)
+import PlutusLedgerApi.V1 (PubKeyHash, Value, singleton)
 import PlutusLedgerApi.V1.Address qualified as Plutus
 import PlutusLedgerApi.V1.Interval qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus
@@ -160,10 +160,29 @@ getValueIn mock tx = do
     forM
       (Set.toList $ txInputs tx)
       ((`Map.lookup` Model.mockUtxos mock) . txInRef)
-  pure $ foldMap' Plutus.txOutValue inputs
+  let sentIn = foldMap' Plutus.txOutValue inputs
+  let minted =
+        mconcat
+          [ singleton cs tn amt
+          | (cs, (tokens, _)) <- Map.toList $ txMint tx
+          , (tn, amt) <- Map.toList tokens
+          , amt > 0
+          ]
+  pure $ minted <> sentIn
 
 getValueOut :: Tx b -> Value
-getValueOut tx = Vector.foldMap' txOutValue (txOutputs tx)
+getValueOut tx =
+  let
+    sentOut = Vector.foldMap' txOutValue (txOutputs tx)
+    burned =
+      mconcat
+        [ singleton cs tn (negate amt)
+        | (cs, (tokens, _)) <- Map.toList $ txMint tx
+        , (tn, amt) <- Map.toList tokens
+        , amt > 0
+        ]
+   in
+    sentOut <> burned
 
 -- based on `split'` in psm
 -- the (b :: Balanced) is polymorphic because
