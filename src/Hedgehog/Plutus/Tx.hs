@@ -19,6 +19,8 @@ import UntypedPlutusCore qualified as UPLC
 
 import Plutus.Model qualified as Model
 
+import Hedgehog qualified
+
 data Balanced = Balanced | Unbalanced
 
 -- | An idealized transaction type, used throughout @hedgehog-plutus-simple@.
@@ -103,8 +105,29 @@ data ScriptPurpose
 
   In the future, hps should support custom balancers.
 -}
-balanceTx :: Model.Mock -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
+balanceTx :: Model.Mock -> Tx 'Unbalanced -> Maybe (Hedgehog.Gen (Tx 'Balanced))
 balanceTx = _
+
+confirmBalanced :: Model.Mock -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
+confirmBalanced = _
+
+data Spend = Spend
+  { spendUtxos :: Vector Plutus.TxOutRef
+  , excess :: Plutus.Value
+  }
+
+{- | Try to satisfy a value from available 'non-special' UTxOs.
+
+A UTxO is 'non-special' iff:
+
+* It is locked by a PubKey
+
+* It does not hold a datum
+
+The refs need not be hwld by the same PubKey.
+-}
+spend :: Model.Mock -> Plutus.Value -> Maybe (Hedgehog.Gen Spend)
+spend = _
 
 {- | Generate a @plutus-simple-model@ 'Model.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
