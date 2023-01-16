@@ -88,6 +88,7 @@ instance Monoid (Tx bal) where
 data TxContext = TxContext
   { mockchain :: !Model.Mock
   , interestingScripts :: !(Map Plutus.ScriptHash Script)
+  , datums :: !(Map Plutus.DatumHash Plutus.Datum)
   }
 
 data ScriptPurpose
