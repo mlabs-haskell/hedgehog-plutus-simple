@@ -28,6 +28,7 @@ common common-lang
     -Wincomplete-record-updates -Wmissing-deriving-strategies
     -Wno-name-shadowing -Wunused-foralls -fprint-explicit-foralls
     -fprint-explicit-kinds -fwarn-missing-import-lists -Werror
+    -fno-show-valid-hole-fits
 
   build-depends:      base >=4.14
   default-extensions:
@@ -99,10 +100,13 @@ library
 
   build-depends:
     , array
+    , bytestring
+    , cardano-crypto-class
     , cardano-ledger-alonzo
     , cardano-ledger-babbage
     , cardano-ledger-core
     , cardano-ledger-shelley
+    , cardano-ledger-shelley-ma
     , cardano-slotting
     , containers
     , hedgehog

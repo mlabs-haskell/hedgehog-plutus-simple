@@ -2,10 +2,11 @@
 
 module Hedgehog.Plutus.Tx where
 
-import Control.Monad (forM, guard)
+import Control.Monad (guard)
 import Control.Monad.State.Strict (gets)
+import Data.ByteString qualified as BS
+import Data.ByteString.Short qualified as SBS
 import Data.Coerce (coerce)
-import Data.Foldable (foldMap')
 import Data.Functor (($>))
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
@@ -15,17 +16,28 @@ import Data.Set qualified as Set
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 
+import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.Core qualified as Ledger
+import Cardano.Ledger.Mary.Value qualified as MV
+import Cardano.Ledger.Shelley.API.Wallet (evaluateTransactionBalance)
+import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
+
+import Plutus.Model qualified as Model
+import Plutus.Model.Fork.Cardano.Alonzo qualified as Alonzo
+import Plutus.Model.Fork.Cardano.Babbage qualified as Babbage
+import Plutus.Model.Fork.Cardano.Class qualified as Class
+import Plutus.Model.Mock.ProtocolParameters qualified as Model
+
 import PlutusCore qualified as PLC
+import UntypedPlutusCore qualified as UPLC
+
 import PlutusLedgerApi.V1 (PubKeyHash, Value, singleton)
 import PlutusLedgerApi.V1.Address qualified as Plutus
 import PlutusLedgerApi.V1.Interval qualified as Plutus
+import PlutusLedgerApi.V1.Value qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusTx.Lattice ((/\))
-import UntypedPlutusCore qualified as UPLC
-
-import Plutus.Model qualified as Model
 
 data Balanced = Balanced | Unbalanced
 
@@ -111,14 +123,14 @@ data ScriptPurpose
 
   In the future, hps should support custom balancers.
 -}
-balanceTx :: Model.Mock -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
-balanceTx mock tx = do
+balanceTx :: TxContext -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
+balanceTx context tx = do
+  let mock = mockchain context
   let balanceingKeys = Map.keys $ Model.mockUsers mock
   -- It probably doesn't make sense to balance a transaction
   -- as every user at once in most cases
   -- so we should probably make this an argument to balance
-  let valueOut = getValueOut tx
-  valueIn <- getValueIn mock tx
+  (valueIn, valueOut) <- getValueInAndOut context tx
   -- TODO we may want to change this to something like
   -- Either FailReason (Tx 'Balanced)
   -- to distinguish things like failure by tx lookup
@@ -134,7 +146,7 @@ balanceTx mock tx = do
   let change = extra <> moreChange
   payOutKey <- listToMaybe balanceingKeys
   -- This ^ is where we could add actual randomness if we decide that makes sense
-  checkBalance mock $
+  checkBalance context $
     tx
       <> payDeficet
       <> mempty
@@ -148,41 +160,56 @@ balanceTx mock tx = do
                 }
         }
 
-checkBalance :: Model.Mock -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
-checkBalance mock tx = do
-  valueIn <- getValueIn mock tx
-  let valueOut = getValueOut tx
+checkBalance :: TxContext -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
+checkBalance context tx = do
+  (valueIn, valueOut) <- getValueInAndOut context tx
   guard (valueIn == valueOut) $> coerce tx
 
-getValueIn :: forall (b :: Balanced). Model.Mock -> Tx b -> Maybe Value
-getValueIn mock tx = do
-  inputs <-
-    forM
-      (Set.toList $ txInputs tx)
-      ((`Map.lookup` Model.mockUtxos mock) . txInRef)
-  let sentIn = foldMap' Plutus.txOutValue inputs
-  let minted =
-        mconcat
-          [ singleton cs tn amt
-          | (cs, (tokens, _)) <- Map.toList $ txMint tx
-          , (tn, amt) <- Map.toList tokens
-          , amt > 0
-          ]
-  pure $ minted <> sentIn
+getBalance :: TxContext -> Tx b -> Maybe Value
+getBalance context tx =
+  case Model.mockConfigProtocol $ Model.mockConfig mock of
+    Model.AlonzoParams params -> do
+      Right utxo <- pure $ Class.toUtxo mempty networkId []
+      -- TODO what should the utxo be for this?
+      pure $
+        maryToPlutus $
+          evaluateTransactionBalance @Alonzo.Era
+            params
+            utxo
+            (const True) -- TODO is this right?
+            (Class.getTxBody $ toLedgerTx context tx)
+    Model.BabbageParams params -> do
+      -- TODO is there a good way to not repeat all this?
+      Right utxo <- pure $ Class.toUtxo mempty networkId []
+      pure $
+        maryToPlutus $
+          evaluateTransactionBalance @Babbage.Era
+            params
+            utxo
+            (const True)
+            (Class.getTxBody $ toLedgerTx context tx)
+  where
+    networkId = Model.mockConfigNetworkId $ Model.mockConfig mock
+    mock = mockchain context
 
-getValueOut :: forall (b :: Balanced). Tx b -> Value
-getValueOut tx =
-  let
-    sentOut = Vector.foldMap' txOutValue (txOutputs tx)
-    burned =
-      mconcat
-        [ singleton cs tn (negate amt)
-        | (cs, (tokens, _)) <- Map.toList $ txMint tx
-        , (tn, amt) <- Map.toList tokens
-        , amt > 0
-        ]
-   in
-    sentOut <> burned
+maryToPlutus :: MV.MaryValue era -> Plutus.Value
+maryToPlutus (MV.MaryValue ada rest) =
+  singleton "" "" ada
+    <> mconcat
+      [ singleton
+        (Plutus.currencySymbol $ hashToBytes $ unScriptHash $ MV.policyID pid)
+        (Plutus.tokenName $ BS.pack $ SBS.unpack $ MV.assetName tn)
+        amt
+      | (pid, toks) <- Map.toList rest
+      , (tn, amt) <- Map.toList toks
+      ]
+  where
+    unScriptHash (ScriptHash h) = h -- The constructor doesn't have this
+
+getValueInAndOut :: TxContext -> Tx bal -> Maybe (Value, Value)
+getValueInAndOut context tx = do
+  val <- getBalance context tx
+  pure (posDif val mempty, posDif mempty val)
 
 -- based on `split'` in psm
 tryPayAs ::
@@ -235,7 +262,7 @@ posDif = Plutus.unionWith (fmap (max 0) . (-))
 {- | Generate a @plutus-simple-model@ 'Model.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
-toSimpleModelTx :: TxContext -> Tx 'Balanced -> Model.Tx
+toSimpleModelTx :: TxContext -> Tx bal -> Model.Tx
 toSimpleModelTx = _
 
 -- 'era' can be constrained as neccesary.
