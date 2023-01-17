@@ -40,6 +40,9 @@ import PlutusLedgerApi.V1.Value qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusTx.Lattice ((/\))
 
+import Hedgehog qualified
+import Hedgehog.Gen qualified as Gen
+
 data Balanced = Balanced | Unbalanced
 
 -- | An idealized transaction type, used throughout @hedgehog-plutus-simple@.
@@ -107,6 +110,7 @@ instance Monoid (Tx bal) where
 data TxContext = TxContext
   { mockchain :: !Model.Mock
   , interestingScripts :: !(Map Plutus.ScriptHash Script)
+  , datums :: !(Map Plutus.DatumHash Plutus.Datum)
   }
 
 data ScriptPurpose
@@ -124,7 +128,7 @@ data ScriptPurpose
 
   In the future, hps should support custom balancers.
 -}
-balanceTx :: TxContext -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
+balanceTx :: TxContext -> Tx 'Unbalanced -> Maybe (Hedgehog.Gen (Tx 'Balanced))
 balanceTx context tx = do
   let mock = mockchain context
   let balanceingKeys = Map.keys $ Model.mockUsers mock
@@ -145,25 +149,25 @@ balanceTx context tx = do
           ]
   (payDeficet, moreChange) <- tryPayAs mock balanceingKeys deficit alreadySpending
   let change = extra <> moreChange
-  payOutKey <- listToMaybe balanceingKeys
-  -- This ^ is where we could add actual randomness if we decide that makes sense
-  checkBalance context $
-    tx
-      <> payDeficet
-      <> mempty
-        { txOutputs =
-            pure $
-              TxOut
-                { txOutAddress = Plutus.pubKeyHashAddress payOutKey
-                , txOutValue = change
-                , txOutDatum = Nothing
-                , txOutReferenceScript = Nothing
+  pure $ do
+    payOutKey <- Gen.element balanceingKeys
+    let checked =
+          confirmBalanced context $
+            tx
+              <> payDeficet
+              <> mempty
+                { txOutputs =
+                    pure $
+                      TxOut
+                        { txOutAddress = Plutus.pubKeyHashAddress payOutKey
+                        , txOutValue = change
+                        , txOutDatum = Nothing
+                        , txOutReferenceScript = Nothing
+                        }
                 }
-        }
-
-checkBalance :: TxContext -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
-checkBalance context tx =
-  (getBalance context tx >>= guard . (== mempty)) $> coerce tx
+    case checked of
+      Just tx -> pure tx
+      Nothing -> error "balanceTx produced an unbalanced tx"
 
 getBalance :: TxContext -> Tx b -> Maybe Value
 getBalance context tx = do
@@ -270,6 +274,28 @@ tryPayAs mock keys val dontSpend = fst $ (`Model.runMock` mock) $ do
 
 posDif :: Plutus.Value -> Plutus.Value -> Plutus.Value
 posDif = Plutus.unionWith (fmap (max 0) . (-))
+
+confirmBalanced :: TxContext -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
+confirmBalanced context tx =
+  (getBalance context tx >>= guard . (== mempty)) $> coerce tx
+
+data Spend = Spend
+  { spendUtxos :: Vector Plutus.TxOutRef
+  , excess :: Plutus.Value
+  }
+
+{- | Try to satisfy a value from available 'non-special' UTxOs.
+
+A UTxO is 'non-special' iff:
+
+* It is locked by a PubKey
+
+* It does not hold a datum
+
+The refs need not be hwld by the same PubKey.
+-}
+spend :: Model.Mock -> Plutus.Value -> Maybe (Hedgehog.Gen Spend)
+spend = _
 
 {- | Generate a @plutus-simple-model@ 'Model.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
