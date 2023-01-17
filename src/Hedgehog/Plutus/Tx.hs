@@ -4,7 +4,6 @@ module Hedgehog.Plutus.Tx where
 
 import Control.Monad (guard)
 import Control.Monad.State.Strict (gets)
-import Data.ByteString qualified as BS
 import Data.ByteString.Short qualified as SBS
 import Data.Coerce (coerce)
 import Data.Functor (($>))
@@ -18,6 +17,8 @@ import Data.Vector qualified as Vector
 
 import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
+import Cardano.Ledger.BaseTypes (Network)
+import Cardano.Ledger.Core (TxBody)
 import Cardano.Ledger.Core qualified as Ledger
 import Cardano.Ledger.Mary.Value qualified as MV
 import Cardano.Ledger.Shelley.API.Wallet (evaluateTransactionBalance)
@@ -161,13 +162,12 @@ balanceTx context tx = do
         }
 
 checkBalance :: TxContext -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
-checkBalance context tx = do
-  (valueIn, valueOut) <- getValueInAndOut context tx
-  guard (valueIn == valueOut) $> coerce tx
+checkBalance context tx =
+  (getBalance context tx >>= guard . (== mempty)) $> coerce tx
 
 getBalance :: TxContext -> Tx b -> Maybe Value
-getBalance context tx =
-  case Model.mockConfigProtocol $ Model.mockConfig mock of
+getBalance context tx = do
+  case protocol of
     Model.AlonzoParams params -> do
       Right utxo <- pure $ Class.toUtxo mempty networkId []
       -- TODO what should the utxo be for this?
@@ -177,20 +177,32 @@ getBalance context tx =
             params
             utxo
             (const True) -- TODO is this right?
-            (Class.getTxBody $ toLedgerTx context tx)
+            body
     Model.BabbageParams params -> do
       -- TODO is there a good way to not repeat all this?
       Right utxo <- pure $ Class.toUtxo mempty networkId []
+      -- This can't be lifted to the outer doblock because `toUtxo` itself
+      -- not the return value is polymorphic so it needs to be called twice
+      -- with the same arguments but a different infered type
       pure $
         maryToPlutus $
           evaluateTransactionBalance @Babbage.Era
             params
             utxo
             (const True)
-            (Class.getTxBody $ toLedgerTx context tx)
+            body
   where
-    networkId = Model.mockConfigNetworkId $ Model.mockConfig mock
-    mock = mockchain context
+    networkId :: Network
+    networkId = Model.mockConfigNetworkId mockConfig
+
+    protocol :: Model.PParams
+    protocol = Model.mockConfigProtocol mockConfig
+
+    mockConfig :: Model.MockConfig
+    mockConfig = Model.mockConfig $ mockchain context
+
+    body :: Class.IsCardanoTx era => TxBody era
+    body = Class.getTxBody $ toLedgerTx context tx
 
 maryToPlutus :: MV.MaryValue era -> Plutus.Value
 maryToPlutus (MV.MaryValue ada rest) =
@@ -198,7 +210,7 @@ maryToPlutus (MV.MaryValue ada rest) =
     <> mconcat
       [ singleton
         (Plutus.currencySymbol $ hashToBytes $ unScriptHash $ MV.policyID pid)
-        (Plutus.tokenName $ BS.pack $ SBS.unpack $ MV.assetName tn)
+        (Plutus.tokenName $ SBS.fromShort $ MV.assetName tn)
         amt
       | (pid, toks) <- Map.toList rest
       , (tn, amt) <- Map.toList toks
