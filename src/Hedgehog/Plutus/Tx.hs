@@ -131,7 +131,7 @@ data ScriptPurpose
 balanceTx :: TxContext -> Tx 'Unbalanced -> Maybe (Hedgehog.Gen (Tx 'Balanced))
 balanceTx context tx = do
   let mock = mockchain context
-  let balanceingKeys = Map.keys $ Model.mockUsers mock
+  let balanceingKeys = Vector.fromList $ Map.keys $ Model.mockUsers mock
   -- It probably doesn't make sense to balance a transaction
   -- as every user at once in most cases
   -- so we should probably make this an argument to balance
@@ -143,20 +143,25 @@ balanceTx context tx = do
   let extra = posDif valueIn valueOut
   let deficit = posDif valueOut valueIn
   let alreadySpending =
-        catMaybes
-          [ Map.lookup (txInRef txin) (Model.mockUtxos mock)
-          | txin <- Set.toList $ txInputs tx
-          ]
-  (payDeficet, moreChange) <- tryPayAs mock balanceingKeys deficit alreadySpending
-  let change = extra <> moreChange
+        Vector.fromList $
+          catMaybes
+            [ Map.lookup (txInRef txin) (Model.mockUtxos mock)
+            | txin <- Set.toList $ txInputs tx
+            ]
+  spendGen <- spend mock deficit balanceingKeys alreadySpending
   pure $ do
-    payOutKey <- Gen.element balanceingKeys
+    Spend outRefs moreChange <- spendGen
+    payOutKey <- Gen.element (Vector.toList balanceingKeys)
+    let change = extra <> moreChange
     let checked =
           confirmBalanced context $
             tx
-              <> payDeficet
               <> mempty
-                { txOutputs =
+                { txInputs =
+                    Set.fromList $
+                      Vector.toList $
+                        (\ref -> TxIn ref Nothing) <$> outRefs
+                , txOutputs =
                     pure $
                       TxOut
                         { txOutAddress = Plutus.pubKeyHashAddress payOutKey
@@ -227,51 +232,6 @@ getValueInAndOut context tx = do
   val <- getBalance context tx
   pure (posDif val mempty, posDif mempty val)
 
--- based on `split'` in psm
-tryPayAs ::
-  Model.Mock ->
-  [PubKeyHash] ->
-  Value ->
-  [Plutus.TxOut] ->
-  Maybe (Tx 'Unbalanced, Value)
-tryPayAs mock keys val dontSpend = fst $ (`Model.runMock` mock) $ do
-  refs <- concat <$> mapM (Model.txOutRefAt . Plutus.pubKeyHashAddress) keys
-  mUtxos <-
-    gets
-      ( (\m -> mapM (\r -> (r,) <$> Map.lookup r m) refs)
-          . Map.filter
-            ( \txo ->
-                isNothing (Plutus.txOutReferenceScript txo)
-                  && (== Plutus.NoOutputDatum) (Plutus.txOutDatum txo)
-                  && txo `notElem` dontSpend
-            )
-          . Model.mockUtxos
-      )
-  case mUtxos of
-    Just utxos -> pure $ toRes $ foldl go (val, mempty, []) utxos
-    Nothing -> pure Nothing
-  where
-    toRes :: (Value, Value, [TxIn]) -> Maybe (Tx 'Unbalanced, Value)
-    toRes (rem, change, refs) = do
-      guard $ rem == mempty
-      pure (mempty {txInputs = Set.fromList refs}, change)
-
-    go ::
-      (Value, Value, [TxIn]) ->
-      (Plutus.TxOutRef, Plutus.TxOut) ->
-      (Value, Value, [TxIn])
-    go (remaining, change, refs) (outRef, out)
-      | remaining == mempty = (remaining, change, refs)
-      | intersect /= mempty =
-          (remaining', change', asTxIn : refs)
-      | otherwise = (remaining, change, refs)
-      where
-        refVal = Plutus.txOutValue out
-        intersect = Plutus.unionWith min remaining refVal
-        remaining' = posDif remaining intersect
-        change' = change <> posDif refVal intersect
-        asTxIn = TxIn outRef Nothing -- TODO is Nothing correct here?
-
 posDif :: Plutus.Value -> Plutus.Value -> Plutus.Value
 posDif = Plutus.unionWith (fmap (max 0) . (-))
 
@@ -294,8 +254,55 @@ A UTxO is 'non-special' iff:
 
 The refs need not be hwld by the same PubKey.
 -}
-spend :: Model.Mock -> Plutus.Value -> Maybe (Hedgehog.Gen Spend)
-spend = _
+spend ::
+  Model.Mock ->
+  Plutus.Value ->
+  Vector PubKeyHash ->
+  Vector Plutus.TxOut ->
+  Maybe (Hedgehog.Gen Spend)
+spend mock val keys dontSpend = fst $ (`Model.runMock` mock) $ do
+  refs <- concat <$> mapM (Model.txOutRefAt . Plutus.pubKeyHashAddress) keys
+  mUtxos <-
+    gets
+      ( (\m -> mapM (\r -> (r,) <$> Map.lookup r m) refs)
+          . Map.filter
+            ( \txo ->
+                isNothing (Plutus.txOutReferenceScript txo)
+                  && (== Plutus.NoOutputDatum) (Plutus.txOutDatum txo)
+                  && txo `notElem` dontSpend
+            )
+          . Model.mockUtxos
+      )
+  case mUtxos of
+    Just utxos -> pure $ do
+      detSpend <- toRes $ foldl go (val, Spend Vector.empty mempty) utxos
+      Just $ do
+        newUtxos <- Gen.shuffle utxos
+        let spend' = toRes $ foldl go (val, Spend Vector.empty mempty) newUtxos
+        case spend' of
+          Nothing -> pure detSpend
+          -- if the shuffled balance somehow fails
+          -- just return the test balance
+          Just spend -> pure spend
+    Nothing -> pure Nothing
+  where
+    toRes :: (Value, Spend) -> Maybe Spend
+    toRes (rem, s) = guard (rem == mempty) $> s
+
+    go ::
+      (Value, Spend) ->
+      (Plutus.TxOutRef, Plutus.TxOut) ->
+      (Value, Spend)
+    go (remaining, s@(Spend refs change)) (outRef, out)
+      | remaining == mempty = (remaining, s)
+      | intersect /= mempty =
+          (remaining', Spend (Vector.cons outRef refs) change')
+      | otherwise = (remaining, s)
+      where
+        refVal = Plutus.txOutValue out
+        intersect = Plutus.unionWith min remaining refVal
+        remaining' = posDif remaining intersect
+        change' = change <> posDif refVal intersect
 
 {- | Generate a @plutus-simple-model@ 'Model.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
