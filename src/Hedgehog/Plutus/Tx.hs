@@ -160,7 +160,7 @@ balanceTx context tx = do
                 { txInputs =
                     Set.fromList $
                       Vector.toList $
-                        (\ref -> TxIn ref Nothing) <$> outRefs
+                        (`TxIn` Nothing) <$> outRefs
                 , txOutputs =
                     pure $
                       TxOut
@@ -273,18 +273,17 @@ spend mock val keys dontSpend = fst $ (`Model.runMock` mock) $ do
             )
           . Model.mockUtxos
       )
-  case mUtxos of
-    Just utxos -> pure $ do
-      detSpend <- toRes $ foldl go (val, Spend Vector.empty mempty) utxos
-      Just $ do
-        newUtxos <- Gen.shuffle utxos
-        let spend' = toRes $ foldl go (val, Spend Vector.empty mempty) newUtxos
-        case spend' of
-          Nothing -> pure detSpend
-          -- if the shuffled balance somehow fails
-          -- just return the test balance
-          Just spend -> pure spend
-    Nothing -> pure Nothing
+  pure $ (mUtxos >>=) $ \utxos -> do
+    detSpend <- toRes $ foldl go (val, Spend Vector.empty mempty) utxos
+    -- create a deterministic spend to test that balance is possible
+    Just $ do
+      newUtxos <- Gen.shuffle utxos
+      let spend = toRes $ foldl go (val, Spend Vector.empty mempty) newUtxos
+      case spend of
+        Nothing -> pure detSpend
+        -- if the shuffled balance somehow fails
+        -- just return the deterministic spend
+        Just s -> pure s
   where
     toRes :: (Value, Spend) -> Maybe Spend
     toRes (rem, s) = guard (rem == mempty) $> s
