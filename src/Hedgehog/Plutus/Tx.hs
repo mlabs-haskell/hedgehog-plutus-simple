@@ -6,7 +6,8 @@ import Control.Arrow ((>>>))
 import Control.Monad (guard, liftM2)
 import Data.ByteString.Short qualified as SBS
 import Data.Coerce (coerce)
-import Data.Functor (($>))
+import Data.Functor (($>), (<&>))
+import Data.List (find)
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
 import Data.Maybe (catMaybes)
@@ -29,6 +30,7 @@ import Plutus.Model qualified as Model
 import Plutus.Model.Fork.Cardano.Alonzo qualified as Alonzo
 import Plutus.Model.Fork.Cardano.Babbage qualified as Babbage
 import Plutus.Model.Fork.Cardano.Class qualified as Class
+import Plutus.Model.Fork.Ledger.Tx qualified as Fork
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
 
 import PlutusCore qualified as PLC
@@ -43,6 +45,7 @@ import PlutusTx.Lattice ((/\))
 
 import Hedgehog qualified
 import Hedgehog.Gen qualified as Gen
+import PlutusLedgerApi.V2 (OutputDatum (NoOutputDatum, OutputDatum))
 
 data Balanced = Balanced | Unbalanced
 
@@ -267,7 +270,7 @@ data Spend = Spend
   , excess :: Plutus.Value
   }
 
-{- | Try to satisfy a value from available 'non-special' UTxOs.
+{- | Try to satisfy a value from available 'non-special' UTxOs matching the provided predicate.
 
 A UTxO is 'non-special' iff:
 
@@ -329,7 +332,80 @@ spendWhere mock val pred = do
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
 toSimpleModelTx :: TxContext -> Tx bal -> Model.Tx
-toSimpleModelTx = _
+toSimpleModelTx
+  _context
+  Tx
+    { txInputs
+    , txOutputs
+    , txMint
+    , txFee
+    , txValidRange
+    , txExtraSignatures
+    } =
+    Model.Tx
+      { Model.tx'extra = mempty
+      , Model.tx'plutus =
+          mempty
+            { Fork.txInputs = Set.map convertTxIn txInputs
+            , Fork.txCollateral = mempty
+            , Fork.txReferenceInputs = mempty
+            , Fork.txOutputs = convertTxOut <$> Vector.toList txOutputs
+            , Fork.txCollateralReturn = Nothing
+            , Fork.txTotalCollateral = Nothing
+            , Fork.txMint =
+                mconcat
+                  [ singleton cs tn amt
+                  | (cs, (toks, _reds)) <- Map.toList txMint
+                  , (tn, amt) <- Map.toList toks
+                  ]
+            , Fork.txFee = txFee
+            , Fork.txValidRange = error "TODO convert to slots" txValidRange
+            , Fork.txMintScripts = mempty
+            , -- TODO I think I need to
+              -- look these up from the interestingScripts
+              -- by getting the script hash from the currency symbol
+              Fork.txSignatures =
+                Map.fromList
+                  [ (pkh, witness)
+                  | pkh <- Set.toList txExtraSignatures
+                  , -- TODO if these are "extra" are the non-extra just
+                  -- the ones required by the inputs?
+                  -- If so add them here
+                  let witness = error "TODO" pkh
+                  ]
+            , -- TODO these last 3 probably shouldn't be mempty
+              Fork.txRedeemers = mempty
+            , Fork.txData = mempty
+            , Fork.txScripts = mempty
+            }
+      }
+    where
+      convertTxOut :: TxOut -> Plutus.TxOut
+      convertTxOut
+        TxOut
+          { txOutAddress
+          , txOutValue
+          , txOutDatum
+          , txOutReferenceScript
+          } =
+          Plutus.TxOut
+            { Plutus.txOutValue = txOutValue
+            , Plutus.txOutAddress = txOutAddress
+            , Plutus.txOutDatum =
+                maybe NoOutputDatum OutputDatum txOutDatum
+            , -- TODO when should this be a hash?
+              Plutus.txOutReferenceScript =
+                error "TODO hash the script here"
+                  -- PSM makes this kinda tricky iirc
+                  <$> txOutReferenceScript
+            }
+      convertTxIn :: TxIn -> Fork.TxIn
+      convertTxIn TxIn {txInRef, txInScript = _} =
+        Fork.TxIn
+          { Fork.txInRef = txInRef
+          , Fork.txInType = Nothing
+          -- TODO this probably isn't just Nothing
+          }
 
 -- 'era' can be constrained as neccesary.
 
