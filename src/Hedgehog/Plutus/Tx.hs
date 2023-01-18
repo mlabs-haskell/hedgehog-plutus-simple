@@ -2,14 +2,14 @@
 
 module Hedgehog.Plutus.Tx where
 
-import Control.Monad (guard)
-import Control.Monad.State.Strict (gets)
+import Control.Arrow ((>>>))
+import Control.Monad (guard, liftM2)
 import Data.ByteString.Short qualified as SBS
 import Data.Coerce (coerce)
 import Data.Functor (($>))
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
-import Data.Maybe (catMaybes, isNothing, listToMaybe)
+import Data.Maybe (catMaybes)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Vector (Vector)
@@ -129,12 +129,32 @@ data ScriptPurpose
   In the future, hps should support custom balancers.
 -}
 balanceTx :: TxContext -> Tx 'Unbalanced -> Maybe (Hedgehog.Gen (Tx 'Balanced))
-balanceTx context tx = do
+balanceTx context tx = balanceTxWhere context tx (const True) (const True)
+
+-- | as balanceTx but only uses txOuts belonging to a particular PubKeyHash and always sends change to that PubKeyHash
+balanceTxAsPubKey :: TxContext -> Tx 'Unbalanced -> PubKeyHash -> Maybe (Hedgehog.Gen (Tx 'Balanced))
+balanceTxAsPubKey context tx pkh =
+  balanceTxWhere
+    context
+    tx
+    ( Plutus.txOutAddress
+        >>> Plutus.addressCredential
+        >>> ( \case
+                Plutus.PubKeyCredential pkh' -> pkh' == pkh
+                _ -> False
+            )
+    )
+    (== pkh)
+
+-- | as balanceTx but with an additional predicate about which TxOuts can be used
+balanceTxWhere ::
+  TxContext ->
+  Tx 'Unbalanced ->
+  (Plutus.TxOut -> Bool) ->
+  (Plutus.PubKeyHash -> Bool) ->
+  Maybe (Hedgehog.Gen (Tx 'Balanced))
+balanceTxWhere context tx predTxout predPkh = do
   let mock = mockchain context
-  let balanceingKeys = Vector.fromList $ Map.keys $ Model.mockUsers mock
-  -- It probably doesn't make sense to balance a transaction
-  -- as every user at once in most cases
-  -- so we should probably make this an argument to balance
   (valueIn, valueOut) <- getValueInAndOut context tx
   -- TODO we may want to change this to something like
   -- Either FailReason (Tx 'Balanced)
@@ -142,16 +162,18 @@ balanceTx context tx = do
   -- and failure by not enough value at keys
   let extra = posDif valueIn valueOut
   let deficit = posDif valueOut valueIn
-  let alreadySpending =
-        Vector.fromList $
-          catMaybes
+  let alreadySpending txOut =
+        txOut
+          `elem` catMaybes
             [ Map.lookup (txInRef txin) (Model.mockUtxos mock)
             | txin <- Set.toList $ txInputs tx
             ]
-  spendGen <- spend mock deficit balanceingKeys alreadySpending
+  spendGen <- spendWhere mock deficit (liftM2 (&&) (not . alreadySpending) predTxout)
+  let payoutKeys = filter predPkh $ Map.keys $ Model.mockUsers mock
+  guard $ not $ null payoutKeys
   pure $ do
     Spend outRefs moreChange <- spendGen
-    payOutKey <- Gen.element (Vector.toList balanceingKeys)
+    payOutKey <- Gen.element payoutKeys
     let change = extra <> moreChange
     let checked =
           confirmBalanced context $
@@ -252,39 +274,38 @@ A UTxO is 'non-special' iff:
 
 * It does not hold a datum
 
-The refs need not be hwld by the same PubKey.
+The refs need not be held by the same PubKey.
 -}
-spend ::
+spendWhere ::
   Model.Mock ->
   Plutus.Value ->
-  Vector PubKeyHash ->
-  Vector Plutus.TxOut ->
+  (Plutus.TxOut -> Bool) ->
   Maybe (Hedgehog.Gen Spend)
-spend mock val keys dontSpend = fst $ (`Model.runMock` mock) $ do
-  refs <- concat <$> mapM (Model.txOutRefAt . Plutus.pubKeyHashAddress) keys
-  mUtxos <-
-    gets
-      ( (\m -> mapM (\r -> (r,) <$> Map.lookup r m) refs)
-          . Map.filter
-            ( \txo ->
-                isNothing (Plutus.txOutReferenceScript txo)
-                  && (== Plutus.NoOutputDatum) (Plutus.txOutDatum txo)
-                  && txo `notElem` dontSpend
-            )
-          . Model.mockUtxos
-      )
-  pure $ (mUtxos >>=) $ \utxos -> do
-    detSpend <- toRes $ foldl go (val, Spend Vector.empty mempty) utxos
-    -- create a deterministic spend to test that balance is possible
-    Just $ do
-      newUtxos <- Gen.shuffle utxos
-      let spend = toRes $ foldl go (val, Spend Vector.empty mempty) newUtxos
-      case spend of
-        Nothing -> pure detSpend
-        -- if the shuffled balance somehow fails
-        -- just return the deterministic spend
-        Just s -> pure s
+spendWhere mock val pred = do
+  let utxos = Map.toList $ Map.filter (liftM2 (&&) nonSpecial pred) $ Model.mockUtxos mock
+  guard $ not $ null utxos
+  detSpend <- toRes $ foldl go (val, Spend Vector.empty mempty) utxos
+  -- create a deterministic spend to test that balance is possible
+  Just $ do
+    newUtxos <- Gen.shuffle utxos
+    let spend = toRes $ foldl go (val, Spend Vector.empty mempty) newUtxos
+    case spend of
+      Nothing -> pure detSpend
+      -- if the shuffled balance somehow fails
+      -- just return the deterministic spend
+      Just s -> pure s
   where
+    nonSpecial :: Plutus.TxOut -> Bool
+    nonSpecial txout =
+      let
+        cred = Plutus.addressCredential $ Plutus.txOutAddress txout
+        noDatum = Plutus.txOutDatum txout == Plutus.NoOutputDatum
+        isPubKey = case cred of
+          Plutus.PubKeyCredential _ -> True
+          _ -> False
+       in
+        isPubKey && noDatum
+
     toRes :: (Value, Spend) -> Maybe Spend
     toRes (rem, s) = guard (rem == mempty) $> s
 
