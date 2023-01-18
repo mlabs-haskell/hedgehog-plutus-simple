@@ -28,7 +28,6 @@ common common-lang
     -Wincomplete-record-updates -Wmissing-deriving-strategies
     -Wno-name-shadowing -Wunused-foralls -fprint-explicit-foralls
     -fprint-explicit-kinds -fwarn-missing-import-lists -Werror
-    -fno-show-valid-hole-fits
 
   build-depends:      base >=4.14
   default-extensions:

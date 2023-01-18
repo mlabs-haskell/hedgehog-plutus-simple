@@ -19,9 +19,10 @@ import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.BaseTypes (Network)
 import Cardano.Ledger.Core (TxBody)
+import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.Core qualified as Ledger
 import Cardano.Ledger.Mary.Value qualified as MV
-import Cardano.Ledger.Shelley.API.Wallet (evaluateTransactionBalance)
+import Cardano.Ledger.Shelley.API.Wallet (CLI, evaluateTransactionBalance)
 import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
 
 import Plutus.Model qualified as Model
@@ -197,32 +198,32 @@ balanceTxWhere context tx predTxout predPkh = do
       Nothing -> error "balanceTx produced an unbalanced tx"
 
 getBalance :: TxContext -> Tx b -> Maybe Value
-getBalance context tx = do
+getBalance context tx =
   case protocol of
-    Model.AlonzoParams params -> do
+    Model.AlonzoParams (params :: Core.PParams Alonzo.Era) ->
+      fromParams params
+    Model.BabbageParams (params :: Core.PParams Babbage.Era) ->
+      fromParams params
+  where
+    -- fromParams ::
+    --  forall era.
+    --    ( Core.EraTx era
+    --    , ShelleyEraTxBody era
+    --    , Ledger.Value era ~ MV.MaryValue era
+    --    ) =>
+    --    Core.PParams era -> Maybe Value
+    -- TODO this signature works but breaks the call sites
+    fromParams params = do
       Right utxo <- pure $ Class.toUtxo mempty networkId []
       -- TODO what should the utxo be for this?
       pure $
         maryToPlutus $
-          evaluateTransactionBalance @Alonzo.Era
+          evaluateTransactionBalance
             params
             utxo
             (const True) -- TODO is this right?
             body
-    Model.BabbageParams params -> do
-      -- TODO is there a good way to not repeat all this?
-      Right utxo <- pure $ Class.toUtxo mempty networkId []
-      -- This can't be lifted to the outer doblock because `toUtxo` itself
-      -- not the return value is polymorphic so it needs to be called twice
-      -- with the same arguments but a different infered type
-      pure $
-        maryToPlutus $
-          evaluateTransactionBalance @Babbage.Era
-            params
-            utxo
-            (const True)
-            body
-  where
+
     networkId :: Network
     networkId = Model.mockConfigNetworkId mockConfig
 
@@ -235,7 +236,7 @@ getBalance context tx = do
     body :: Class.IsCardanoTx era => TxBody era
     body = Class.getTxBody $ toLedgerTx context tx
 
-maryToPlutus :: MV.MaryValue era -> Plutus.Value
+maryToPlutus :: forall era. MV.MaryValue era -> Plutus.Value
 maryToPlutus (MV.MaryValue ada rest) =
   singleton "" "" ada
     <> mconcat
