@@ -22,7 +22,7 @@ import Cardano.Ledger.Core (TxBody)
 import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.Core qualified as Ledger
 import Cardano.Ledger.Mary.Value qualified as MV
-import Cardano.Ledger.Shelley.API.Wallet (CLI, evaluateTransactionBalance)
+import Cardano.Ledger.Shelley.API.Wallet (evaluateTransactionBalance)
 import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
 
 import Plutus.Model qualified as Model
@@ -147,7 +147,7 @@ balanceTxAsPubKey context tx pkh =
     )
     (== pkh)
 
--- | as balanceTx but with an additional predicate about which TxOuts can be used
+-- | as balanceTx but with additional predicates about which TxOuts and PubKeyHashs can be used
 balanceTxWhere ::
   TxContext ->
   Tx 'Unbalanced ->
