@@ -9,7 +9,7 @@ import Data.Coerce (coerce)
 import Data.Functor (($>))
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
-import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Vector (Vector)
@@ -436,8 +436,11 @@ toSimpleModelTx
         Plutus.scriptHashAddress sh
           `elem` [ Plutus.txOutAddress txOut
                  | txIn <- Set.toList txInputs
-                 , let txOutRef = txInRef txIn
-                 , Just txOut <- pure $ Map.lookup txOutRef (Model.mockUtxos mockchain)
+                 , Just txOut <-
+                    pure $
+                      Map.lookup
+                        (txInRef txIn)
+                        (Model.mockUtxos mockchain)
                  ]
         ]
 
@@ -451,7 +454,8 @@ toSimpleModelTx
       -- Or just have our TxOut type know how the datum is stored
 
       -- convert tx out to Plutus.TxOut maybe adding a datum table entry
-      convertTxOut :: TxOut -> (Plutus.TxOut, Maybe (Plutus.DatumHash, Plutus.Datum))
+      convertTxOut ::
+        TxOut -> (Plutus.TxOut, Maybe (Plutus.DatumHash, Plutus.Datum))
       convertTxOut
         TxOut
           { txOutAddress
@@ -521,7 +525,7 @@ toLedgerTx context tx =
         params
         (toSimpleModelTx context tx)
         & \case
-          Left e -> error (show e)
+          Left e -> error ("toLedgerTx failed with:" <> show e)
           Right tx -> tx
 
 -- Since toLedgerTx can't actually be polymorphic
