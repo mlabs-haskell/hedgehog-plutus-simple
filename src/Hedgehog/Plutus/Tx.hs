@@ -208,16 +208,13 @@ balanceTxWhere context tx predTxout predPkh = do
 getBalance :: TxContext -> Tx b -> Maybe Value
 getBalance context tx =
   case (protocol, coreTx) of
-    ( Model.AlonzoParams (params :: Core.PParams Alonzo.Era)
-      , Alonzo coreTx
-      ) -> cont @Alonzo.Era params (Class.getTxBody coreTx)
-    ( Model.BabbageParams (params :: Core.PParams Babbage.Era)
-      , Babbage coreTx
-      ) -> cont params (Class.getTxBody coreTx)
+    (Model.AlonzoParams params, Alonzo coreTx) ->
+      cont @Alonzo.Era params coreTx
+    (Model.BabbageParams params, Babbage coreTx) ->
+      cont @Babbage.Era params coreTx
+    -- this error should be unreachable
     _ -> error "era mismatch between balance and toLedgerTx"
   where
-    -- This should be unreachable
-
     cont ::
       forall era.
       ( Core.EraTx era
@@ -227,9 +224,9 @@ getBalance context tx =
       , Core.Value era ~ MV.MaryValue StandardCrypto
       ) =>
       Core.PParams era ->
-      TxBody era ->
+      Core.Tx era ->
       Maybe Value
-    cont params body = do
+    cont params coreTx = do
       Right utxo <- pure $ Class.toUtxo mempty networkId []
       -- TODO what should the utxo be for this?
       pure $
@@ -238,7 +235,7 @@ getBalance context tx =
             params
             utxo
             (const True) -- TODO is this right?
-            body
+            (Class.getTxBody coreTx)
 
     networkId :: Network
     networkId = Model.mockConfigNetworkId mockConfig
@@ -504,12 +501,12 @@ toLedgerTx :: TxContext -> Tx bal -> CoreTx
 toLedgerTx context tx =
   case Model.mockConfigProtocol $ Model.mockConfig (mockchain context) of
     Model.AlonzoParams (params :: Core.PParams Alonzo.Era) ->
-      Alonzo $ fromParams params
+      Alonzo $ cont params
     Model.BabbageParams (params :: Core.PParams Babbage.Era) ->
-      Babbage $ fromParams params
+      Babbage $ cont params
   where
-    fromParams :: Class.IsCardanoTx era => Core.PParams era -> Core.Tx era
-    fromParams params =
+    cont :: Class.IsCardanoTx era => Core.PParams era -> Core.Tx era
+    cont params =
       Class.toCardanoTx
         (Map.map convertScript $ interestingScripts context)
         (Model.mockConfigNetworkId $ Model.mockConfig $ mockchain context)
