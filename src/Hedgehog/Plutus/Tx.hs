@@ -6,11 +6,10 @@ import Control.Arrow ((>>>))
 import Control.Monad (guard, liftM2)
 import Data.ByteString.Short qualified as SBS
 import Data.Coerce (coerce)
-import Data.Functor (($>), (<&>))
-import Data.List (find)
+import Data.Functor (($>))
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Vector (Vector)
@@ -30,7 +29,9 @@ import Plutus.Model qualified as Model
 import Plutus.Model.Fork.Cardano.Alonzo qualified as Alonzo
 import Plutus.Model.Fork.Cardano.Babbage qualified as Babbage
 import Plutus.Model.Fork.Cardano.Class qualified as Class
+import Plutus.Model.Fork.Ledger.Scripts (scriptHash)
 import Plutus.Model.Fork.Ledger.Tx qualified as Fork
+import Plutus.Model.Fork.PlutusLedgerApi.V1.Scripts qualified as Scripts
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
 
 import PlutusCore qualified as PLC
@@ -39,13 +40,14 @@ import UntypedPlutusCore qualified as UPLC
 import PlutusLedgerApi.V1 (PubKeyHash, Value, singleton)
 import PlutusLedgerApi.V1.Address qualified as Plutus
 import PlutusLedgerApi.V1.Interval qualified as Plutus
+import PlutusLedgerApi.V1.Tx (RedeemerPtr (RedeemerPtr), ScriptTag (Mint))
 import PlutusLedgerApi.V1.Value qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusTx.Lattice ((/\))
 
 import Hedgehog qualified
 import Hedgehog.Gen qualified as Gen
-import PlutusLedgerApi.V2 (OutputDatum (NoOutputDatum, OutputDatum))
+import PlutusLedgerApi.V2 (OutputDatum (NoOutputDatum, OutputDatum, OutputDatumHash))
 
 data Balanced = Balanced | Unbalanced
 
@@ -333,7 +335,11 @@ spendWhere mock val pred = do
 -}
 toSimpleModelTx :: TxContext -> Tx bal -> Model.Tx
 toSimpleModelTx
-  _context
+  TxContext
+    { interestingScripts
+    , mockchain
+    , datums
+    }
   Tx
     { txInputs
     , txOutputs
@@ -347,9 +353,10 @@ toSimpleModelTx
       , Model.tx'plutus =
           mempty
             { Fork.txInputs = Set.map convertTxIn txInputs
-            , Fork.txCollateral = mempty
+            , -- It would not be hard to make it a predicate either
+              Fork.txCollateral = mempty
             , Fork.txReferenceInputs = mempty
-            , Fork.txOutputs = convertTxOut <$> Vector.toList txOutputs
+            , Fork.txOutputs = outs
             , Fork.txCollateralReturn = Nothing
             , Fork.txTotalCollateral = Nothing
             , Fork.txMint =
@@ -360,11 +367,18 @@ toSimpleModelTx
                   ]
             , Fork.txFee = txFee
             , Fork.txValidRange = error "TODO convert to slots" txValidRange
-            , Fork.txMintScripts = mempty
-            , -- TODO I think I need to
-              -- look these up from the interestingScripts
-              -- by getting the script hash from the currency symbol
-              Fork.txSignatures =
+            , Fork.txMintScripts =
+                Set.fromList $
+                  [ ( coerce ::
+                        Model.Versioned Model.Script ->
+                        Model.Versioned Model.MintingPolicy
+                    )
+                    $ convertScript script
+                  | (Plutus.CurrencySymbol cs, _) <- Map.toList txMint
+                  , let (sh :: Plutus.ScriptHash) = Plutus.ScriptHash cs
+                  , Just script <- pure $ Map.lookup sh interestingScripts
+                  ]
+            , Fork.txSignatures =
                 Map.fromList
                   [ (pkh, witness)
                   | pkh <- Set.toList txExtraSignatures
@@ -372,15 +386,58 @@ toSimpleModelTx
                   -- the ones required by the inputs?
                   -- If so add them here
                   let witness = error "TODO" pkh
+                  -- TODO how do you get these keys?
                   ]
-            , -- TODO these last 3 probably shouldn't be mempty
-              Fork.txRedeemers = mempty
-            , Fork.txData = mempty
-            , Fork.txScripts = mempty
+            , Fork.txRedeemers =
+                Map.fromList $
+                  zip
+                    [RedeemerPtr Mint i | i <- [0 ..]]
+                    [red | (_, (_, red)) <- Map.toList txMint]
+            , Fork.txData = txData
+            , Fork.txScripts =
+                Map.fromList $
+                  zip
+                    hashes
+                    scripts
             }
       }
     where
-      convertTxOut :: TxOut -> Plutus.TxOut
+      outs' :: [(Plutus.TxOut, Maybe (Plutus.DatumHash, Plutus.Datum))]
+      outs' = convertTxOut <$> Vector.toList txOutputs
+
+      outs :: [Plutus.TxOut]
+      outs = fst <$> outs'
+
+      txData :: Map Plutus.DatumHash Plutus.Datum
+      txData =
+        datums
+          <> Map.fromList (mapMaybe snd outs')
+      -- Context datums with any additional datums
+      -- from txout conversions
+
+      scripts :: [Model.Versioned Model.Script]
+      scripts =
+        [ convertScript s
+        | (sh, s) <- Map.toList interestingScripts
+        , -- filter only the scripts being invoked
+        -- by checking their address coresponds to some input
+        Plutus.scriptHashAddress sh
+          `elem` [ Plutus.txOutAddress txOut
+                 | txIn <- Set.toList txInputs
+                 , let txOutRef = txInRef txIn
+                 , Just txOut <- pure $ Map.lookup txOutRef (Model.mockUtxos mockchain)
+                 ]
+        ]
+
+      hashes :: [Plutus.ScriptHash]
+      hashes = scriptHash <$> scripts
+
+      inlineDatums :: Bool
+      inlineDatums = True
+      -- Maybe this could be computed from version or added to context?
+      -- It would not be hard to make it a predicate either
+
+      convertTxOut :: TxOut -> (Plutus.TxOut, Maybe (Plutus.DatumHash, Plutus.Datum))
       convertTxOut
         TxOut
           { txOutAddress
@@ -388,17 +445,31 @@ toSimpleModelTx
           , txOutDatum
           , txOutReferenceScript
           } =
-          Plutus.TxOut
-            { Plutus.txOutValue = txOutValue
-            , Plutus.txOutAddress = txOutAddress
-            , Plutus.txOutDatum =
-                maybe NoOutputDatum OutputDatum txOutDatum
-            , -- TODO when should this be a hash?
-              Plutus.txOutReferenceScript =
-                error "TODO hash the script here"
-                  -- PSM makes this kinda tricky iirc
-                  <$> txOutReferenceScript
-            }
+          ( Plutus.TxOut
+              { Plutus.txOutValue = txOutValue
+              , Plutus.txOutAddress = txOutAddress
+              , Plutus.txOutDatum =
+                  case txOutDatum of
+                    Nothing -> NoOutputDatum
+                    Just datum ->
+                      if inlineDatums
+                        then OutputDatum datum
+                        else OutputDatumHash $ Model.datumHash datum
+              , Plutus.txOutReferenceScript =
+                  scriptHash . convertScript
+                    <$> txOutReferenceScript
+              }
+          , do
+              datum <- txOutDatum
+              guard $ not inlineDatums
+              pure (Model.datumHash datum, datum)
+          )
+
+      convertScript :: Script -> Model.Versioned Model.Script
+      convertScript (Script s) = Model.toV1 $ Scripts.Script s
+      -- TODO toV1 is a placeholder
+      -- our script type should probably know the version
+
       convertTxIn :: TxIn -> Fork.TxIn
       convertTxIn TxIn {txInRef, txInScript = _} =
         Fork.TxIn
