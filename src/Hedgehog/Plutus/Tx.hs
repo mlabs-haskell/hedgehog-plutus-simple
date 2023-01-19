@@ -21,9 +21,11 @@ import Cardano.Ledger.BaseTypes (Network)
 import Cardano.Ledger.Core (TxBody)
 import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.Core qualified as Ledger
+import Cardano.Ledger.Crypto (StandardCrypto)
 import Cardano.Ledger.Mary.Value qualified as MV
-import Cardano.Ledger.Shelley.API.Wallet (evaluateTransactionBalance)
+import Cardano.Ledger.Shelley.API.Wallet (CLI, evaluateTransactionBalance)
 import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
+import Cardano.Ledger.Shelley.TxBody (ShelleyEraTxBody)
 
 import Plutus.Model qualified as Model
 import Plutus.Model.Fork.Cardano.Alonzo qualified as Alonzo
@@ -201,19 +203,21 @@ getBalance :: TxContext -> Tx b -> Maybe Value
 getBalance context tx =
   case protocol of
     Model.AlonzoParams (params :: Core.PParams Alonzo.Era) ->
-      fromParams params
+      cont params
     Model.BabbageParams (params :: Core.PParams Babbage.Era) ->
-      fromParams params
+      cont params
   where
-    -- fromParams ::
-    --  forall era.
-    --    ( Core.EraTx era
-    --    , ShelleyEraTxBody era
-    --    , Ledger.Value era ~ MV.MaryValue era
-    --    ) =>
-    --    Core.PParams era -> Maybe Value
-    -- TODO this signature works but breaks the call sites
-    fromParams params = do
+    cont ::
+      forall era.
+      ( Core.EraTx era
+      , Class.IsCardanoTx era
+      , CLI era
+      , ShelleyEraTxBody era
+      , Core.Value era ~ MV.MaryValue StandardCrypto
+      ) =>
+      Core.PParams era ->
+      Maybe Value
+    cont params = do
       Right utxo <- pure $ Class.toUtxo mempty networkId []
       -- TODO what should the utxo be for this?
       pure $
