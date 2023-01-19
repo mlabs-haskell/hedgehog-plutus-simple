@@ -45,6 +45,7 @@ import PlutusLedgerApi.V1.Value qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusTx.Lattice ((/\))
 
+import Data.Function ((&))
 import Hedgehog qualified
 import Hedgehog.Gen qualified as Gen
 import PlutusLedgerApi.V2 (OutputDatum (NoOutputDatum, OutputDatum, OutputDatumHash))
@@ -353,8 +354,7 @@ toSimpleModelTx
       , Model.tx'plutus =
           mempty
             { Fork.txInputs = Set.map convertTxIn txInputs
-            , -- It would not be hard to make it a predicate either
-              Fork.txCollateral = mempty
+            , Fork.txCollateral = mempty
             , Fork.txReferenceInputs = mempty
             , Fork.txOutputs = outs
             , Fork.txCollateralReturn = Nothing
@@ -473,11 +473,6 @@ toSimpleModelTx
               pure (Model.datumHash datum, datum)
           )
 
-      convertScript :: Script -> Model.Versioned Model.Script
-      convertScript (Script s) = Model.toV1 $ Scripts.Script s
-      -- TODO toV1 is a placeholder
-      -- our script type should probably know the version
-
       convertTxIn :: TxIn -> Fork.TxIn
       convertTxIn TxIn {txInRef, txInScript = _} =
         Fork.TxIn
@@ -486,13 +481,42 @@ toSimpleModelTx
           -- TODO this probably isn't just Nothing
           }
 
--- 'era' can be constrained as neccesary.
+convertScript :: Script -> Model.Versioned Model.Script
+convertScript (Script s) = Model.toV1 $ Scripts.Script s
+
+-- TODO toV1 is a placeholder
+-- our script type should probably know the version
 
 {- | Generate a ledger 'Ledger.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
 toLedgerTx :: TxContext -> Tx bal -> Core.Tx era
-toLedgerTx = _
+toLedgerTx context tx =
+  case Model.mockConfigProtocol $ Model.mockConfig (mockchain context) of
+    Model.AlonzoParams (params :: Core.PParams Alonzo.Era) ->
+      error "TODO type issue" $ fromParams params
+    Model.BabbageParams (params :: Core.PParams Babbage.Era) ->
+      error "TODO type issue" $ fromParams params
+  where
+    fromParams :: Class.IsCardanoTx era => Core.PParams era -> Core.Tx era
+    fromParams params =
+      Class.toCardanoTx
+        (Map.map convertScript $ interestingScripts context)
+        (Model.mockConfigNetworkId $ Model.mockConfig $ mockchain context)
+        params
+        (toSimpleModelTx context tx)
+        & \case
+          Left e -> error (show e)
+          Right tx -> tx
+
+-- Since toLedgerTx can't actually be polymorphic
+-- as the era is forced by the mockchain
+-- it needs to return something like this
+-- but this would break getBalance which abuses
+-- the fact that this is currently polymorphic
+-- to make sure the type matches the mock from the context
+data CoreTx where
+  CoreTx :: Class.IsCardanoTx era => {unCoreTx :: Core.Tx era} -> CoreTx
 
 -- | Generate the relevant transaction fragment for a 'ScriptPurpose'
 scriptPurposeTx :: TxContext -> ScriptPurpose -> Tx 'Unbalanced
