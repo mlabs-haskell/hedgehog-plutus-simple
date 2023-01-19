@@ -20,7 +20,6 @@ import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.BaseTypes (Network)
 import Cardano.Ledger.Core (TxBody)
 import Cardano.Ledger.Core qualified as Core
-import Cardano.Ledger.Core qualified as Ledger
 import Cardano.Ledger.Mary.Value qualified as MV
 import Cardano.Ledger.Shelley.API.Wallet (evaluateTransactionBalance)
 import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
@@ -30,6 +29,7 @@ import Plutus.Model.Fork.Cardano.Alonzo qualified as Alonzo
 import Plutus.Model.Fork.Cardano.Babbage qualified as Babbage
 import Plutus.Model.Fork.Cardano.Class qualified as Class
 import Plutus.Model.Fork.Ledger.Scripts (scriptHash)
+import Plutus.Model.Fork.Ledger.TimeSlot qualified as Time
 import Plutus.Model.Fork.Ledger.Tx qualified as Fork
 import Plutus.Model.Fork.PlutusLedgerApi.V1.Scripts qualified as Scripts
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
@@ -366,7 +366,10 @@ toSimpleModelTx
                   , (tn, amt) <- Map.toList toks
                   ]
             , Fork.txFee = txFee
-            , Fork.txValidRange = error "TODO convert to slots" txValidRange
+            , Fork.txValidRange =
+                Time.posixTimeRangeToContainedSlotRange
+                  (Model.mockConfigSlotConfig $ Model.mockConfig mockchain)
+                  txValidRange
             , Fork.txMintScripts =
                 Set.fromList $
                   [ ( coerce ::
@@ -380,13 +383,16 @@ toSimpleModelTx
                   ]
             , Fork.txSignatures =
                 Map.fromList
-                  [ (pkh, witness)
+                  [ (pkh, Model.userSignKey user)
                   | pkh <- Set.toList txExtraSignatures
                   , -- TODO if these are "extra" are the non-extra just
                   -- the ones required by the inputs?
                   -- If so add them here
-                  let witness = error "TODO" pkh
-                  -- TODO how do you get these keys?
+                  Just user <-
+                    pure $
+                      Map.lookup
+                        pkh
+                        (Model.mockUsers mockchain)
                   ]
             , Fork.txRedeemers =
                 Map.fromList $
@@ -436,7 +442,9 @@ toSimpleModelTx
       inlineDatums = True
       -- Maybe this could be computed from version or added to context?
       -- It would not be hard to make it a predicate either
+      -- Or just have our TxOut type know how the datum is stored
 
+      -- convert tx out to Plutus.TxOut maybe adding a datum table entry
       convertTxOut :: TxOut -> (Plutus.TxOut, Maybe (Plutus.DatumHash, Plutus.Datum))
       convertTxOut
         TxOut
@@ -483,7 +491,7 @@ toSimpleModelTx
 {- | Generate a ledger 'Ledger.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
-toLedgerTx :: TxContext -> Tx bal -> Ledger.Tx era
+toLedgerTx :: TxContext -> Tx bal -> Core.Tx era
 toLedgerTx = _
 
 -- | Generate the relevant transaction fragment for a 'ScriptPurpose'
