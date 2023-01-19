@@ -9,7 +9,7 @@ import Data.Coerce (coerce)
 import Data.Functor (($>))
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
-import Data.Maybe (catMaybes, mapMaybe)
+import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Vector (Vector)
@@ -18,7 +18,6 @@ import Data.Vector qualified as Vector
 import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.BaseTypes (Network)
-import Cardano.Ledger.Core (TxBody)
 import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.Crypto (StandardCrypto)
 import Cardano.Ledger.Mary.Value qualified as MV
@@ -481,18 +480,27 @@ toSimpleModelTx
           )
 
       convertTxIn :: TxIn -> Fork.TxIn
-      convertTxIn TxIn {txInRef, txInScript = _} =
+      convertTxIn TxIn {txInRef, txInScript} =
         Fork.TxIn
           { Fork.txInRef = txInRef
-          , Fork.txInType = Nothing
-          -- TODO this probably isn't just Nothing
+          , Fork.txInType = do
+              Plutus.TxOut
+                { Plutus.txOutAddress = Plutus.Address cred _
+                } <-
+                Map.lookup txInRef (Model.mockUtxos mockchain)
+              case cred of
+                Plutus.PubKeyCredential _ -> pure Fork.ConsumePublicKeyAddress
+                Plutus.ScriptCredential _sh -> do
+                  InScript {inScriptData} <- txInScript
+                  (redeemer, datum) <- inScriptData
+                  pure $ Fork.ConsumeScriptAddress Nothing redeemer datum
+                  -- TODO this Nothing should probably be the script
           }
-
-convertScript :: Script -> Model.Versioned Model.Script
-convertScript (Script s) = Model.toV1 $ Scripts.Script s
 
 -- TODO toV1 is a placeholder
 -- our script type should probably know the version
+convertScript :: Script -> Model.Versioned Model.Script
+convertScript (Script s) = Model.toV1 $ Scripts.Script s
 
 {- | Generate a ledger 'Ledger.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
