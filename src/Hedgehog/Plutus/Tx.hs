@@ -20,9 +20,11 @@ import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.BaseTypes (Network)
 import Cardano.Ledger.Core (TxBody)
 import Cardano.Ledger.Core qualified as Core
+import Cardano.Ledger.Crypto (StandardCrypto)
 import Cardano.Ledger.Mary.Value qualified as MV
-import Cardano.Ledger.Shelley.API.Wallet (evaluateTransactionBalance)
+import Cardano.Ledger.Shelley.API.Wallet (CLI, evaluateTransactionBalance)
 import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
+import Cardano.Ledger.Shelley.TxBody (ShelleyEraTxBody)
 
 import Plutus.Model qualified as Model
 import Plutus.Model.Fork.Cardano.Alonzo qualified as Alonzo
@@ -205,26 +207,34 @@ balanceTxWhere context tx predTxout predPkh = do
 
 getBalance :: TxContext -> Tx b -> Maybe Value
 getBalance context tx =
-  case protocol of
-    Model.AlonzoParams (params :: Core.PParams Alonzo.Era) ->
-      fromParams params
-    Model.BabbageParams (params :: Core.PParams Babbage.Era) ->
-      fromParams params
+  case (protocol, coreTx) of
+    ( Model.AlonzoParams (params :: Core.PParams Alonzo.Era)
+      , Alonzo coreTx
+      ) -> cont @Alonzo.Era params (Class.getTxBody coreTx)
+    ( Model.BabbageParams (params :: Core.PParams Babbage.Era)
+      , Babbage coreTx
+      ) -> cont params (Class.getTxBody coreTx)
+    _ -> error "era mismatch between balance and toLedgerTx"
   where
-    -- fromParams ::
-    --  forall era.
-    --    ( Core.EraTx era
-    --    , ShelleyEraTxBody era
-    --    , Ledger.Value era ~ MV.MaryValue era
-    --    ) =>
-    --    Core.PParams era -> Maybe Value
-    -- TODO this signature works but breaks the call sites
-    fromParams params = do
+    -- This should be unreachable
+
+    cont ::
+      forall era.
+      ( Core.EraTx era
+      , Class.IsCardanoTx era
+      , CLI era
+      , ShelleyEraTxBody era
+      , Core.Value era ~ MV.MaryValue StandardCrypto
+      ) =>
+      Core.PParams era ->
+      TxBody era ->
+      Maybe Value
+    cont params body = do
       Right utxo <- pure $ Class.toUtxo mempty networkId []
       -- TODO what should the utxo be for this?
       pure $
         maryToPlutus $
-          evaluateTransactionBalance
+          evaluateTransactionBalance @era
             params
             utxo
             (const True) -- TODO is this right?
@@ -239,8 +249,8 @@ getBalance context tx =
     mockConfig :: Model.MockConfig
     mockConfig = Model.mockConfig $ mockchain context
 
-    body :: Class.IsCardanoTx era => TxBody era
-    body = Class.getTxBody $ toLedgerTx context tx
+    coreTx :: CoreTx
+    coreTx = toLedgerTx context tx
 
 maryToPlutus :: forall era. MV.MaryValue era -> Plutus.Value
 maryToPlutus (MV.MaryValue ada rest) =
@@ -490,13 +500,13 @@ convertScript (Script s) = Model.toV1 $ Scripts.Script s
 {- | Generate a ledger 'Ledger.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
-toLedgerTx :: TxContext -> Tx bal -> Core.Tx era
+toLedgerTx :: TxContext -> Tx bal -> CoreTx
 toLedgerTx context tx =
   case Model.mockConfigProtocol $ Model.mockConfig (mockchain context) of
     Model.AlonzoParams (params :: Core.PParams Alonzo.Era) ->
-      error "TODO type issue" $ fromParams params
+      Alonzo $ fromParams params
     Model.BabbageParams (params :: Core.PParams Babbage.Era) ->
-      error "TODO type issue" $ fromParams params
+      Babbage $ fromParams params
   where
     fromParams :: Class.IsCardanoTx era => Core.PParams era -> Core.Tx era
     fromParams params =
@@ -512,11 +522,9 @@ toLedgerTx context tx =
 -- Since toLedgerTx can't actually be polymorphic
 -- as the era is forced by the mockchain
 -- it needs to return something like this
--- but this would break getBalance which abuses
--- the fact that this is currently polymorphic
--- to make sure the type matches the mock from the context
-data CoreTx where
-  CoreTx :: Class.IsCardanoTx era => {unCoreTx :: Core.Tx era} -> CoreTx
+data CoreTx
+  = Alonzo (Core.Tx Alonzo.Era)
+  | Babbage (Core.Tx Babbage.Era)
 
 -- | Generate the relevant transaction fragment for a 'ScriptPurpose'
 scriptPurposeTx :: TxContext -> ScriptPurpose -> Tx 'Unbalanced
