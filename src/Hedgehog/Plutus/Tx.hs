@@ -17,13 +17,14 @@ import Data.Vector qualified as Vector
 
 import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
-import Cardano.Ledger.BaseTypes (Network)
+import Cardano.Ledger.BaseTypes (Network, txIxFromIntegral)
 import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.Crypto (StandardCrypto)
 import Cardano.Ledger.Mary.Value qualified as MV
 import Cardano.Ledger.Shelley.API.Wallet (CLI, evaluateTransactionBalance)
 import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
 import Cardano.Ledger.Shelley.TxBody (ShelleyEraTxBody)
+import Cardano.Ledger.TxIn qualified as Ledger
 
 import Plutus.Model qualified as Model
 import Plutus.Model.Fork.Cardano.Alonzo qualified as Alonzo
@@ -534,11 +535,31 @@ data CoreTx
   | Babbage (Core.Tx Babbage.Era)
 
 -- | Generate the relevant transaction fragment for a 'ScriptPurpose'
-scriptPurposeTx :: TxContext -> ScriptPurpose -> Tx 'Unbalanced
-scriptPurposeTx = _
+scriptPurposeTx :: ScriptPurpose -> Tx 'Unbalanced
+scriptPurposeTx = \case
+  Spending ref inscript ->
+    mempty
+      { txInputs = Set.singleton $ TxIn ref (Just inscript)
+      }
+  Minting cs (toks, red) ->
+    mempty
+      { txMint = Map.singleton cs (toks, red)
+      }
 
 {- | Generate a ledger 'Ledger.ScriptPurpose' from a @hedgehog-plutus-simple@
  'ScriptPurpose'.
 -}
 toLedgerScriptPurpose :: ScriptPurpose -> Ledger.ScriptPurpose era
-toLedgerScriptPurpose = _
+toLedgerScriptPurpose = \case
+  Spending (Plutus.TxOutRef (Plutus.TxId txIdHash) idx) _inscript ->
+    Ledger.Spending $
+      Ledger.TxIn
+        (Ledger.TxId $ error "TODO convert this hash" txIdHash)
+        (fromMaybe (error "index overflow") $ txIxFromIntegral idx)
+  -- The Maybe is because the integer might not fit in a Word64
+  -- This shouldn't come up in practice
+  Minting (Plutus.CurrencySymbol sh) _ ->
+    Ledger.Minting $
+      MV.PolicyID $
+        ScriptHash $
+          error "TODO find a way to convert this type" sh
