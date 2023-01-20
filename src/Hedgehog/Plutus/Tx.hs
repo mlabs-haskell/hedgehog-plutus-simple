@@ -9,7 +9,7 @@ import Data.Coerce (coerce)
 import Data.Functor (($>))
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
-import Data.Maybe (catMaybes, mapMaybe)
+import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Vector (Vector)
@@ -49,6 +49,7 @@ import PlutusTx.Lattice ((/\))
 import Data.Function ((&))
 import Hedgehog qualified
 import Hedgehog.Gen qualified as Gen
+import Plutus.Model.Fork.PlutusLedgerApi.V1.Scripts qualified as Model
 import PlutusLedgerApi.V2 (OutputDatum (NoOutputDatum, OutputDatum, OutputDatumHash))
 
 data Balanced = Balanced | Unbalanced
@@ -361,7 +362,8 @@ toSimpleModelTx
           mempty
             { Fork.txInputs = Set.map convertTxIn txInputs
             , Fork.txCollateral = mempty
-            , Fork.txReferenceInputs = mempty
+            , -- TODO our tx type should probably support reference inputs
+              Fork.txReferenceInputs = mempty
             , Fork.txOutputs = outs
             , Fork.txCollateralReturn = Nothing
             , Fork.txTotalCollateral = Nothing
@@ -378,42 +380,42 @@ toSimpleModelTx
                   txValidRange
             , Fork.txMintScripts =
                 Set.fromList $
-                  [ ( coerce ::
-                        Model.Versioned Model.Script ->
-                        Model.Versioned Model.MintingPolicy
-                    )
-                    $ convertScript script
+                  [ scriptToMP $ getScript $ Plutus.ScriptHash cs
                   | (Plutus.CurrencySymbol cs, _) <- Map.toList txMint
-                  , let (sh :: Plutus.ScriptHash) = Plutus.ScriptHash cs
-                  , Just script <- pure $ Map.lookup sh interestingScripts
                   ]
             , Fork.txSignatures =
                 Map.fromList
-                  [ (pkh, Model.userSignKey user)
+                  [ (pkh, Model.userSignKey $ getUser pkh)
                   | pkh <- Set.toList txExtraSignatures
-                  , -- TODO if these are "extra" are the non-extra just
+                  -- TODO if these are "extra" are the non-extra just
                   -- the ones required by the inputs?
                   -- If so add them here
-                  Just user <-
-                    pure $
-                      Map.lookup
-                        pkh
-                        (Model.mockUsers mockchain)
                   ]
             , Fork.txRedeemers =
                 Map.fromList $
                   zip
-                    [RedeemerPtr Mint i | i <- [0 ..]]
+                    [RedeemerPtr Mint i | i <- [0 ..]] -- TODO is this correct?
                     [red | (_, (_, red)) <- Map.toList txMint]
             , Fork.txData = txData
-            , Fork.txScripts =
-                Map.fromList $
-                  zip
-                    hashes
-                    scripts
+            , Fork.txScripts = Map.fromList $ zip hashes scripts
             }
       }
     where
+      getScript :: Plutus.ScriptHash -> Script
+      getScript sh =
+        Map.lookup sh interestingScripts
+          & fromMaybe (error "script lookup failed")
+
+      getUser :: PubKeyHash -> Model.User
+      getUser pkh =
+        Map.lookup pkh (Model.mockUsers mockchain)
+          & fromMaybe (error "user lookup failed")
+
+      getUTxO :: Plutus.TxOutRef -> Plutus.TxOut
+      getUTxO ref =
+        Map.lookup ref (Model.mockUtxos mockchain)
+          & fromMaybe (error "utxo lookup failed")
+
       outs' :: [(Plutus.TxOut, Maybe (Plutus.DatumHash, Plutus.Datum))]
       outs' = convertTxOut <$> Vector.toList txOutputs
 
@@ -421,9 +423,7 @@ toSimpleModelTx
       outs = fst <$> outs'
 
       txData :: Map Plutus.DatumHash Plutus.Datum
-      txData =
-        datums
-          <> Map.fromList (mapMaybe snd outs')
+      txData = datums <> Map.fromList (mapMaybe snd outs')
       -- Context datums with any additional datums
       -- from txout conversions
 
@@ -434,13 +434,8 @@ toSimpleModelTx
         , -- filter only the scripts being invoked
         -- by checking their address coresponds to some input
         Plutus.scriptHashAddress sh
-          `elem` [ Plutus.txOutAddress txOut
+          `elem` [ Plutus.txOutAddress $ getUTxO $ txInRef txIn
                  | txIn <- Set.toList txInputs
-                 , Just txOut <-
-                    pure $
-                      Map.lookup
-                        (txInRef txIn)
-                        (Model.mockUtxos mockchain)
                  ]
         ]
 
@@ -487,24 +482,28 @@ toSimpleModelTx
       convertTxIn TxIn {txInRef, txInScript} =
         Fork.TxIn
           { Fork.txInRef = txInRef
-          , Fork.txInType = do
-              Plutus.TxOut
-                { Plutus.txOutAddress = Plutus.Address cred _
-                } <-
-                Map.lookup txInRef (Model.mockUtxos mockchain)
-              case cred of
-                Plutus.PubKeyCredential _ -> pure Fork.ConsumePublicKeyAddress
-                Plutus.ScriptCredential _sh -> do
-                  InScript {inScriptData} <- txInScript
-                  (redeemer, datum) <- inScriptData
-                  pure $ Fork.ConsumeScriptAddress Nothing redeemer datum
-                  -- TODO this Nothing should probably be the script
+          , Fork.txInType =
+              let Plutus.TxOut {Plutus.txOutAddress = Plutus.Address cred _} =
+                    getUTxO txInRef
+               in case cred of
+                    Plutus.PubKeyCredential _ -> pure Fork.ConsumePublicKeyAddress
+                    Plutus.ScriptCredential sh -> do
+                      InScript {inScriptData} <- txInScript
+                      (redeemer, datum) <- inScriptData
+                      let script = Just $ scriptToVal $ getScript sh
+                      pure $ Fork.ConsumeScriptAddress script redeemer datum
           }
 
 -- TODO toV1 is a placeholder
 -- our script type should probably know the version
 convertScript :: Script -> Model.Versioned Model.Script
 convertScript (Script s) = Model.toV1 $ Scripts.Script s
+
+scriptToMP :: Script -> Model.Versioned Model.MintingPolicy
+scriptToMP = coerce . convertScript
+
+scriptToVal :: Script -> Model.Versioned Model.Validator
+scriptToVal = coerce . convertScript
 
 {- | Generate a ledger 'Ledger.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
