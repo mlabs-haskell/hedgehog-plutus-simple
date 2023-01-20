@@ -49,7 +49,6 @@ import PlutusTx.Lattice ((/\))
 import Data.Function ((&))
 import Hedgehog qualified
 import Hedgehog.Gen qualified as Gen
-import Plutus.Model.Fork.PlutusLedgerApi.V1.Scripts qualified as Model
 import PlutusLedgerApi.V2 (OutputDatum (NoOutputDatum, OutputDatum, OutputDatumHash))
 
 data Balanced = Balanced | Unbalanced
@@ -249,7 +248,7 @@ getBalance context tx =
     coreTx :: CoreTx
     coreTx = toLedgerTx context tx
 
-maryToPlutus :: forall era. MV.MaryValue era -> Plutus.Value
+maryToPlutus :: MV.MaryValue StandardCrypto -> Plutus.Value
 maryToPlutus (MV.MaryValue ada rest) =
   singleton "" "" ada
     <> mconcat
