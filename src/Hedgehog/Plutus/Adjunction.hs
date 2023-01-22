@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -Wwarn=missing-import-lists #-}
 
 module Hedgehog.Plutus.Adjunction (
-  Adjunction (Adjunction, left, right),
+  Adjunction (Adjunction, lower, raise),
   adjunctionTest,
 ) where
 
@@ -18,21 +18,21 @@ import Hedgehog ((===))
 import Hedgehog qualified
 
 data Adjunction a b = Adjunction
-  { left :: !(a -> b)
-  , right :: !(b -> a)
+  { lower :: !(a -> b)
+  , raise :: !(b -> a)
   }
 
 instance Category Adjunction where
   Adjunction ll lr . Adjunction rl rr =
     Adjunction
-      { left = ll . rl
-      , right = rr . lr
+      { lower = ll . rl
+      , raise = rr . lr
       }
 
   id =
     Adjunction
-      { left = id
-      , right = id
+      { lower = id
+      , raise = id
       }
 
 -- | Verify the adjunction of a layer.
@@ -42,4 +42,4 @@ adjunctionTest ::
   Adjunction a b ->
   a ->
   m ()
-adjunctionTest (Adjunction left right) a = a === right (left a)
+adjunctionTest (Adjunction lower raise) a = a === raise (lower a)

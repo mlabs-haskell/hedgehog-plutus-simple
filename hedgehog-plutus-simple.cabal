@@ -92,7 +92,9 @@ library
   import:          common-lang
   exposed-modules:
     Hedgehog.Plutus.Adjunction
+    Hedgehog.Plutus.AuctionExample
     Hedgehog.Plutus.Simple
+    Hedgehog.Plutus.TestData
     Hedgehog.Plutus.TestSingleScript
     Hedgehog.Plutus.Tx
     Hedgehog.Plutus.TxTest

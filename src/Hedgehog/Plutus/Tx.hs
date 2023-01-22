@@ -125,7 +125,7 @@ A UTxO is 'non-special' iff:
 
 * It does not hold a datum
 
-The refs need not be hwld by the same PubKey.
+The refs need not be held by the same PubKey.
 -}
 spend :: Model.Mock -> Plutus.Value -> Maybe (Hedgehog.Gen Spend)
 spend = _

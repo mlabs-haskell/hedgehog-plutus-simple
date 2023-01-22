@@ -31,8 +31,8 @@ txTest ::
 txTest b g r =
   TxTest $
     Adjunction
-      { left = either b g
-      , right = r
+      { lower = either b g
+      , raise = r
       }
 
 txTestBad ::
@@ -40,21 +40,21 @@ txTestBad ::
   TxTest ingrs ->
   Bad ingrs ->
   ScriptTx
-txTestBad (TxTest Adjunction {left}) = left . Left
+txTestBad (TxTest Adjunction {lower}) = lower . Left
 
 txTestGood ::
   forall (ingrs :: Type).
   TxTest ingrs ->
   ingrs ->
   ScriptTx
-txTestGood (TxTest Adjunction {left}) = left . Right
+txTestGood (TxTest Adjunction {lower}) = lower . Right
 
 txTestRight ::
   forall (ingrs :: Type).
   TxTest ingrs ->
   ScriptTx ->
   Either (Bad ingrs) ingrs
-txTestRight (TxTest Adjunction {right}) = right
+txTestRight (TxTest Adjunction {raise}) = raise
 
 txTestTestBad ::
   forall (m :: Type -> Type) (ingrs :: Type).
