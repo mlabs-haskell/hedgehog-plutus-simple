@@ -25,8 +25,10 @@ where
 
 import Control.Arrow ((>>>))
 import Control.Monad (guard, liftM2)
+
 import Data.ByteString.Short qualified as SBS
 import Data.Coerce (coerce)
+import Data.Function ((&))
 import Data.Functor (($>))
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
@@ -67,13 +69,12 @@ import PlutusLedgerApi.V1.Address qualified as Plutus
 import PlutusLedgerApi.V1.Interval qualified as Plutus
 import PlutusLedgerApi.V1.Tx (RedeemerPtr (RedeemerPtr), ScriptTag (Mint))
 import PlutusLedgerApi.V1.Value qualified as Plutus
+import PlutusLedgerApi.V2 (OutputDatum (NoOutputDatum, OutputDatum, OutputDatumHash))
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusTx.Lattice ((/\))
 
-import Data.Function ((&))
 import Hedgehog qualified
 import Hedgehog.Gen qualified as Gen
-import PlutusLedgerApi.V2 (OutputDatum (NoOutputDatum, OutputDatum, OutputDatumHash))
 
 data Balanced = Balanced | Unbalanced
 
