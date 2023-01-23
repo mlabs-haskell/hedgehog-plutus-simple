@@ -15,11 +15,12 @@ import Data.Set qualified as Set
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 
-import Cardano.Crypto.Hash.Class (hashToBytes)
+import Cardano.Crypto.Hash.Class (hashFromBytes, hashToBytes)
+import Cardano.Crypto.Hash.Class qualified as Hash
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.BaseTypes (Network, txIxFromIntegral)
 import Cardano.Ledger.Core qualified as Core
-import Cardano.Ledger.Crypto (StandardCrypto)
+import Cardano.Ledger.Crypto (ADDRHASH, StandardCrypto)
 import Cardano.Ledger.Mary.Value qualified as MV
 import Cardano.Ledger.Shelley.API.Wallet (CLI, evaluateTransactionBalance)
 import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
@@ -549,7 +550,11 @@ scriptPurposeTx = \case
 {- | Generate a ledger 'Ledger.ScriptPurpose' from a @hedgehog-plutus-simple@
  'ScriptPurpose'.
 -}
-toLedgerScriptPurpose :: ScriptPurpose -> Ledger.ScriptPurpose era
+toLedgerScriptPurpose ::
+  forall era.
+  (Hash.HashAlgorithm (ADDRHASH era)) =>
+  ScriptPurpose ->
+  Ledger.ScriptPurpose era
 toLedgerScriptPurpose = \case
   Spending (Plutus.TxOutRef (Plutus.TxId txIdHash) idx) _inscript ->
     Ledger.Spending $
@@ -562,4 +567,5 @@ toLedgerScriptPurpose = \case
     Ledger.Minting $
       MV.PolicyID $
         ScriptHash $
-          error "TODO find a way to convert this type" sh
+          fromMaybe (error "failed to repack currencySymbol to hash") $
+            hashFromBytes (Plutus.fromBuiltin sh)
