@@ -1,6 +1,27 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 
-module Hedgehog.Plutus.Tx where
+module Hedgehog.Plutus.Tx (
+  Tx (..),
+  Balanced (..),
+  TxIn (..),
+  TxOut (..),
+  Script (..),
+  InScript (..),
+  ScriptSource (..),
+  TxContext (..),
+  ScriptPurpose (..),
+  balanceTx,
+  balanceTxAsPubKey,
+  balanceTxWhere,
+  confirmBalanced,
+  Spend (..),
+  spendWhere,
+  toSimpleModelTx,
+  toLedgerTx,
+  scriptPurposeTx,
+  toLedgerScriptPurpose,
+)
+where
 
 import Control.Arrow ((>>>))
 import Control.Monad (guard, liftM2)
@@ -20,8 +41,9 @@ import Cardano.Crypto.Hash.Class qualified as Hash
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.BaseTypes (Network, txIxFromIntegral)
 import Cardano.Ledger.Core qualified as Core
-import Cardano.Ledger.Crypto (ADDRHASH, StandardCrypto)
+import Cardano.Ledger.Crypto (ADDRHASH, HASH, StandardCrypto)
 import Cardano.Ledger.Mary.Value qualified as MV
+import Cardano.Ledger.SafeHash qualified as SafeHash
 import Cardano.Ledger.Shelley.API.Wallet (CLI, evaluateTransactionBalance)
 import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
 import Cardano.Ledger.Shelley.TxBody (ShelleyEraTxBody)
@@ -553,13 +575,19 @@ scriptPurposeTx = \case
 toLedgerScriptPurpose ::
   forall era.
   (Hash.HashAlgorithm (ADDRHASH era)) =>
+  (Hash.HashAlgorithm (HASH era)) =>
   ScriptPurpose ->
   Ledger.ScriptPurpose era
 toLedgerScriptPurpose = \case
   Spending (Plutus.TxOutRef (Plutus.TxId txIdHash) idx) _inscript ->
     Ledger.Spending $
       Ledger.TxIn
-        (Ledger.TxId $ error "TODO convert this hash" txIdHash)
+        ( Ledger.TxId $
+            SafeHash.unsafeMakeSafeHash $
+              fromMaybe (error "failed to repack script hash") $
+                hashFromBytes $
+                  Plutus.fromBuiltin txIdHash
+        )
         (fromMaybe (error "index overflow") $ txIxFromIntegral idx)
   -- The Maybe is because the integer might not fit in a Word64
   -- This shouldn't come up in practice
