@@ -99,14 +99,18 @@ library
 
   build-depends:
     , array
+    , bytestring
+    , cardano-crypto-class
     , cardano-ledger-alonzo
     , cardano-ledger-babbage
     , cardano-ledger-core
     , cardano-ledger-shelley
+    , cardano-ledger-shelley-ma
     , cardano-slotting
     , containers
     , hedgehog
     , microlens
+    , mtl
     , plutus-core
     , plutus-ledger-api
     , plutus-simple-model
