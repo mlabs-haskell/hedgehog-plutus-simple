@@ -1,9 +1,11 @@
-{-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Hedgehog.Plutus.Tx (
   Tx (..),
-  Balanced (..),
-  Balanceable,
+  Balanced,
+  MaybeBalanced,
+  IsBool,
+  getTx,
   TxIn (..),
   TxOut (..),
   Script (..),
@@ -21,8 +23,6 @@ module Hedgehog.Plutus.Tx (
   toLedgerTx,
   scriptPurposeTx,
   toLedgerScriptPurpose,
-  getTx,
-  unbalanced,
 )
 where
 
@@ -93,18 +93,29 @@ data Tx = Tx
   , txExtraSignatures :: !(Set Plutus.PubKeyHash)
   }
 
-newtype Balanceable (bal :: Balanced) tx = UnsafeBalanceable tx
-data Balanced = Balanced | Unbalanced
+newtype Balanced tx = UnsafeBalance tx
 
--- forgetBalanced can't be a record feild of the newtype
--- because it would let you edit the tx inside balanced
+type family MaybeBalanced (balanced :: Bool) tx where
+  MaybeBalanced 'True tx = Balanced tx
+  MaybeBalanced 'False tx = tx
 
--- | get the Tx out of a balanced Tx
-getTx :: Balanceable bal a -> a
-getTx (UnsafeBalanceable tx) = tx
+{- | IsBool has instances for 'True and 'False
+ IsBool bal is required by some functions
+ to convince ghc the tx either is or isn't balanced
+-}
+class IsBool bal where
+  -- | Get a plain tx out of a Balanced tx or MaybeBalanced bal tx
+  getTx :: forall tx. MaybeBalanced bal tx -> tx
 
-unbalanced :: a -> Balanceable 'Unbalanced a
-unbalanced = UnsafeBalanceable @'Unbalanced
+  unsafeMBalance :: forall tx. tx -> MaybeBalanced bal tx
+
+instance IsBool 'False where
+  getTx = id
+  unsafeMBalance = id
+
+instance IsBool 'True where
+  getTx (UnsafeBalance tx) = tx
+  unsafeMBalance = UnsafeBalance
 
 data TxIn = TxIn
   { txInRef :: !Plutus.TxOutRef
@@ -154,12 +165,6 @@ instance Monoid Tx where
       , txExtraSignatures = Set.empty
       }
 
-instance Semigroup tx => Semigroup (Balanceable 'Unbalanced tx) where
-  l <> r = unbalanced $ getTx l <> getTx r
-
-instance Monoid tx => Monoid (Balanceable 'Unbalanced tx) where
-  mempty = unbalanced mempty
-
 data TxContext = TxContext
   { mockchain :: !Model.Mock
   , interestingScripts :: !(Map Plutus.ScriptHash Script)
@@ -183,8 +188,8 @@ data ScriptPurpose
 -}
 balanceTx ::
   TxContext ->
-  Balanceable (bal :: Balanced) Tx ->
-  Maybe (Hedgehog.Gen (Balanceable 'Balanced Tx))
+  Tx ->
+  Maybe (Hedgehog.Gen (Balanced Tx))
 balanceTx context tx = balanceTxWhere context tx (const True) (const True)
 
 {- | as balanceTx but only uses txOuts belonging to a particular
@@ -192,9 +197,9 @@ balanceTx context tx = balanceTxWhere context tx (const True) (const True)
 -}
 balanceTxAsPubKey ::
   TxContext ->
-  Balanceable bal Tx ->
+  Tx ->
   PubKeyHash ->
-  Maybe (Hedgehog.Gen (Balanceable 'Balanced Tx))
+  Maybe (Hedgehog.Gen (Balanced Tx))
 balanceTxAsPubKey context tx pkh =
   balanceTxWhere
     context
@@ -211,14 +216,13 @@ balanceTxAsPubKey context tx pkh =
 -- | as balanceTx but with additional predicates about which TxOuts and PubKeyHashs can be used
 balanceTxWhere ::
   TxContext ->
-  Balanceable bal Tx ->
+  Tx ->
   (Plutus.TxOut -> Bool) ->
   (Plutus.PubKeyHash -> Bool) ->
-  Maybe (Hedgehog.Gen (Balanceable 'Balanced Tx))
-balanceTxWhere context btx predTxout predPkh = do
-  let tx = getTx btx
+  Maybe (Hedgehog.Gen (Balanced Tx))
+balanceTxWhere context tx predTxout predPkh = do
   let mock = mockchain context
-  (valueIn, valueOut) <- getValueInAndOut context btx
+  (valueIn, valueOut) <- getValueInAndOut @'False context tx
   -- TODO we may want to change this to something like
   -- Either FailReason (Tx 'Balanced)
   -- to distinguish things like failure by tx lookup
@@ -240,27 +244,31 @@ balanceTxWhere context btx predTxout predPkh = do
     let change = extra <> moreChange
     let checked =
           confirmBalanced context $
-            unbalanced $
-              tx
-                <> mempty
-                  { txInputs =
-                      Set.fromList $
-                        Vector.toList $
-                          (`TxIn` Nothing) <$> outRefs
-                  , txOutputs =
-                      pure $
-                        TxOut
-                          { txOutAddress = Plutus.pubKeyHashAddress payOutKey
-                          , txOutValue = change
-                          , txOutDatum = Nothing
-                          , txOutReferenceScript = Nothing
-                          }
-                  }
+            tx
+              <> mempty
+                { txInputs =
+                    Set.fromList $
+                      Vector.toList $
+                        (`TxIn` Nothing) <$> outRefs
+                , txOutputs =
+                    pure $
+                      TxOut
+                        { txOutAddress = Plutus.pubKeyHashAddress payOutKey
+                        , txOutValue = change
+                        , txOutDatum = Nothing
+                        , txOutReferenceScript = Nothing
+                        }
+                }
     case checked of
       Just tx -> pure tx
       Nothing -> error "balanceTx produced an unbalanced tx"
 
-getBalance :: TxContext -> Balanceable bal Tx -> Maybe Value
+getBalance ::
+  forall (bal :: Bool).
+  IsBool bal =>
+  TxContext ->
+  MaybeBalanced bal Tx ->
+  Maybe Value
 getBalance context tx =
   case (protocol, coreTx) of
     (Model.AlonzoParams params, Alonzo coreTx) ->
@@ -302,7 +310,7 @@ getBalance context tx =
     mockConfig = Model.mockConfig $ mockchain context
 
     coreTx :: CoreTx
-    coreTx = getTx $ toLedgerTx context tx
+    coreTx = getTx @bal $ toLedgerTx @bal context tx
 
 maryToPlutus :: MV.MaryValue StandardCrypto -> Plutus.Value
 maryToPlutus (MV.MaryValue ada rest) =
@@ -318,17 +326,22 @@ maryToPlutus (MV.MaryValue ada rest) =
   where
     unScriptHash (ScriptHash h) = h -- The constructor doesn't have this
 
-getValueInAndOut :: TxContext -> Balanceable bal Tx -> Maybe (Value, Value)
+getValueInAndOut ::
+  forall (bal :: Bool).
+  IsBool bal =>
+  TxContext ->
+  MaybeBalanced bal Tx ->
+  Maybe (Value, Value)
 getValueInAndOut context tx = do
-  val <- getBalance context tx
+  val <- getBalance @bal context tx
   pure (posDif val mempty, posDif mempty val)
 
 posDif :: Plutus.Value -> Plutus.Value -> Plutus.Value
 posDif = Plutus.unionWith (fmap (max 0) . (-))
 
-confirmBalanced :: TxContext -> Balanceable bal Tx -> Maybe (Balanceable 'Balanced Tx)
+confirmBalanced :: TxContext -> Tx -> Maybe (Balanced Tx)
 confirmBalanced context tx =
-  (getBalance context tx >>= guard . (== mempty)) $> coerce tx
+  (getBalance @'False context tx >>= guard . (== mempty)) $> UnsafeBalance tx
 
 data Spend = Spend
   { spendUtxos :: Vector Plutus.TxOutRef
@@ -396,14 +409,19 @@ spendWhere mock val pred = do
 {- | Generate a @plutus-simple-model@ 'Model.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
-toSimpleModelTx :: TxContext -> Balanceable bal Tx -> Balanceable bal Model.Tx
+toSimpleModelTx ::
+  forall (bal :: Bool).
+  IsBool bal =>
+  TxContext ->
+  MaybeBalanced bal Tx ->
+  MaybeBalanced bal Model.Tx
 toSimpleModelTx
   TxContext
     { interestingScripts
     , mockchain
     , datums
     }
-  ( getTx ->
+  ( getTx @bal ->
       ( Tx
           { txInputs
           , txOutputs
@@ -414,7 +432,7 @@ toSimpleModelTx
           }
         )
     ) =
-    UnsafeBalanceable $
+    unsafeMBalance @bal $
       Model.Tx
         { Model.tx'extra = mempty
         , Model.tx'plutus =
@@ -567,8 +585,13 @@ scriptToVal = coerce . convertScript
 {- | Generate a ledger 'Ledger.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
-toLedgerTx :: TxContext -> Balanceable bal Tx -> Balanceable bal CoreTx
-toLedgerTx context tx = UnsafeBalanceable $
+toLedgerTx ::
+  forall (bal :: Bool).
+  IsBool bal =>
+  TxContext ->
+  MaybeBalanced bal Tx ->
+  MaybeBalanced bal CoreTx
+toLedgerTx context tx = unsafeMBalance @bal @CoreTx $
   case Model.mockConfigProtocol $ Model.mockConfig (mockchain context) of
     Model.AlonzoParams (params :: Core.PParams Alonzo.Era) ->
       Alonzo $ cont params
@@ -581,7 +604,7 @@ toLedgerTx context tx = UnsafeBalanceable $
         (Map.map convertScript $ interestingScripts context)
         (Model.mockConfigNetworkId $ Model.mockConfig $ mockchain context)
         params
-        (getTx $ toSimpleModelTx context tx)
+        (getTx @bal $ toSimpleModelTx @bal context tx)
         & \case
           Left e -> error ("toLedgerTx failed with:" <> show e)
           Right tx -> tx
