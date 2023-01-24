@@ -2,6 +2,8 @@
 
 module Hedgehog.Plutus.Tx (
   Tx (..),
+  Balanced (..),
+  Balanceable,
   TxIn (..),
   TxOut (..),
   Script (..),
@@ -19,7 +21,8 @@ module Hedgehog.Plutus.Tx (
   toLedgerTx,
   scriptPurposeTx,
   toLedgerScriptPurpose,
-  forgetBalanced,
+  getTx,
+  unbalanced,
 )
 where
 
@@ -90,15 +93,18 @@ data Tx = Tx
   , txExtraSignatures :: !(Set Plutus.PubKeyHash)
   }
 
-newtype Balanced = Balanced Tx
+newtype Balanceable (bal :: Balanced) tx = UnsafeBalanceable tx
+data Balanced = Balanced | Unbalanced
 
-{- | get the Tx out of a balanced Tx
- This can't be a record feild of the newtype
- because it would let you edit the tx inside
- balanced
--}
-forgetBalanced :: Balanced -> Tx
-forgetBalanced (Balanced tx) = tx
+-- forgetBalanced can't be a record feild of the newtype
+-- because it would let you edit the tx inside balanced
+
+-- | get the Tx out of a balanced Tx
+getTx :: Balanceable bal a -> a
+getTx (UnsafeBalanceable tx) = tx
+
+unbalanced :: a -> Balanceable 'Unbalanced a
+unbalanced = UnsafeBalanceable @'Unbalanced
 
 data TxIn = TxIn
   { txInRef :: !Plutus.TxOutRef
@@ -148,6 +154,12 @@ instance Monoid Tx where
       , txExtraSignatures = Set.empty
       }
 
+instance Semigroup tx => Semigroup (Balanceable 'Unbalanced tx) where
+  l <> r = unbalanced $ getTx l <> getTx r
+
+instance Monoid tx => Monoid (Balanceable 'Unbalanced tx) where
+  mempty = unbalanced mempty
+
 data TxContext = TxContext
   { mockchain :: !Model.Mock
   , interestingScripts :: !(Map Plutus.ScriptHash Script)
@@ -169,11 +181,20 @@ data ScriptPurpose
 
   In the future, hps should support custom balancers.
 -}
-balanceTx :: TxContext -> Tx -> Maybe (Hedgehog.Gen Balanced)
+balanceTx ::
+  TxContext ->
+  Balanceable (bal :: Balanced) Tx ->
+  Maybe (Hedgehog.Gen (Balanceable 'Balanced Tx))
 balanceTx context tx = balanceTxWhere context tx (const True) (const True)
 
--- | as balanceTx but only uses txOuts belonging to a particular PubKeyHash and always sends change to that PubKeyHash
-balanceTxAsPubKey :: TxContext -> Tx -> PubKeyHash -> Maybe (Hedgehog.Gen Balanced)
+{- | as balanceTx but only uses txOuts belonging to a particular
+ PubKeyHash and always sends change to that PubKeyHash
+-}
+balanceTxAsPubKey ::
+  TxContext ->
+  Balanceable bal Tx ->
+  PubKeyHash ->
+  Maybe (Hedgehog.Gen (Balanceable 'Balanced Tx))
 balanceTxAsPubKey context tx pkh =
   balanceTxWhere
     context
@@ -190,13 +211,14 @@ balanceTxAsPubKey context tx pkh =
 -- | as balanceTx but with additional predicates about which TxOuts and PubKeyHashs can be used
 balanceTxWhere ::
   TxContext ->
-  Tx ->
+  Balanceable bal Tx ->
   (Plutus.TxOut -> Bool) ->
   (Plutus.PubKeyHash -> Bool) ->
-  Maybe (Hedgehog.Gen Balanced)
-balanceTxWhere context tx predTxout predPkh = do
+  Maybe (Hedgehog.Gen (Balanceable 'Balanced Tx))
+balanceTxWhere context btx predTxout predPkh = do
+  let tx = getTx btx
   let mock = mockchain context
-  (valueIn, valueOut) <- getValueInAndOut context tx
+  (valueIn, valueOut) <- getValueInAndOut context btx
   -- TODO we may want to change this to something like
   -- Either FailReason (Tx 'Balanced)
   -- to distinguish things like failure by tx lookup
@@ -218,26 +240,27 @@ balanceTxWhere context tx predTxout predPkh = do
     let change = extra <> moreChange
     let checked =
           confirmBalanced context $
-            tx
-              <> mempty
-                { txInputs =
-                    Set.fromList $
-                      Vector.toList $
-                        (`TxIn` Nothing) <$> outRefs
-                , txOutputs =
-                    pure $
-                      TxOut
-                        { txOutAddress = Plutus.pubKeyHashAddress payOutKey
-                        , txOutValue = change
-                        , txOutDatum = Nothing
-                        , txOutReferenceScript = Nothing
-                        }
-                }
+            unbalanced $
+              tx
+                <> mempty
+                  { txInputs =
+                      Set.fromList $
+                        Vector.toList $
+                          (`TxIn` Nothing) <$> outRefs
+                  , txOutputs =
+                      pure $
+                        TxOut
+                          { txOutAddress = Plutus.pubKeyHashAddress payOutKey
+                          , txOutValue = change
+                          , txOutDatum = Nothing
+                          , txOutReferenceScript = Nothing
+                          }
+                  }
     case checked of
       Just tx -> pure tx
       Nothing -> error "balanceTx produced an unbalanced tx"
 
-getBalance :: TxContext -> Tx -> Maybe Value
+getBalance :: TxContext -> Balanceable bal Tx -> Maybe Value
 getBalance context tx =
   case (protocol, coreTx) of
     (Model.AlonzoParams params, Alonzo coreTx) ->
@@ -279,7 +302,7 @@ getBalance context tx =
     mockConfig = Model.mockConfig $ mockchain context
 
     coreTx :: CoreTx
-    coreTx = toLedgerTx context tx
+    coreTx = getTx $ toLedgerTx context tx
 
 maryToPlutus :: MV.MaryValue StandardCrypto -> Plutus.Value
 maryToPlutus (MV.MaryValue ada rest) =
@@ -295,7 +318,7 @@ maryToPlutus (MV.MaryValue ada rest) =
   where
     unScriptHash (ScriptHash h) = h -- The constructor doesn't have this
 
-getValueInAndOut :: TxContext -> Tx -> Maybe (Value, Value)
+getValueInAndOut :: TxContext -> Balanceable bal Tx -> Maybe (Value, Value)
 getValueInAndOut context tx = do
   val <- getBalance context tx
   pure (posDif val mempty, posDif mempty val)
@@ -303,7 +326,7 @@ getValueInAndOut context tx = do
 posDif :: Plutus.Value -> Plutus.Value -> Plutus.Value
 posDif = Plutus.unionWith (fmap (max 0) . (-))
 
-confirmBalanced :: TxContext -> Tx -> Maybe Balanced
+confirmBalanced :: TxContext -> Balanceable bal Tx -> Maybe (Balanceable 'Balanced Tx)
 confirmBalanced context tx =
   (getBalance context tx >>= guard . (== mempty)) $> coerce tx
 
@@ -373,14 +396,14 @@ spendWhere mock val pred = do
 {- | Generate a @plutus-simple-model@ 'Model.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
-toSimpleModelTx :: TxContext -> Balanced -> Model.Tx
+toSimpleModelTx :: TxContext -> Balanceable bal Tx -> Balanceable bal Model.Tx
 toSimpleModelTx
   TxContext
     { interestingScripts
     , mockchain
     , datums
     }
-  ( Balanced
+  ( getTx ->
       ( Tx
           { txInputs
           , txOutputs
@@ -391,50 +414,51 @@ toSimpleModelTx
           }
         )
     ) =
-    Model.Tx
-      { Model.tx'extra = mempty
-      , Model.tx'plutus =
-          mempty
-            { Fork.txInputs = Set.map convertTxIn txInputs
-            , Fork.txCollateral = mempty
-            , -- TODO our tx type should probably support reference inputs
-              Fork.txReferenceInputs = mempty
-            , Fork.txOutputs = outs
-            , Fork.txCollateralReturn = Nothing
-            , Fork.txTotalCollateral = Nothing
-            , Fork.txMint =
-                mconcat
-                  [ singleton cs tn amt
-                  | (cs, (toks, _reds)) <- Map.toList txMint
-                  , (tn, amt) <- Map.toList toks
-                  ]
-            , Fork.txFee = txFee
-            , Fork.txValidRange =
-                Time.posixTimeRangeToContainedSlotRange
-                  (Model.mockConfigSlotConfig $ Model.mockConfig mockchain)
-                  txValidRange
-            , Fork.txMintScripts =
-                Set.fromList $
-                  [ scriptToMP $ getScript $ Plutus.ScriptHash cs
-                  | (Plutus.CurrencySymbol cs, _) <- Map.toList txMint
-                  ]
-            , Fork.txSignatures =
-                Map.fromList
-                  [ (pkh, Model.userSignKey $ getUser pkh)
-                  | pkh <- Set.toList txExtraSignatures
-                  -- TODO if these are "extra" are the non-extra just
-                  -- the ones required by the inputs?
-                  -- If so add them here
-                  ]
-            , Fork.txRedeemers =
-                Map.fromList $
-                  zip
-                    [RedeemerPtr Mint i | i <- [0 ..]] -- TODO is this correct?
-                    [red | (_, (_, red)) <- Map.toList txMint]
-            , Fork.txData = txData
-            , Fork.txScripts = Map.fromList $ zip hashes scripts
-            }
-      }
+    UnsafeBalanceable $
+      Model.Tx
+        { Model.tx'extra = mempty
+        , Model.tx'plutus =
+            mempty
+              { Fork.txInputs = Set.map convertTxIn txInputs
+              , Fork.txCollateral = mempty
+              , -- TODO our tx type should probably support reference inputs
+                Fork.txReferenceInputs = mempty
+              , Fork.txOutputs = outs
+              , Fork.txCollateralReturn = Nothing
+              , Fork.txTotalCollateral = Nothing
+              , Fork.txMint =
+                  mconcat
+                    [ singleton cs tn amt
+                    | (cs, (toks, _reds)) <- Map.toList txMint
+                    , (tn, amt) <- Map.toList toks
+                    ]
+              , Fork.txFee = txFee
+              , Fork.txValidRange =
+                  Time.posixTimeRangeToContainedSlotRange
+                    (Model.mockConfigSlotConfig $ Model.mockConfig mockchain)
+                    txValidRange
+              , Fork.txMintScripts =
+                  Set.fromList $
+                    [ scriptToMP $ getScript $ Plutus.ScriptHash cs
+                    | (Plutus.CurrencySymbol cs, _) <- Map.toList txMint
+                    ]
+              , Fork.txSignatures =
+                  Map.fromList
+                    [ (pkh, Model.userSignKey $ getUser pkh)
+                    | pkh <- Set.toList txExtraSignatures
+                    -- TODO if these are "extra" are the non-extra just
+                    -- the ones required by the inputs?
+                    -- If so add them here
+                    ]
+              , Fork.txRedeemers =
+                  Map.fromList $
+                    zip
+                      [RedeemerPtr Mint i | i <- [0 ..]] -- TODO is this correct?
+                      [red | (_, (_, red)) <- Map.toList txMint]
+              , Fork.txData = txData
+              , Fork.txScripts = Map.fromList $ zip hashes scripts
+              }
+        }
     where
       getScript :: Plutus.ScriptHash -> Script
       getScript sh =
@@ -543,8 +567,8 @@ scriptToVal = coerce . convertScript
 {- | Generate a ledger 'Ledger.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
-toLedgerTx :: TxContext -> Balanced -> CoreTx
-toLedgerTx context tx =
+toLedgerTx :: TxContext -> Balanceable bal Tx -> Balanceable bal CoreTx
+toLedgerTx context tx = UnsafeBalanceable $
   case Model.mockConfigProtocol $ Model.mockConfig (mockchain context) of
     Model.AlonzoParams (params :: Core.PParams Alonzo.Era) ->
       Alonzo $ cont params
@@ -557,7 +581,7 @@ toLedgerTx context tx =
         (Map.map convertScript $ interestingScripts context)
         (Model.mockConfigNetworkId $ Model.mockConfig $ mockchain context)
         params
-        (toSimpleModelTx context tx)
+        (getTx $ toSimpleModelTx context tx)
         & \case
           Left e -> error ("toLedgerTx failed with:" <> show e)
           Right tx -> tx
