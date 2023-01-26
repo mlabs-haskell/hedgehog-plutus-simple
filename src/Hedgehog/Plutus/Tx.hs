@@ -2,6 +2,8 @@
 
 module Hedgehog.Plutus.Tx (
   Tx (..),
+  BalancedTx (..),
+  forgetBlanced,
   Balanced,
   MaybeBalanced,
   IsBool,
@@ -93,6 +95,8 @@ data Tx = Tx
   , txExtraSignatures :: !(Set Plutus.PubKeyHash)
   }
 
+newtype BalancedTx = BalancedTx {getBalanced :: Balanced Tx}
+
 newtype Balanced tx = UnsafeBalance tx
 
 type family MaybeBalanced (balanced :: Bool) tx where
@@ -108,6 +112,9 @@ class IsBool bal where
   getTx :: forall tx. MaybeBalanced bal tx -> tx
 
   unsafeMBalance :: forall tx. tx -> MaybeBalanced bal tx
+
+forgetBlanced :: BalancedTx -> Tx
+forgetBlanced = getTx @'True . getBalanced
 
 instance IsBool 'False where
   getTx = id
@@ -189,7 +196,7 @@ data ScriptPurpose
 balanceTx ::
   TxContext ->
   Tx ->
-  Maybe (Hedgehog.Gen (Balanced Tx))
+  Maybe (Hedgehog.Gen BalancedTx)
 balanceTx context tx = balanceTxWhere context tx (const True) (const True)
 
 {- | as balanceTx but only uses txOuts belonging to a particular
@@ -199,7 +206,7 @@ balanceTxAsPubKey ::
   TxContext ->
   Tx ->
   PubKeyHash ->
-  Maybe (Hedgehog.Gen (Balanced Tx))
+  Maybe (Hedgehog.Gen BalancedTx)
 balanceTxAsPubKey context tx pkh =
   balanceTxWhere
     context
@@ -219,7 +226,7 @@ balanceTxWhere ::
   Tx ->
   (Plutus.TxOut -> Bool) ->
   (Plutus.PubKeyHash -> Bool) ->
-  Maybe (Hedgehog.Gen (Balanced Tx))
+  Maybe (Hedgehog.Gen BalancedTx)
 balanceTxWhere context tx predTxout predPkh = do
   let mock = mockchain context
   (valueIn, valueOut) <- getValueInAndOut @'False context tx
@@ -339,9 +346,9 @@ getValueInAndOut context tx = do
 posDif :: Plutus.Value -> Plutus.Value -> Plutus.Value
 posDif = Plutus.unionWith (fmap (max 0) . (-))
 
-confirmBalanced :: TxContext -> Tx -> Maybe (Balanced Tx)
+confirmBalanced :: TxContext -> Tx -> Maybe BalancedTx
 confirmBalanced context tx =
-  (getBalance @'False context tx >>= guard . (== mempty)) $> UnsafeBalance tx
+  (getBalance @'False context tx >>= guard . (== mempty)) $> BalancedTx (UnsafeBalance tx)
 
 data Spend = Spend
   { spendUtxos :: Vector Plutus.TxOutRef
