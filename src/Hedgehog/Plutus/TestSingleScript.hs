@@ -44,8 +44,15 @@ import Plutus.Model.Mock.ProtocolParameters qualified as Model
 import Hedgehog ((===))
 import Hedgehog qualified
 
-import Hedgehog.Plutus.Tx
-import Hedgehog.Plutus.TxTest
+import Hedgehog.Plutus.Model (TxContext (TxContext, mockchain))
+import Hedgehog.Plutus.Model.Internal (toLedgerScriptPurpose)
+import Hedgehog.Plutus.TxTest (
+  Bad,
+  ScriptTx (ScriptTx, scriptTx, scriptTxPurpose),
+  TxTest,
+  txTestBad,
+  txTestGood,
+ )
 
 testSingleScriptBad ::
   (Hedgehog.MonadTest m) =>

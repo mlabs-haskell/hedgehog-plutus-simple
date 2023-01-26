@@ -19,7 +19,7 @@ import Hedgehog ((===))
 import Hedgehog qualified
 
 import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction, left, right))
-import Hedgehog.Plutus.Tx (
+import Hedgehog.Plutus.Model (
   ScriptPurpose,
   Tx,
   TxContext,
