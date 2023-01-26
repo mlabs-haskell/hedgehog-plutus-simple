@@ -94,6 +94,7 @@ library
     Hedgehog.Plutus.Adjunction
     Hedgehog.Plutus.Model
     Hedgehog.Plutus.Model.Internal
+    Hedgehog.Plutus.Model.Run
     Hedgehog.Plutus.Model.TxHelpers
     Hedgehog.Plutus.Simple
     Hedgehog.Plutus.TestSingleScript

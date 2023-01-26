@@ -25,6 +25,7 @@ module Hedgehog.Plutus.Model (
   spendScriptOutput,
   mintWithRed,
   scriptPurposeTx,
+  submitTx,
 )
 where
 
@@ -47,7 +48,7 @@ import Hedgehog.Plutus.Model.Internal (
   scriptPurposeTx,
   spendWhere,
  )
-
+import Hedgehog.Plutus.Model.Run (submitTx)
 import Hedgehog.Plutus.Model.TxHelpers (
   mintWithRed,
   payToScript,
