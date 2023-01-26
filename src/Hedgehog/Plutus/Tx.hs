@@ -9,7 +9,7 @@ import Data.Coerce (coerce)
 import Data.Functor (($>))
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Vector (Vector)
@@ -18,9 +18,7 @@ import Data.Vector qualified as Vector
 import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.BaseTypes (Network)
-import Cardano.Ledger.Core (TxBody)
 import Cardano.Ledger.Core qualified as Core
-import Cardano.Ledger.Core qualified as Ledger
 import Cardano.Ledger.Crypto (StandardCrypto)
 import Cardano.Ledger.Mary.Value qualified as MV
 import Cardano.Ledger.Shelley.API.Wallet (CLI, evaluateTransactionBalance)
@@ -31,6 +29,10 @@ import Plutus.Model qualified as Model
 import Plutus.Model.Fork.Cardano.Alonzo qualified as Alonzo
 import Plutus.Model.Fork.Cardano.Babbage qualified as Babbage
 import Plutus.Model.Fork.Cardano.Class qualified as Class
+import Plutus.Model.Fork.Ledger.Scripts (scriptHash)
+import Plutus.Model.Fork.Ledger.TimeSlot qualified as Time
+import Plutus.Model.Fork.Ledger.Tx qualified as Fork
+import Plutus.Model.Fork.PlutusLedgerApi.V1.Scripts qualified as Scripts
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
 
 import PlutusCore qualified as PLC
@@ -39,12 +41,15 @@ import UntypedPlutusCore qualified as UPLC
 import PlutusLedgerApi.V1 (PubKeyHash, Value, singleton)
 import PlutusLedgerApi.V1.Address qualified as Plutus
 import PlutusLedgerApi.V1.Interval qualified as Plutus
+import PlutusLedgerApi.V1.Tx (RedeemerPtr (RedeemerPtr), ScriptTag (Mint))
 import PlutusLedgerApi.V1.Value qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusTx.Lattice ((/\))
 
+import Data.Function ((&))
 import Hedgehog qualified
 import Hedgehog.Gen qualified as Gen
+import PlutusLedgerApi.V2 (OutputDatum (NoOutputDatum, OutputDatum, OutputDatumHash))
 
 data Balanced = Balanced | Unbalanced
 
@@ -201,11 +206,13 @@ balanceTxWhere context tx predTxout predPkh = do
 
 getBalance :: TxContext -> Tx b -> Maybe Value
 getBalance context tx =
-  case protocol of
-    Model.AlonzoParams (params :: Core.PParams Alonzo.Era) ->
-      cont params
-    Model.BabbageParams (params :: Core.PParams Babbage.Era) ->
-      cont params
+  case (protocol, coreTx) of
+    (Model.AlonzoParams params, Alonzo coreTx) ->
+      cont @Alonzo.Era params coreTx
+    (Model.BabbageParams params, Babbage coreTx) ->
+      cont @Babbage.Era params coreTx
+    -- this error should be unreachable
+    _ -> error "era mismatch between balance and toLedgerTx"
   where
     cont ::
       forall era.
@@ -216,17 +223,18 @@ getBalance context tx =
       , Core.Value era ~ MV.MaryValue StandardCrypto
       ) =>
       Core.PParams era ->
+      Core.Tx era ->
       Maybe Value
-    cont params = do
+    cont params coreTx = do
       Right utxo <- pure $ Class.toUtxo mempty networkId []
       -- TODO what should the utxo be for this?
       pure $
         maryToPlutus $
-          evaluateTransactionBalance
+          evaluateTransactionBalance @era
             params
             utxo
             (const True) -- TODO is this right?
-            body
+            (Class.getTxBody coreTx)
 
     networkId :: Network
     networkId = Model.mockConfigNetworkId mockConfig
@@ -237,10 +245,10 @@ getBalance context tx =
     mockConfig :: Model.MockConfig
     mockConfig = Model.mockConfig $ mockchain context
 
-    body :: Class.IsCardanoTx era => TxBody era
-    body = Class.getTxBody $ toLedgerTx context tx
+    coreTx :: CoreTx
+    coreTx = toLedgerTx context tx
 
-maryToPlutus :: forall era. MV.MaryValue era -> Plutus.Value
+maryToPlutus :: MV.MaryValue StandardCrypto -> Plutus.Value
 maryToPlutus (MV.MaryValue ada rest) =
   singleton "" "" ada
     <> mconcat
@@ -271,7 +279,7 @@ data Spend = Spend
   , excess :: Plutus.Value
   }
 
-{- | Try to satisfy a value from available 'non-special' UTxOs.
+{- | Try to satisfy a value from available 'non-special' UTxOs matching the provided predicate.
 
 A UTxO is 'non-special' iff:
 
@@ -333,15 +341,197 @@ spendWhere mock val pred = do
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
 toSimpleModelTx :: TxContext -> Tx bal -> Model.Tx
-toSimpleModelTx = _
+toSimpleModelTx
+  TxContext
+    { interestingScripts
+    , mockchain
+    , datums
+    }
+  Tx
+    { txInputs
+    , txOutputs
+    , txMint
+    , txFee
+    , txValidRange
+    , txExtraSignatures
+    } =
+    Model.Tx
+      { Model.tx'extra = mempty
+      , Model.tx'plutus =
+          mempty
+            { Fork.txInputs = Set.map convertTxIn txInputs
+            , Fork.txCollateral = mempty
+            , -- TODO our tx type should probably support reference inputs
+              Fork.txReferenceInputs = mempty
+            , Fork.txOutputs = outs
+            , Fork.txCollateralReturn = Nothing
+            , Fork.txTotalCollateral = Nothing
+            , Fork.txMint =
+                mconcat
+                  [ singleton cs tn amt
+                  | (cs, (toks, _reds)) <- Map.toList txMint
+                  , (tn, amt) <- Map.toList toks
+                  ]
+            , Fork.txFee = txFee
+            , Fork.txValidRange =
+                Time.posixTimeRangeToContainedSlotRange
+                  (Model.mockConfigSlotConfig $ Model.mockConfig mockchain)
+                  txValidRange
+            , Fork.txMintScripts =
+                Set.fromList $
+                  [ scriptToMP $ getScript $ Plutus.ScriptHash cs
+                  | (Plutus.CurrencySymbol cs, _) <- Map.toList txMint
+                  ]
+            , Fork.txSignatures =
+                Map.fromList
+                  [ (pkh, Model.userSignKey $ getUser pkh)
+                  | pkh <- Set.toList txExtraSignatures
+                  -- TODO if these are "extra" are the non-extra just
+                  -- the ones required by the inputs?
+                  -- If so add them here
+                  ]
+            , Fork.txRedeemers =
+                Map.fromList $
+                  zip
+                    [RedeemerPtr Mint i | i <- [0 ..]] -- TODO is this correct?
+                    [red | (_, (_, red)) <- Map.toList txMint]
+            , Fork.txData = txData
+            , Fork.txScripts = Map.fromList $ zip hashes scripts
+            }
+      }
+    where
+      getScript :: Plutus.ScriptHash -> Script
+      getScript sh =
+        Map.lookup sh interestingScripts
+          & fromMaybe (error "script lookup failed")
 
--- 'era' can be constrained as neccesary.
+      getUser :: PubKeyHash -> Model.User
+      getUser pkh =
+        Map.lookup pkh (Model.mockUsers mockchain)
+          & fromMaybe (error "user lookup failed")
+
+      getUTxO :: Plutus.TxOutRef -> Plutus.TxOut
+      getUTxO ref =
+        Map.lookup ref (Model.mockUtxos mockchain)
+          & fromMaybe (error "utxo lookup failed")
+
+      outs' :: [(Plutus.TxOut, Maybe (Plutus.DatumHash, Plutus.Datum))]
+      outs' = convertTxOut <$> Vector.toList txOutputs
+
+      outs :: [Plutus.TxOut]
+      outs = fst <$> outs'
+
+      txData :: Map Plutus.DatumHash Plutus.Datum
+      txData = datums <> Map.fromList (mapMaybe snd outs')
+      -- Context datums with any additional datums
+      -- from txout conversions
+
+      scripts :: [Model.Versioned Model.Script]
+      scripts =
+        [ convertScript s
+        | (sh, s) <- Map.toList interestingScripts
+        , -- filter only the scripts being invoked
+        -- by checking their address coresponds to some input
+        Plutus.scriptHashAddress sh
+          `elem` [ Plutus.txOutAddress $ getUTxO $ txInRef txIn
+                 | txIn <- Set.toList txInputs
+                 ]
+        ]
+
+      hashes :: [Plutus.ScriptHash]
+      hashes = scriptHash <$> scripts
+
+      inlineDatums :: Bool
+      inlineDatums = True
+      -- Maybe this could be computed from version or added to context?
+      -- It would not be hard to make it a predicate either
+      -- Or just have our TxOut type know how the datum is stored
+
+      -- convert tx out to Plutus.TxOut maybe adding a datum table entry
+      convertTxOut ::
+        TxOut -> (Plutus.TxOut, Maybe (Plutus.DatumHash, Plutus.Datum))
+      convertTxOut
+        TxOut
+          { txOutAddress
+          , txOutValue
+          , txOutDatum
+          , txOutReferenceScript
+          } =
+          ( Plutus.TxOut
+              { Plutus.txOutValue = txOutValue
+              , Plutus.txOutAddress = txOutAddress
+              , Plutus.txOutDatum =
+                  case txOutDatum of
+                    Nothing -> NoOutputDatum
+                    Just datum ->
+                      if inlineDatums
+                        then OutputDatum datum
+                        else OutputDatumHash $ Model.datumHash datum
+              , Plutus.txOutReferenceScript =
+                  scriptHash . convertScript
+                    <$> txOutReferenceScript
+              }
+          , do
+              datum <- txOutDatum
+              guard $ not inlineDatums
+              pure (Model.datumHash datum, datum)
+          )
+
+      convertTxIn :: TxIn -> Fork.TxIn
+      convertTxIn TxIn {txInRef, txInScript} =
+        Fork.TxIn
+          { Fork.txInRef = txInRef
+          , Fork.txInType =
+              let Plutus.TxOut {Plutus.txOutAddress = Plutus.Address cred _} =
+                    getUTxO txInRef
+               in case cred of
+                    Plutus.PubKeyCredential _ -> pure Fork.ConsumePublicKeyAddress
+                    Plutus.ScriptCredential sh -> do
+                      InScript {inScriptData} <- txInScript
+                      (redeemer, datum) <- inScriptData
+                      let script = Just $ scriptToVal $ getScript sh
+                      pure $ Fork.ConsumeScriptAddress script redeemer datum
+          }
+
+-- TODO toV1 is a placeholder
+-- our script type should probably know the version
+convertScript :: Script -> Model.Versioned Model.Script
+convertScript (Script s) = Model.toV1 $ Scripts.Script s
+
+scriptToMP :: Script -> Model.Versioned Model.MintingPolicy
+scriptToMP = coerce . convertScript
+
+scriptToVal :: Script -> Model.Versioned Model.Validator
+scriptToVal = coerce . convertScript
 
 {- | Generate a ledger 'Ledger.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
-toLedgerTx :: TxContext -> Tx bal -> Ledger.Tx era
-toLedgerTx = _
+toLedgerTx :: TxContext -> Tx bal -> CoreTx
+toLedgerTx context tx =
+  case Model.mockConfigProtocol $ Model.mockConfig (mockchain context) of
+    Model.AlonzoParams (params :: Core.PParams Alonzo.Era) ->
+      Alonzo $ cont params
+    Model.BabbageParams (params :: Core.PParams Babbage.Era) ->
+      Babbage $ cont params
+  where
+    cont :: Class.IsCardanoTx era => Core.PParams era -> Core.Tx era
+    cont params =
+      Class.toCardanoTx
+        (Map.map convertScript $ interestingScripts context)
+        (Model.mockConfigNetworkId $ Model.mockConfig $ mockchain context)
+        params
+        (toSimpleModelTx context tx)
+        & \case
+          Left e -> error ("toLedgerTx failed with:" <> show e)
+          Right tx -> tx
+
+-- Since toLedgerTx can't actually be polymorphic
+-- as the era is forced by the mockchain
+-- it needs to return something like this
+data CoreTx
+  = Alonzo (Core.Tx Alonzo.Era)
+  | Babbage (Core.Tx Babbage.Era)
 
 -- | Generate the relevant transaction fragment for a 'ScriptPurpose'
 scriptPurposeTx :: TxContext -> ScriptPurpose -> Tx 'Unbalanced
