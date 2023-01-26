@@ -73,7 +73,7 @@ txRunScript ::
   ScriptTx ->
   Maybe Plutus.EvaluationError
 txRunScript
-  TxContext
+  ctx@TxContext
     { mockchain =
       Model.Mock
         { Model.mockConfig =
@@ -87,11 +87,12 @@ txRunScript
             }
         }
     }
-  ScriptTx {scriptTx, scriptTxPurpose} = case mockConfigProtocol of
-    Model.AlonzoParams params ->
-      go (Proxy @(Alonzo.AlonzoEra Crypto.StandardCrypto)) params
-    Model.BabbageParams params ->
-      go (Proxy @(Babbage.BabbageEra Crypto.StandardCrypto)) params
+  ScriptTx {scriptTx, scriptTxPurpose} = case (mockConfigProtocol, toLedgerTx ctx scriptTx) of
+    (Model.AlonzoParams params, Alonzo coreTx) ->
+      go (Proxy @(Alonzo.AlonzoEra Crypto.StandardCrypto)) params coreTx
+    (Model.BabbageParams params, Babbage coreTx) ->
+      go (Proxy @(Babbage.BabbageEra Crypto.StandardCrypto)) params coreTx
+    _ -> error "era mismatch"
     where
       go ::
         forall (era :: Type).
@@ -106,8 +107,9 @@ txRunScript
         ) =>
         Proxy era ->
         Ledger.PParams era ->
+        Ledger.Tx era ->
         Maybe Plutus.EvaluationError
-      go _ params =
+      go _ params coreTx =
         txRunScript'
           params
           ( Cardano.fixedEpochInfo
@@ -121,8 +123,8 @@ txRunScript
               . Plutus.getPOSIXTime
               $ scSlotZeroTime
           )
-          _
-          _
+          (error "TODO")
+          coreTx
           (toLedgerScriptPurpose scriptTxPurpose)
 
 txRunScript' ::
