@@ -1,13 +1,18 @@
 module Hedgehog.Plutus.TestSingleScript (
+  ScriptTx (ScriptTx, scriptTx, scriptTxPurpose),
   testSingleScriptBad,
   testSingleScriptGood,
+  TxTest (TxTest),
+  txTest,
 ) where
+
+import Prelude hiding ((.))
 
 import Data.Kind (Type)
 import GHC.Records (HasField (getField))
 
+import Control.Category ((.))
 import Data.Maybe (isNothing, maybeToList)
-import Data.Proxy (Proxy (Proxy))
 
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -24,11 +29,9 @@ import Cardano.Ledger.Alonzo.Scripts qualified as Alonzo
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.Alonzo.TxInfo qualified as Alonzo
 import Cardano.Ledger.Alonzo.TxWitness qualified as Ledger
-import Cardano.Ledger.Babbage qualified as Babbage
 import Cardano.Ledger.Babbage.PParams (_costmdls, _protocolVersion)
 import Cardano.Ledger.BaseTypes qualified as Ledger
 import Cardano.Ledger.Core qualified as Ledger
-import Cardano.Ledger.Crypto qualified as Crypto
 import Cardano.Ledger.Language qualified as Ledger
 import Cardano.Ledger.Shelley.UTxO qualified as Ledger
 import Cardano.Ledger.Slot qualified as Ledger
@@ -46,17 +49,38 @@ import Plutus.Model.Mock.ProtocolParameters qualified as Model
 import Hedgehog ((===))
 import Hedgehog qualified
 
+import Hedgehog.Plutus.Adjunction
+import Hedgehog.Plutus.TestData
 import Hedgehog.Plutus.Tx
-import Hedgehog.Plutus.TxTest
+
+data ScriptTx = ScriptTx
+  { scriptTx :: Tx 'Unbalanced
+  , scriptTxPurpose :: ScriptPurpose
+  }
+
+newtype TxTest a
+  = TxTest (TxContext -> Adjunction ScriptTx (Either (Bad a) (Good a)))
+
+txTest ::
+  (TestData TxContext a) =>
+  (TxContext -> Adjunction ScriptTx (Generalised a)) ->
+  TxTest a
+txTest adj = TxTest $ \ctx -> testDataAdjunction ctx . adj ctx
+
+txTestBad :: TxTest a -> TxContext -> Bad a -> ScriptTx
+txTestBad (TxTest tt) txc = (lower . tt) txc . Left
+
+txTestGood :: TxTest a -> TxContext -> Good a -> ScriptTx
+txTestGood (TxTest tt) txc = (lower . tt) txc . Right
 
 testSingleScriptBad ::
   (Hedgehog.MonadTest m) =>
   TxContext ->
-  TxTest ingrs ->
-  Bad ingrs ->
+  TxTest a ->
+  Bad a ->
   m ()
 testSingleScriptBad txc tt bad =
-  Hedgehog.evalMaybe (txRunScript txc $ txTestBad tt bad) >>= \case
+  Hedgehog.evalMaybe (txRunScript txc $ txTestBad tt txc bad) >>= \case
     Plutus.CekError ewc ->
       PLC._ewcError ewc === PLC.UserEvaluationError UPLC.CekEvaluationFailure
     _ -> Hedgehog.failure
@@ -64,11 +88,11 @@ testSingleScriptBad txc tt bad =
 testSingleScriptGood ::
   (Hedgehog.MonadTest m) =>
   TxContext ->
-  TxTest ingrs ->
-  ingrs ->
+  TxTest a ->
+  Good a ->
   m ()
 testSingleScriptGood txc tt good =
-  Hedgehog.assert $ isNothing (txRunScript txc $ txTestGood tt good)
+  Hedgehog.assert $ isNothing (txRunScript txc $ txTestGood tt txc good)
 
 txRunScript ::
   TxContext ->
@@ -91,9 +115,9 @@ txRunScript
     }
   ScriptTx {scriptTx, scriptTxPurpose} = case mockConfigProtocol of
     Model.AlonzoParams params ->
-      go (Proxy @(Alonzo.AlonzoEra Crypto.StandardCrypto)) params
+      go params
     Model.BabbageParams params ->
-      go (Proxy @(Babbage.BabbageEra Crypto.StandardCrypto)) params
+      go params
     where
       go ::
         forall (era :: Type).
@@ -106,10 +130,9 @@ txRunScript
             (Ledger.PParams era)
             Alonzo.CostModels
         ) =>
-        Proxy era ->
         Ledger.PParams era ->
         Maybe Plutus.EvaluationError
-      go _ params =
+      go params =
         txRunScript'
           params
           ( Cardano.fixedEpochInfo

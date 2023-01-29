@@ -17,7 +17,7 @@ import Control.Category (Category (id, (.)))
 import Hedgehog ((===))
 import Hedgehog qualified
 
-data Adjunction a b = Adjunction
+data Adjunction b a = Adjunction
   { lower :: !(a -> b)
   , raise :: !(b -> a)
   }
@@ -25,8 +25,8 @@ data Adjunction a b = Adjunction
 instance Category Adjunction where
   Adjunction ll lr . Adjunction rl rr =
     Adjunction
-      { lower = ll . rl
-      , raise = rr . lr
+      { lower = rl . ll
+      , raise = lr . rr
       }
 
   id =
@@ -39,7 +39,7 @@ instance Category Adjunction where
 adjunctionTest ::
   forall (m :: Type -> Type) (a :: Type) (b :: Type).
   (Hedgehog.MonadTest m, Eq a, Show a) =>
-  Adjunction a b ->
+  Adjunction b a ->
   a ->
   m ()
 adjunctionTest (Adjunction lower raise) a = a === raise (lower a)

@@ -107,6 +107,7 @@ library
     , cardano-ledger-shelley
     , cardano-slotting
     , containers
+    , generics-sop
     , hedgehog
     , microlens
     , plutus-core
