@@ -96,9 +96,14 @@ data Tx = Tx
   , txExtraSignatures :: !(Set Plutus.PubKeyHash)
   }
 
+instance Show Tx where
+  show Tx {} = "<tx>" -- TODO show as much usefull info as possible
+
 newtype BalancedTx = BalancedTx {getBalanced :: Balanced Tx}
+  deriving newtype (Show)
 
 newtype Balanced tx = UnsafeBalance tx
+  deriving newtype (Show)
 
 type family MaybeBalanced (balanced :: Bool) tx where
   MaybeBalanced 'True tx = Balanced tx
