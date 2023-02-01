@@ -202,7 +202,7 @@ data ScriptPurpose
 balanceTx ::
   TxContext ->
   Tx ->
-  Maybe (Hedgehog.Gen BalancedTx)
+  Either String (Hedgehog.Gen BalancedTx)
 balanceTx context tx = balanceTxWhere context tx (const True) (const True)
 
 {- | as balanceTx but only uses txOuts belonging to a particular
@@ -212,7 +212,7 @@ balanceTxAsPubKey ::
   TxContext ->
   Tx ->
   PubKeyHash ->
-  Maybe (Hedgehog.Gen BalancedTx)
+  Either String (Hedgehog.Gen BalancedTx)
 balanceTxAsPubKey context tx pkh =
   balanceTxWhere
     context
@@ -232,10 +232,10 @@ balanceTxWhere ::
   Tx ->
   (Plutus.TxOut -> Bool) ->
   (Plutus.PubKeyHash -> Bool) ->
-  Maybe (Hedgehog.Gen BalancedTx)
+  Either String (Hedgehog.Gen BalancedTx)
 balanceTxWhere context tx predTxout predPkh = do
   let mock = mockchain context
-  (valueIn, valueOut) <- getValueInAndOut @'False context tx
+  (valueIn, valueOut) <- labelError "get value failed" $ getValueInAndOut @'False context tx
   -- TODO we may want to change this to something like
   -- Either FailReason (Tx 'Balanced)
   -- to distinguish things like failure by tx lookup
@@ -375,13 +375,16 @@ spendWhere ::
   Model.Mock ->
   Plutus.Value ->
   (Plutus.TxOut -> Bool) ->
-  Maybe (Hedgehog.Gen Spend)
+  Either String (Hedgehog.Gen Spend)
 spendWhere mock val pred = do
   let utxos = Map.toList $ Map.filter (liftM2 (&&) nonSpecial pred) $ Model.mockUtxos mock
-  guard $ not $ null utxos
-  detSpend <- toRes $ foldl go (val, Spend Vector.empty mempty) utxos
+  labelError "no utxos" $ guard $ not $ null utxos
+  detSpend <-
+    labelError "insuficent value" $
+      toRes $
+        foldl go (val, Spend Vector.empty mempty) utxos
   -- create a deterministic spend to test that balance is possible
-  Just $ do
+  pure $ do
     newUtxos <- Gen.shuffle utxos
     let spend = toRes $ foldl go (val, Spend Vector.empty mempty) newUtxos
     case spend of
@@ -646,8 +649,9 @@ scriptPurposeTx = \case
 -}
 toLedgerScriptPurpose ::
   forall era.
-  (Hash.HashAlgorithm (ADDRHASH era)) =>
-  (Hash.HashAlgorithm (HASH era)) =>
+  ( Hash.HashAlgorithm (ADDRHASH era)
+  , Hash.HashAlgorithm (HASH era)
+  ) =>
   ScriptPurpose ->
   Ledger.ScriptPurpose era
 toLedgerScriptPurpose = \case
@@ -669,3 +673,6 @@ toLedgerScriptPurpose = \case
         ScriptHash $
           fromMaybe (error "failed to repack currencySymbol to hash") $
             hashFromBytes (Plutus.fromBuiltin sh)
+
+labelError :: String -> Maybe a -> Either String a
+labelError label = maybe (Left label) Right

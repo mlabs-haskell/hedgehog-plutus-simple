@@ -3,9 +3,7 @@ module Hedgehog.Plutus.Model.Run (
   submitBalancedTx,
 ) where
 
-import Data.Functor (($>))
 import Data.Map qualified as Map
-import Data.Maybe (fromMaybe)
 
 import Hedgehog.Plutus.Model.Internal (
   Balanced,
@@ -31,24 +29,23 @@ import Hedgehog (
 -}
 submitTx :: Monad m => Tx -> TxContext -> PropertyT m TxContext
 submitTx tx ctx = do
-  btx <- forAll $ fromMaybe (fail "failed to balance") $ balanceTx ctx tx
-  maybe (fail "failed to submit") pure (submitBalancedTx btx ctx)
+  btx <- either (fail . ("Balance error: " <>)) forAll (balanceTx ctx tx)
+  either (fail . (<> "Submit error: ")) pure (submitBalancedTx btx ctx)
 
 -- TODO both of these functions should probably return better errors
 -- which can then be logged better here
 
 -- | submits a balanced tx reutrns a maybe because this
-submitBalancedTx :: BalancedTx -> TxContext -> Maybe TxContext
+submitBalancedTx :: BalancedTx -> TxContext -> Either String TxContext
 submitBalancedTx (BalancedTx tx) ctx =
   (\m -> ctx {mockchain = m})
     <$> submitModelTx (toSimpleModelTx @'True ctx tx) (mockchain ctx)
 
-submitModelTx :: Balanced Model.Tx -> Model.Mock -> Maybe Model.Mock
-submitModelTx (getTx @'True -> tx :: Model.Tx) =
+submitModelTx :: Balanced Model.Tx -> Model.Mock -> Either String Model.Mock
+submitModelTx (getTx @'True -> tx :: Model.Tx) mock =
   case Map.keys $ Fork.txSignatures $ Model.tx'plutus tx of
+    [] -> Left "no public keys in tx"
     (pkh : _) ->
-      uncurry ($>)
-        . Model.runMock (Model.submitTx pkh tx >> Model.checkErrors)
-    -- TODO does which key matter?
-    -- should we invoke Gen to chose?
-    [] -> const Nothing
+      case Model.runMock (Model.submitTx pkh tx >> Model.checkErrors) mock of
+        (Just err, _) -> Left err
+        (Nothing, mock) -> Right mock
