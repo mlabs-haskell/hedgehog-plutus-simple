@@ -62,10 +62,10 @@ newtype TxTest a
   = TxTest (TxContext -> Adjunction ScriptTx (Either (Bad a) (Good a)))
 
 txTest ::
-  (TestData TxContext a) =>
+  (TestData a) =>
   (TxContext -> Adjunction ScriptTx (Generalised a)) ->
   TxTest a
-txTest adj = TxTest $ \ctx -> testDataAdjunction ctx . adj ctx
+txTest adj = TxTest $ \ctx -> testDataAdjunction . adj ctx
 
 txTestBad :: TxTest a -> TxContext -> Bad a -> ScriptTx
 txTestBad (TxTest tt) txc = (lower . tt) txc . Left

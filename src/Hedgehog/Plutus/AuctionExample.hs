@@ -19,9 +19,11 @@ import Prelude hiding ((.))
 import Control.Category ((.))
 import Data.Maybe (fromJust)
 
+import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
+import Data.Vector (Vector)
 
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusTx qualified
@@ -46,7 +48,7 @@ data Auction = Auction
   , aCurrency :: !Plutus.CurrencySymbol
   , aToken :: !Plutus.TokenName
   }
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 PlutusTx.unstableMakeIsData ''Auction
 PlutusTx.makeLift ''Auction
@@ -55,7 +57,7 @@ data Bid = Bid
   { bBidder :: !Plutus.PubKeyHash
   , bBid :: !Integer
   }
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 PlutusTx.unstableMakeIsData ''Bid
 PlutusTx.makeLift ''Bid
@@ -306,71 +308,248 @@ PlutusTx.makeLift ''AuctionDatum
 -- fromRight (Right r) = Just r
 
 data AuctionTest q = AuctionTest
-  { stateRef :: !(Only Plutus.TxOutRef TxContext q)
-  , otherInputsWithDatum :: !(ShouldEqual (Mempty (Set TxIn)) TxContext q)
+  { stateRef :: !(Only Plutus.TxOutRef q)
+  , otherInputsWithDatum :: !(ShouldEqual (Mempty (Set TxIn)) q)
   , auctionRedeemer :: !(AuctionTestRedeemer q)
   }
   deriving stock (GHC.Generic)
-  deriving (TestData TxContext) via (Generically' TxContext AuctionTest)
+  deriving (TestData) via (Generically' AuctionTest)
 
 type AuctionTestRedeemer :: Quality -> Type
-data AuctionTestRedeemer q = TestRedeemerBid | TestRedeemerClose
+data AuctionTestRedeemer q
+  = TestRedeemerBid
+      { testRedeemerBidder :: !(Only Plutus.PubKeyHash q)
+      , testRedeemerBidMagnitude :: !(ShouldBeNatural q)
+      -- ^ Difference between bid and minBid
+      , selfOutputs :: !(EitherOr (Only (Vector TxOut)) SelfOutput q)
+      }
+  | TestRedeemerClose
   deriving stock (GHC.Generic)
-  deriving (TestData TxContext) via (Generically' TxContext AuctionTestRedeemer)
+  deriving (TestData) via (Generically' AuctionTestRedeemer)
+
+data SelfOutput q = SelfOutput
+  { datumIfDifferent :: Shouldn'tBePresent AuctionTestDatum q
+  , valueIfDifferent :: Shouldn'tBePresent (Only Plutus.Value) q
+  }
+  deriving stock (GHC.Generic)
+  deriving (TestData) via (Generically' SelfOutput)
+
+data AuctionTestDatum q = AuctionTestDatum
+  { auctionTestAuction :: !(Shouldn'tBePresent (Only Auction) q)
+  , auctionTestHiBid :: !(Shouldn'tBePresent (Only (Maybe Bid)) q)
+  }
 
 auctionTest :: TxTest AuctionTest
-auctionTest =
-  txTest $
-    \TxContext {mockchain = Model.Mock {Model.mockUtxos}} ->
-      Adjunction
-        { raise = \case
-            ScriptTx
-              { scriptTx = Tx {txInputs}
-              , scriptTxPurpose = Spending ref (InScript _ (Just (rdmr, _)))
-              } ->
-                AuctionTest
-                  { stateRef = Only ref
-                  , otherInputsWithDatum =
-                      MightNotBeEqual
-                        ( Set.filter
-                            ( \inp ->
-                                Plutus.txOutDatum (mockUtxos Map.! txInRef inp)
-                                  /= Plutus.NoOutputDatum
+auctionTest = txTest $ \txc ->
+  Adjunction
+    { raise = raiseAuctionTest txc
+    , lower = lowerAuctionTest txc
+    }
+
+raiseAuctionTest :: TxContext -> ScriptTx -> AuctionTest 'IsGeneralised
+raiseAuctionTest
+  txc@TxContext {mockchain = Model.Mock {Model.mockUtxos}}
+  ScriptTx
+    { scriptTx = Tx {txInputs, txOutputs}
+    , scriptTxPurpose = Spending ref (InScript _ (Just (rdmr, _)))
+    } =
+    AuctionTest
+      { stateRef = Only ref
+      , otherInputsWithDatum =
+          MightNotBeEqual
+            ( Set.filter
+                ( \inp' ->
+                    Plutus.txOutDatum (mockUtxos Map.! txInRef inp')
+                      /= Plutus.NoOutputDatum
+                )
+                txInputs
+            )
+      , auctionRedeemer =
+          case fromJust
+            . Plutus.fromBuiltinData
+            $ Plutus.getRedeemer rdmr of
+            MkBid bid@Bid {bBidder, bBid} ->
+              TestRedeemerBid
+                { testRedeemerBidder = Only bBidder
+                , testRedeemerBidMagnitude =
+                    MightBeNegative (bBid - minBid txc ref)
+                , selfOutputs =
+                    let os =
+                          Vector.filter
+                            ( \TxOut {txOutAddress} ->
+                                txOutAddress == selfAddress mockUtxos ref
                             )
-                            txInputs
-                        )
-                  , auctionRedeemer =
-                      case fromJust
-                        . Plutus.fromBuiltinData
-                        $ Plutus.getRedeemer rdmr of
-                        MkBid _ -> TestRedeemerBid
-                        Close -> TestRedeemerBid
-                  }
-            _ -> error "not a spending input, or no redeemer"
-        , lower = \(AuctionTest (Only ref) (MightNotBeEqual otherIns) rdmr) ->
-            ScriptTx
-              ( Tx
-                  { txInputs = otherIns
-                  , txOutputs = Vector.empty
-                  , txMint = Map.empty
-                  , txFee = 0
-                  , txValidRange = Plutus.always
-                  , txExtraSignatures = Set.empty
-                  }
+                            txOutputs
+                     in if Vector.length os == 1
+                          then ShouldBe (selfOutput (Vector.head os) bid)
+                          else Shouldn'tBe (Only os)
+                }
+            Close -> TestRedeemerClose
+      }
+    where
+      selfOutput :: TxOut -> Bid -> SelfOutput 'IsGeneralised
+      selfOutput o rBid =
+        SelfOutput
+          ( if correctAuction && correctBid
+              then IsAbsent
+              else
+                IsPresent
+                  ( AuctionTestDatum
+                      { auctionTestAuction =
+                          expect (adAuction inDatum) (adAuction outDatum)
+                      , auctionTestHiBid =
+                          expect (Just rBid) (adHighestBid outDatum)
+                      }
+                  )
+          )
+          ( expect
+              ( token
+                  (adAuction inDatum)
+                  <> lovelaceValue (minLovelace + bBid rBid)
               )
-              ( Spending
-                  ref
-                  ( InScript
-                      InTransaction
-                      ( Just $
-                          ( Plutus.Redeemer
-                              . Plutus.toBuiltinData
-                              $ case rdmr of
-                                TestRedeemerBid -> MkBid (_)
-                                TestRedeemerClose -> Close
-                          , _
-                          )
-                      )
+              (txOutValue o)
+          )
+        where
+          outDatum :: AuctionDatum
+          outDatum =
+            fromJust
+              . Plutus.fromBuiltinData
+              . Plutus.getDatum
+              . fromJust
+              . txOutDatum
+              $ o
+
+          inDatum :: AuctionDatum
+          inDatum = datum txc ref
+
+          correctAuction :: Bool
+          correctAuction = adAuction outDatum == adAuction inDatum
+
+          correctBid :: Bool
+          correctBid = adHighestBid outDatum == Just rBid
+raiseAuctionTest _ _ = error "not a spending input, or no redeemer"
+
+lowerAuctionTest :: TxContext -> AuctionTest 'IsGeneralised -> ScriptTx
+lowerAuctionTest
+  txc@TxContext {mockchain = Model.Mock {Model.mockUtxos}}
+  (AuctionTest (Only ref) (MightNotBeEqual otherIns) rdmr) =
+    ScriptTx
+      ( Tx
+          { txInputs = otherIns
+          , txOutputs = case rdmr of
+              TestRedeemerBid
+                (Only bidder)
+                (MightBeNegative mag)
+                selfOutputs -> case selfOutputs of
+                  Shouldn'tBe (Only os) -> os
+                  ShouldBe (SelfOutput dat val) ->
+                    Vector.singleton (continuingOut mag bidder dat val)
+              TestRedeemerClose -> Vector.empty
+          , txMint = Map.empty
+          , txFee = 0
+          , txValidRange = Plutus.always
+          , txExtraSignatures = Set.empty
+          }
+      )
+      ( Spending
+          ref
+          ( InScript
+              InTransaction
+              ( Just
+                  ( Plutus.Redeemer . Plutus.toBuiltinData $
+                      case rdmr of
+                        TestRedeemerBid (Only bidder) (MightBeNegative mag) _ ->
+                          MkBid $ bid txc bidder ref mag
+                        TestRedeemerClose -> Close
+                  , _
                   )
               )
-        }
+          )
+      )
+    where
+      bid :: TxContext -> Plutus.PubKeyHash -> Plutus.TxOutRef -> Integer -> Bid
+      bid txc bidder ref mag =
+        Bid
+          { bBidder = bidder
+          , bBid = bidAmt txc ref mag
+          }
+
+      continuingOut ::
+        Integer ->
+        Plutus.PubKeyHash ->
+        Generalised (Shouldn'tBePresent AuctionTestDatum) ->
+        Generalised (Shouldn'tBePresent (Only Plutus.Value)) ->
+        TxOut
+      continuingOut mag bidder dat val =
+        TxOut
+          { txOutAddress = selfAddress mockUtxos ref
+          , txOutValue = case val of
+              IsPresent (Only v) -> v
+              IsAbsent ->
+                token (auction txc ref)
+                  <> lovelaceValue (minLovelace + bidAmt txc ref mag)
+          , txOutDatum =
+              Just . Plutus.Datum . Plutus.toBuiltinData $
+                AuctionDatum
+                  { adAuction = case dat of
+                      IsPresent
+                        AuctionTestDatum
+                          { auctionTestAuction = IsPresent (Only auct)
+                          } -> auct
+                      _ -> auction txc ref
+                  , adHighestBid = case dat of
+                      IsPresent
+                        AuctionTestDatum
+                          { auctionTestHiBid = IsPresent (Only hiBid)
+                          } -> hiBid
+                      _ -> Just $ bid txc bidder ref mag
+                  }
+          , txOutReferenceScript = Nothing
+          }
+
+bidAmt :: TxContext -> Plutus.TxOutRef -> Integer -> Integer
+bidAmt txc ref mag = minBid txc ref + mag
+
+decodeDatum :: Plutus.Datum -> AuctionDatum
+decodeDatum = fromJust . Plutus.fromBuiltinData . Plutus.getDatum
+
+datum :: TxContext -> Plutus.TxOutRef -> AuctionDatum
+datum TxContext {mockchain = Model.Mock {Model.mockUtxos}, datums} ref =
+  decodeDatum . unsafeGetDatum datums . Plutus.txOutDatum $ mockUtxos Map.! ref
+
+auction :: TxContext -> Plutus.TxOutRef -> Auction
+auction txc = adAuction . datum txc
+
+token :: Auction -> Plutus.Value
+token Auction {aCurrency, aToken} = Plutus.singleton aCurrency aToken 1
+
+hiBid :: TxContext -> Plutus.TxOutRef -> Maybe Bid
+hiBid txc = adHighestBid . datum txc
+
+minBid :: TxContext -> Plutus.TxOutRef -> Integer
+minBid txc ref =
+  maybe (aMinBid $ auction txc ref) ((+ 1) . bBid) (hiBid txc ref)
+
+selfAddress ::
+  Map Plutus.TxOutRef Plutus.TxOut ->
+  Plutus.TxOutRef ->
+  Plutus.Address
+selfAddress utxos ref = Plutus.txOutAddress (utxos Map.! ref)
+
+minValue :: Plutus.Value
+minValue = lovelaceValue minLovelace
+
+lovelaceValue :: Integer -> Plutus.Value
+lovelaceValue =
+  Plutus.singleton
+    (Plutus.CurrencySymbol "")
+    (Plutus.TokenName "")
+
+unsafeGetDatum ::
+  Map Plutus.DatumHash Plutus.Datum ->
+  Plutus.OutputDatum ->
+  Plutus.Datum
+unsafeGetDatum datums = \case
+  Plutus.OutputDatum d -> d
+  Plutus.OutputDatumHash dh -> datums Map.! dh
+  Plutus.NoOutputDatum -> error "No datum!"

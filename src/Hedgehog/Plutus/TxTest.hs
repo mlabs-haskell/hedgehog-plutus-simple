@@ -21,7 +21,7 @@ data family Bad ingrs
 txForScriptTx :: TxContext -> ScriptTx -> Tx 'Unbalanced
 txForScriptTx ctx (ScriptTx sp tx) = tx <> scriptPurposeTx ctx sp
 
-newtype TxTest ingrs = TxTest (Adjunction (Either (Bad ingrs) ingrs) ScriptTx)
+newtype TxTest ingrs = TxTest (Adjunction ScriptTx (Either (Bad ingrs) ingrs))
 
 txTest ::
   (Bad ingrs -> ScriptTx) ->

@@ -1,18 +1,17 @@
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE ImpredicativeTypes #-}
-{-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 
 module Hedgehog.Plutus.TestData where
 
-import Data.Coerce (Coercible, coerce)
+import Data.Coerce (coerce)
 import Data.Kind (Constraint, Type)
 import GHC.Generics qualified as GHC
 
 import Control.Monad (guard)
 import Data.Proxy (Proxy (Proxy))
+import Numeric.Natural (Natural)
 
 import Generics.SOP qualified as SOP
 import Generics.SOP.GGP qualified as SOP
@@ -32,39 +31,25 @@ type Good a = a 'IsGood
 type Generalised :: (Quality -> Type) -> Type
 type Generalised a = a 'IsGeneralised
 
-type TestData :: Type -> (Quality -> Type) -> Constraint
-class TestData ctx a | a -> ctx where
-  validate :: ctx -> Generalised a -> Maybe (Good a)
+type TestData :: (Quality -> Type) -> Constraint
+class TestData a where
+  validate :: Generalised a -> Maybe (Good a)
 
   generalise :: Good a -> Generalised a
 
-  default validate ::
-    (Coercible (Generalised a) (Good a)) =>
-    ctx ->
-    Generalised a ->
-    Maybe (Good a)
-  validate _ = Just . coerce
-
-  default generalise ::
-    (Coercible (Good a) (Generalised a)) =>
-    Good a ->
-    Generalised a
-  generalise = coerce
-
 testDataAdjunction ::
-  (TestData ctx a) =>
-  ctx ->
+  (TestData a) =>
   Adjunction (Generalised a) (Either (Bad a) (Good a))
-testDataAdjunction ctx =
+testDataAdjunction =
   Adjunction
     { lower = either getBad generalise
-    , raise = \g -> maybe (Left (Bad g)) Right (validate ctx g)
+    , raise = \g -> maybe (Left (Bad g)) Right (validate g)
     }
 
-type ShouldEqual :: Type -> Type -> Quality -> Type
-data ShouldEqual val ctx q where
-  IsEqual :: ShouldEqual val ctx 'IsGood
-  MightNotBeEqual :: TypeOf val -> ShouldEqual val ctx 'IsGeneralised
+type ShouldEqual :: Type -> Quality -> Type
+data ShouldEqual val q where
+  IsEqual :: ShouldEqual val 'IsGood
+  MightNotBeEqual :: TypeOf val -> ShouldEqual val 'IsGeneralised
 
 type TypeOf :: Type -> Type
 type family TypeOf a
@@ -75,9 +60,9 @@ class ShouldBeEqualTo val where
 
 instance
   (Eq (TypeOf val), ShouldBeEqualTo val) =>
-  TestData ctx (ShouldEqual val ctx)
+  TestData (ShouldEqual val)
   where
-  validate _ (MightNotBeEqual a) = guard (a == val (Proxy @val)) >> Just IsEqual
+  validate (MightNotBeEqual a) = guard (a == val (Proxy @val)) >> Just IsEqual
   generalise IsEqual = MightNotBeEqual (val $ Proxy @val)
 
 type Mempty :: Type -> Type
@@ -87,32 +72,74 @@ type instance TypeOf (Mempty a) = a
 
 instance (Monoid a) => ShouldBeEqualTo (Mempty a) where val _ = mempty
 
-type Only :: Type -> Type -> Quality -> Type
-newtype Only a ctx q = Only a
-  deriving anyclass (TestData ctx)
+type Only :: Type -> Quality -> Type
+newtype Only a q = Only a
+  deriving stock (GHC.Generic)
 
-type Predicated :: Type -> Type -> Quality -> Type
-newtype Predicated pred ctx q = Predicated (TypeOf pred)
+instance TestData (Only a) where
+  validate = Just . coerce
+  generalise = coerce
+
+type EitherOr :: (Quality -> Type) -> (Quality -> Type) -> Quality -> Type
+data EitherOr bad gen q where
+  Shouldn'tBe :: bad 'IsGeneralised -> EitherOr bad gen 'IsGeneralised
+  ShouldBe :: gen q -> EitherOr bad gen q
+
+instance (TestData gen) => TestData (EitherOr bad gen) where
+  validate (Shouldn'tBe _) = Nothing
+  validate (ShouldBe gen) = ShouldBe <$> validate gen
+
+  generalise (ShouldBe good) = ShouldBe (generalise good)
+
+type Predicated :: Type -> Quality -> Type
+newtype Predicated pred q = Predicated (TypeOf pred)
 
 class IsPredicated pred where
   predicate :: Proxy pred -> TypeOf pred -> Bool
 
-instance (IsPredicated pred) => TestData ctx (Predicated pred ctx) where
-  validate _ (Predicated a) =
+instance (IsPredicated pred) => TestData (Predicated pred) where
+  validate (Predicated a) =
     guard (predicate (Proxy @pred) a) >> Just (Predicated a)
 
-type Generically' :: Type -> (Quality -> Type) -> (Quality -> Type)
-newtype Generically' ctx f a where
-  Generically :: f a -> Generically' ctx f a
+  generalise = coerce
 
-instance
+type ShouldBeNatural :: Quality -> Type
+data ShouldBeNatural q where
+  MightBeNegative :: Integer -> ShouldBeNatural 'IsGeneralised
+  IsNatural :: Natural -> ShouldBeNatural 'IsGood
+
+instance TestData ShouldBeNatural where
+  validate (MightBeNegative i) =
+    guard (i >= 0) >> Just (IsNatural $ fromIntegral i)
+
+  generalise (IsNatural n) = MightBeNegative $ toInteger n
+
+type Shouldn'tBePresent :: (Quality -> Type) -> Quality -> Type
+data Shouldn'tBePresent bad q where
+  IsAbsent :: Shouldn'tBePresent bad q
+  IsPresent :: bad 'IsGeneralised -> Shouldn'tBePresent bad 'IsGeneralised
+
+instance TestData (Shouldn'tBePresent bad) where
+  validate IsAbsent = Just IsAbsent
+  validate (IsPresent _) = Nothing
+
+  generalise IsAbsent = IsAbsent
+
+expect :: (Eq a) => a -> a -> Generalised (Shouldn'tBePresent (Only a))
+expect exp act = if exp == act then IsAbsent else IsPresent (Only act)
+
+type Generically' :: (Quality -> Type) -> Quality -> Type
+newtype Generically' f a where
+  Generically :: f a -> Generically' f a
+
+class
   ( (forall q. GHC.Generic (a q))
   , SOP.GFrom (Generalised a)
   , SOP.GFrom (Good a)
   , SOP.GTo (Generalised a)
   , SOP.GTo (Good a)
   , SOP.AllZip2
-      (TestData' ctx)
+      TestData'
       (SOP.GCode (Generalised a))
       (UnAp2 (SOP.GCode (Good a)))
   , SOP.AllZip2
@@ -128,13 +155,42 @@ instance
       (SOP.GCode (Good a))
       (UnAp2 (SOP.GCode (Good a)))
   , SOP.AllZip2
-      (Gen ctx)
+      Gen
       (UnAp2 (SOP.GCode (Good a)))
       (UnAp2 (SOP.GCode (Generalised a)))
   ) =>
-  TestData ctx (Generically' ctx a)
-  where
-  validate ctx (Generically a) =
+  ValidateGeneric a
+instance
+  ( (forall q. GHC.Generic (a q))
+  , SOP.GFrom (Generalised a)
+  , SOP.GFrom (Good a)
+  , SOP.GTo (Generalised a)
+  , SOP.GTo (Good a)
+  , SOP.AllZip2
+      TestData'
+      (SOP.GCode (Generalised a))
+      (UnAp2 (SOP.GCode (Good a)))
+  , SOP.AllZip2
+      (GetAp 'IsGood)
+      (UnAp2 (SOP.GCode (Good a)))
+      (SOP.GCode (Good a))
+  , SOP.AllZip2
+      (GetAp 'IsGeneralised)
+      (UnAp2 (SOP.GCode (Generalised a)))
+      (SOP.GCode (Generalised a))
+  , SOP.AllZip2
+      (Apped 'IsGood)
+      (SOP.GCode (Good a))
+      (UnAp2 (SOP.GCode (Good a)))
+  , SOP.AllZip2
+      Gen
+      (UnAp2 (SOP.GCode (Good a)))
+      (UnAp2 (SOP.GCode (Generalised a)))
+  ) =>
+  ValidateGeneric a
+
+instance (ValidateGeneric a) => TestData (Generically' a) where
+  validate (Generically a) =
     fmap
       ( Generically
           . SOP.gto
@@ -142,15 +198,15 @@ instance
       )
       . sequence'_SOP
       . SOP.htrans
-        (Proxy @(TestData' ctx))
-        (SOP.Comp . fmap Ap . validate ctx . SOP.unI)
+        (Proxy @TestData')
+        (SOP.Comp . fmap Ap . validate . SOP.unI)
       $ SOP.gfrom a
 
   generalise (Generically a) =
     Generically
       . SOP.gto
       . sopGetAp @'IsGeneralised (Proxy @a)
-      . SOP.htrans (Proxy @(Gen ctx)) (Ap . generalise . getAp)
+      . SOP.htrans (Proxy @Gen) (Ap . generalise . getAp)
       . sopAp @'IsGood (Proxy @a)
       $ SOP.gfrom a
 
@@ -191,18 +247,10 @@ type family UnAp xs where
   UnAp (f a ': as) = f ': UnAp as
   UnAp '[] = '[]
 
-type TestData' :: Type -> Type -> (Quality -> Type) -> Constraint
-class
-  ( x ~ y 'IsGeneralised
-  , TestData ctx y
-  ) =>
-  TestData' ctx x y
-instance
-  ( x ~ y 'IsGeneralised
-  , TestData ctx y
-  ) =>
-  TestData' ctx x y
+type TestData' :: Type -> (Quality -> Type) -> Constraint
+class (x ~ y 'IsGeneralised, TestData y) => TestData' x y
+instance (x ~ y 'IsGeneralised, TestData y) => TestData' x y
 
-type Gen :: Type -> (Quality -> Type) -> (Quality -> Type) -> Constraint
-class (x ~ y, TestData ctx y) => Gen ctx x y
-instance (x ~ y, TestData ctx y) => Gen ctx x y
+type Gen :: (Quality -> Type) -> (Quality -> Type) -> Constraint
+class (x ~ y, TestData y) => Gen x y
+instance (x ~ y, TestData y) => Gen x y
