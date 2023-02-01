@@ -18,12 +18,14 @@ import Lens.Micro ((^.))
 
 import Cardano.Ledger.Alonzo qualified as Alonzo
 import Cardano.Ledger.Alonzo.Data qualified as Ledger
+import Cardano.Ledger.Alonzo.PParams (_costmdls, _protocolVersion)
 import Cardano.Ledger.Alonzo.PlutusScriptApi qualified as Alonzo
 import Cardano.Ledger.Alonzo.Scripts qualified as Alonzo
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.Alonzo.TxInfo qualified as Alonzo
 import Cardano.Ledger.Alonzo.TxWitness qualified as Ledger
 import Cardano.Ledger.Babbage qualified as Babbage
+import Cardano.Ledger.Babbage.PParams (_costmdls, _protocolVersion)
 import Cardano.Ledger.BaseTypes qualified as Ledger
 import Cardano.Ledger.Core qualified as Ledger
 import Cardano.Ledger.Crypto qualified as Crypto
@@ -32,20 +34,31 @@ import Cardano.Ledger.Shelley.UTxO qualified as Ledger
 import Cardano.Ledger.Slot qualified as Ledger
 import Cardano.Slotting.EpochInfo qualified as Cardano
 import Cardano.Slotting.Time qualified as Cardano
+import Plutus.Model qualified as Model
+import Plutus.Model.Fork.Cardano.Class qualified as Class
+import Plutus.Model.Fork.Ledger.TimeSlot qualified as Fork
+import Plutus.Model.Mock.ProtocolParameters qualified as Model
 import PlutusCore.Evaluation.Machine.Exception qualified as PLC
 import PlutusLedgerApi.Common qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus hiding (evaluateScriptCounting)
 import UntypedPlutusCore.Evaluation.Machine.Cek qualified as UPLC
 
-import Plutus.Model qualified as Model
-import Plutus.Model.Fork.Ledger.TimeSlot qualified as Fork
-import Plutus.Model.Mock.ProtocolParameters qualified as Model
-
 import Hedgehog ((===))
 import Hedgehog qualified
 
-import Hedgehog.Plutus.Tx
-import Hedgehog.Plutus.TxTest
+import Hedgehog.Plutus.Tx (
+  CoreTx (Alonzo, Babbage),
+  TxContext (TxContext, mockchain),
+  toLedgerScriptPurpose,
+  toLedgerTx,
+ )
+import Hedgehog.Plutus.TxTest (
+  Bad,
+  ScriptTx (ScriptTx, scriptTx, scriptTxPurpose),
+  TxTest,
+  txTestBad,
+  txTestGood,
+ )
 
 testSingleScriptBad ::
   (Hedgehog.MonadTest m) =>
@@ -84,6 +97,7 @@ txRunScript
                 { Fork.scSlotLength
                 , Fork.scSlotZeroTime
                 }
+            , Model.mockConfigNetworkId = networkId
             }
         }
     }
@@ -99,6 +113,7 @@ txRunScript
         ( Ledger.Script era ~ Alonzo.AlonzoScript era
         , Alonzo.ExtendedUTxO era
         , Ledger.AlonzoEraTx era
+        , Class.IsCardanoTx era
         , HasField "_protocolVersion" (Ledger.PParams era) Ledger.ProtVer
         , HasField
             "_costmdls"
@@ -109,7 +124,9 @@ txRunScript
         Ledger.PParams era ->
         Ledger.Tx era ->
         Maybe Plutus.EvaluationError
-      go _ params coreTx =
+      go _ params coreTx = do
+        Right utxo <- pure $ Class.toUtxo mempty networkId []
+        -- TODO is this empty utxo correct?
         txRunScript'
           params
           ( Cardano.fixedEpochInfo
@@ -123,7 +140,7 @@ txRunScript
               . Plutus.getPOSIXTime
               $ scSlotZeroTime
           )
-          (error "TODO")
+          utxo
           coreTx
           (toLedgerScriptPurpose scriptTxPurpose)
 
