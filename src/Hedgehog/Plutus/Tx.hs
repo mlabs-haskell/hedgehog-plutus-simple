@@ -20,6 +20,7 @@ module Hedgehog.Plutus.Tx (
   toLedgerTx,
   scriptPurposeTx,
   toLedgerScriptPurpose,
+  CoreTx (..),
 )
 where
 
