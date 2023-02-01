@@ -1,7 +1,3 @@
-{-# OPTIONS_GHC -Wno-missing-import-lists #-}
-
--- I think they are fine here because they are just reexported
-
 module Hedgehog.Plutus.Model (
   Tx (..),
   BalancedTx,
@@ -32,15 +28,15 @@ where
 
 import Hedgehog.Plutus.Model.Internal (
   BalancedTx,
-  InScript (..),
-  Script (..),
-  ScriptPurpose (..),
-  ScriptSource (..),
-  Spend (..),
-  Tx (..),
-  TxContext (..),
-  TxIn (..),
-  TxOut (..),
+  InScript (InScript, inScriptData, inScriptSource),
+  Script (Script, unScript),
+  ScriptPurpose (Minting, Spending),
+  ScriptSource (InTransaction, RefScript),
+  Spend (Spend, excess, spendUtxos),
+  Tx (Tx, txExtraSignatures, txFee, txInputs, txMint, txOutputs, txValidRange),
+  TxContext (TxContext, datums, interestingScripts, mockchain),
+  TxIn (TxIn, txInRef, txInScript),
+  TxOut (TxOut, txOutAddress, txOutDatum, txOutReferenceScript, txOutValue),
   balanceTx,
   balanceTxAsPubKey,
   balanceTxWhere,

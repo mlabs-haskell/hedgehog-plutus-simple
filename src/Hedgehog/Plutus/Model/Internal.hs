@@ -26,6 +26,7 @@ module Hedgehog.Plutus.Model.Internal (
   scriptPurposeTx,
   toLedgerScriptPurpose,
   convertScript,
+  BalanceError (..),
 )
 where
 
@@ -202,7 +203,7 @@ data ScriptPurpose
 balanceTx ::
   TxContext ->
   Tx ->
-  Either String (Hedgehog.Gen BalancedTx)
+  Either BalanceError (Hedgehog.Gen BalancedTx)
 balanceTx context tx = balanceTxWhere context tx (const True) (const True)
 
 {- | as balanceTx but only uses txOuts belonging to a particular
@@ -212,7 +213,7 @@ balanceTxAsPubKey ::
   TxContext ->
   Tx ->
   PubKeyHash ->
-  Either String (Hedgehog.Gen BalancedTx)
+  Either BalanceError (Hedgehog.Gen BalancedTx)
 balanceTxAsPubKey context tx pkh =
   balanceTxWhere
     context
@@ -232,10 +233,10 @@ balanceTxWhere ::
   Tx ->
   (Plutus.TxOut -> Bool) ->
   (Plutus.PubKeyHash -> Bool) ->
-  Either String (Hedgehog.Gen BalancedTx)
+  Either BalanceError (Hedgehog.Gen BalancedTx)
 balanceTxWhere context tx predTxout predPkh = do
   let mock = mockchain context
-  (valueIn, valueOut) <- labelError "get value failed" $ getValueInAndOut @'False context tx
+  (valueIn, valueOut) <- labelError GetBalanceFailed $ getValueInAndOut @'False context tx
   -- TODO we may want to change this to something like
   -- Either FailReason (Tx 'Balanced)
   -- to distinguish things like failure by tx lookup
@@ -250,7 +251,7 @@ balanceTxWhere context tx predTxout predPkh = do
             ]
   spendGen <- spendWhere mock deficit (liftM2 (&&) (not . alreadySpending) predTxout)
   let payoutKeys = filter predPkh $ Map.keys $ Model.mockUsers mock
-  guard $ not $ null payoutKeys
+  labelError NoPayoutKeys $ guard $ not $ null payoutKeys
   pure $ do
     Spend outRefs moreChange <- spendGen
     payOutKey <- Gen.element payoutKeys
@@ -375,14 +376,18 @@ spendWhere ::
   Model.Mock ->
   Plutus.Value ->
   (Plutus.TxOut -> Bool) ->
-  Either String (Hedgehog.Gen Spend)
+  Either BalanceError (Hedgehog.Gen Spend)
 spendWhere mock val pred = do
   let utxos = Map.toList $ Map.filter (liftM2 (&&) nonSpecial pred) $ Model.mockUtxos mock
-  labelError "no utxos" $ guard $ not $ null utxos
+  labelError (InsufficentValue {had = Nothing, need = val}) $ guard $ not $ null utxos
   detSpend <-
-    labelError "insuficent value" $
-      toRes $
-        foldl go (val, Spend Vector.empty mempty) utxos
+    labelError
+      InsufficentValue
+        { had = Just $ mconcat $ Plutus.txOutValue . snd <$> utxos
+        , need = val
+        }
+      $ toRes
+      $ foldl go (val, Spend Vector.empty mempty) utxos
   -- create a deterministic spend to test that balance is possible
   pure $ do
     newUtxos <- Gen.shuffle utxos
@@ -674,5 +679,12 @@ toLedgerScriptPurpose = \case
           fromMaybe (error "failed to repack currencySymbol to hash") $
             hashFromBytes (Plutus.fromBuiltin sh)
 
-labelError :: String -> Maybe a -> Either String a
+data BalanceError
+  = -- The maybe distinguishes no utxos at all from no value
+    InsufficentValue {had :: Maybe Plutus.Value, need :: Plutus.Value}
+  | GetBalanceFailed
+  | NoPayoutKeys
+  deriving stock (Eq, Show)
+
+labelError :: BalanceError -> Maybe a -> Either BalanceError a
 labelError label = maybe (Left label) Right
