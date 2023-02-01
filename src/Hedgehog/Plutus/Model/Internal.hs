@@ -95,9 +95,7 @@ data Tx = Tx
   , txValidRange :: !Plutus.POSIXTimeRange
   , txExtraSignatures :: !(Set Plutus.PubKeyHash)
   }
-
-instance Show Tx where
-  show Tx {} = "<tx>" -- TODO show as much usefull info as possible
+  deriving stock (Show)
 
 newtype BalancedTx = BalancedTx {getBalanced :: Balanced Tx}
   deriving newtype (Show)
@@ -134,7 +132,7 @@ data TxIn = TxIn
   { txInRef :: !Plutus.TxOutRef
   , txInScript :: !(Maybe InScript)
   }
-  deriving stock (Eq, Ord)
+  deriving stock (Eq, Ord, Show)
 
 data TxOut = TxOut
   { txOutAddress :: !Plutus.Address
@@ -142,19 +140,21 @@ data TxOut = TxOut
   , txOutDatum :: !(Maybe Plutus.Datum)
   , txOutReferenceScript :: !(Maybe Script)
   }
+  deriving stock (Show)
 
 newtype Script = Script
   { unScript :: UPLC.Program UPLC.DeBruijn PLC.DefaultUni PLC.DefaultFun ()
   }
+  deriving stock (Show)
 
 data InScript = InScript
   { inScriptSource :: ScriptSource
   , inScriptData :: Maybe (Plutus.Redeemer, Plutus.Datum)
   }
-  deriving stock (Eq, Ord)
+  deriving stock (Eq, Ord, Show)
 
 data ScriptSource = InTransaction | RefScript !Plutus.TxOutRef
-  deriving stock (Eq, Ord)
+  deriving stock (Eq, Ord, Show)
 
 instance Semigroup Tx where
   l <> r =
