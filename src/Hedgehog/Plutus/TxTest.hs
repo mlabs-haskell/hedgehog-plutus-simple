@@ -1,14 +1,31 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 
-module Hedgehog.Plutus.TxTest where
+module Hedgehog.Plutus.TxTest (
+  txTest,
+  ScriptTx (..),
+  Bad,
+  TxTest (..),
+  txForScriptTx,
+  txTestBad,
+  txTestGood,
+  txTestRight,
+  txTestTestBad,
+  txTestTestGood,
+) where
 
 import Data.Kind (Type)
 
 import Hedgehog ((===))
 import Hedgehog qualified
 
-import Hedgehog.Plutus.Adjunction
-import Hedgehog.Plutus.Tx
+import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction, left, right))
+import Hedgehog.Plutus.Tx (
+  Balanced (Unbalanced),
+  ScriptPurpose,
+  Tx,
+  TxContext,
+  scriptPurposeTx,
+ )
 
 data ScriptTx = ScriptTx
   { scriptTxPurpose :: ScriptPurpose
@@ -19,7 +36,7 @@ data ScriptTx = ScriptTx
 data family Bad ingrs
 
 txForScriptTx :: TxContext -> ScriptTx -> Tx 'Unbalanced
-txForScriptTx ctx (ScriptTx sp tx) = tx <> scriptPurposeTx ctx sp
+txForScriptTx _ctx (ScriptTx sp tx) = tx <> scriptPurposeTx sp
 
 newtype TxTest ingrs = TxTest (Adjunction (Either (Bad ingrs) ingrs) ScriptTx)
 

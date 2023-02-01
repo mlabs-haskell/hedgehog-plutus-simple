@@ -1,11 +1,34 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 
-module Hedgehog.Plutus.Tx where
+module Hedgehog.Plutus.Tx (
+  Tx (..),
+  Balanced (..),
+  TxIn (..),
+  TxOut (..),
+  Script (..),
+  InScript (..),
+  ScriptSource (..),
+  TxContext (..),
+  ScriptPurpose (..),
+  balanceTx,
+  balanceTxAsPubKey,
+  balanceTxWhere,
+  confirmBalanced,
+  Spend (..),
+  spendWhere,
+  toSimpleModelTx,
+  toLedgerTx,
+  scriptPurposeTx,
+  toLedgerScriptPurpose,
+)
+where
 
 import Control.Arrow ((>>>))
 import Control.Monad (guard, liftM2)
+
 import Data.ByteString.Short qualified as SBS
 import Data.Coerce (coerce)
+import Data.Function ((&))
 import Data.Functor (($>))
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
@@ -15,15 +38,18 @@ import Data.Set qualified as Set
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 
-import Cardano.Crypto.Hash.Class (hashToBytes)
+import Cardano.Crypto.Hash.Class (hashFromBytes, hashToBytes)
+import Cardano.Crypto.Hash.Class qualified as Hash
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
-import Cardano.Ledger.BaseTypes (Network)
+import Cardano.Ledger.BaseTypes (Network, txIxFromIntegral)
 import Cardano.Ledger.Core qualified as Core
-import Cardano.Ledger.Crypto (StandardCrypto)
+import Cardano.Ledger.Crypto (ADDRHASH, HASH, StandardCrypto)
 import Cardano.Ledger.Mary.Value qualified as MV
+import Cardano.Ledger.SafeHash qualified as SafeHash
 import Cardano.Ledger.Shelley.API.Wallet (CLI, evaluateTransactionBalance)
 import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
 import Cardano.Ledger.Shelley.TxBody (ShelleyEraTxBody)
+import Cardano.Ledger.TxIn qualified as Ledger
 
 import Plutus.Model qualified as Model
 import Plutus.Model.Fork.Cardano.Alonzo qualified as Alonzo
@@ -43,13 +69,12 @@ import PlutusLedgerApi.V1.Address qualified as Plutus
 import PlutusLedgerApi.V1.Interval qualified as Plutus
 import PlutusLedgerApi.V1.Tx (RedeemerPtr (RedeemerPtr), ScriptTag (Mint))
 import PlutusLedgerApi.V1.Value qualified as Plutus
+import PlutusLedgerApi.V2 (OutputDatum (NoOutputDatum, OutputDatum, OutputDatumHash))
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusTx.Lattice ((/\))
 
-import Data.Function ((&))
 import Hedgehog qualified
 import Hedgehog.Gen qualified as Gen
-import PlutusLedgerApi.V2 (OutputDatum (NoOutputDatum, OutputDatum, OutputDatumHash))
 
 data Balanced = Balanced | Unbalanced
 
@@ -534,11 +559,42 @@ data CoreTx
   | Babbage (Core.Tx Babbage.Era)
 
 -- | Generate the relevant transaction fragment for a 'ScriptPurpose'
-scriptPurposeTx :: TxContext -> ScriptPurpose -> Tx 'Unbalanced
-scriptPurposeTx = _
+scriptPurposeTx :: ScriptPurpose -> Tx 'Unbalanced
+scriptPurposeTx = \case
+  Spending ref inscript ->
+    mempty
+      { txInputs = Set.singleton $ TxIn ref (Just inscript)
+      }
+  Minting cs (toks, red) ->
+    mempty
+      { txMint = Map.singleton cs (toks, red)
+      }
 
 {- | Generate a ledger 'Ledger.ScriptPurpose' from a @hedgehog-plutus-simple@
  'ScriptPurpose'.
 -}
-toLedgerScriptPurpose :: ScriptPurpose -> Ledger.ScriptPurpose era
-toLedgerScriptPurpose = _
+toLedgerScriptPurpose ::
+  forall era.
+  (Hash.HashAlgorithm (ADDRHASH era)) =>
+  (Hash.HashAlgorithm (HASH era)) =>
+  ScriptPurpose ->
+  Ledger.ScriptPurpose era
+toLedgerScriptPurpose = \case
+  Spending (Plutus.TxOutRef (Plutus.TxId txIdHash) idx) _inscript ->
+    Ledger.Spending $
+      Ledger.TxIn
+        ( Ledger.TxId $
+            SafeHash.unsafeMakeSafeHash $
+              fromMaybe (error "failed to repack script hash") $
+                hashFromBytes $
+                  Plutus.fromBuiltin txIdHash
+        )
+        (fromMaybe (error "index overflow") $ txIxFromIntegral idx)
+  -- The Maybe is because the integer might not fit in a Word64
+  -- This shouldn't come up in practice
+  Minting (Plutus.CurrencySymbol sh) _ ->
+    Ledger.Minting $
+      MV.PolicyID $
+        ScriptHash $
+          fromMaybe (error "failed to repack currencySymbol to hash") $
+            hashFromBytes (Plutus.fromBuiltin sh)
