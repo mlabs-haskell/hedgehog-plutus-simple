@@ -106,7 +106,7 @@ txRunScript
       go (Proxy @(Alonzo.AlonzoEra Crypto.StandardCrypto)) params coreTx
     (Model.BabbageParams params, Babbage coreTx) ->
       go (Proxy @(Babbage.BabbageEra Crypto.StandardCrypto)) params coreTx
-    _ -> error "era mismatch"
+    _ -> error "era mismatch" -- should be unreachable unless toLedgerTx is broken
     where
       go ::
         forall (era :: Type).
