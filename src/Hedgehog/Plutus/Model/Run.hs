@@ -2,6 +2,7 @@ module Hedgehog.Plutus.Model.Run (
   submitTx,
   submitTxAs,
   submitBalancedTx,
+  SubmitError (..),
 ) where
 
 import Data.Map qualified as Map

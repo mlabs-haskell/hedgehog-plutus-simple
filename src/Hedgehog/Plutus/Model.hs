@@ -22,7 +22,9 @@ module Hedgehog.Plutus.Model (
   mintWithRed,
   scriptPurposeTx,
   submitTx,
+  submitTxAs,
   submitBalancedTx,
+  SubmitError (PSMSubmitError, NoPubKeys),
 )
 where
 
@@ -46,8 +48,10 @@ import Hedgehog.Plutus.Model.Internal (
   spendWhere,
  )
 import Hedgehog.Plutus.Model.Run (
+  SubmitError (NoPubKeys, PSMSubmitError),
   submitBalancedTx,
   submitTx,
+  submitTxAs,
  )
 import Hedgehog.Plutus.Model.TxHelpers (
   mintWithRed,
