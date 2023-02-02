@@ -21,10 +21,11 @@ module Hedgehog.Plutus.Tx (
   scriptPurposeTx,
   toLedgerScriptPurpose,
   CoreTx (..),
+  convertScript,
 )
 where
 
-import Control.Arrow ((>>>))
+import Control.Arrow (first, (>>>))
 import Control.Monad (guard, liftM2)
 
 import Data.ByteString.Short qualified as SBS
@@ -231,48 +232,50 @@ balanceTxWhere context tx predTxout predPkh = do
       Nothing -> error "balanceTx produced an unbalanced tx"
 
 getBalance :: TxContext -> Tx b -> Maybe Value
-getBalance context tx =
-  case (protocol, coreTx) of
-    (Model.AlonzoParams params, Alonzo coreTx) ->
-      cont @Alonzo.Era params coreTx
-    (Model.BabbageParams params, Babbage coreTx) ->
-      cont @Babbage.Era params coreTx
-    -- this error should be unreachable
-    _ -> error "era mismatch between balance and toLedgerTx"
-  where
-    cont ::
-      forall era.
-      ( Core.EraTx era
-      , Class.IsCardanoTx era
-      , CLI era
-      , ShelleyEraTxBody era
-      , Core.Value era ~ MV.MaryValue StandardCrypto
-      ) =>
-      Core.PParams era ->
-      Core.Tx era ->
-      Maybe Value
-    cont params coreTx = do
-      Right utxo <- pure $ Class.toUtxo mempty networkId []
-      -- TODO what should the utxo be for this?
-      pure $
-        maryToPlutus $
-          evaluateTransactionBalance @era
-            params
-            utxo
-            (const True) -- TODO is this right?
-            (Class.getTxBody coreTx)
-
-    networkId :: Network
-    networkId = Model.mockConfigNetworkId mockConfig
-
-    protocol :: Model.PParams
-    protocol = Model.mockConfigProtocol mockConfig
-
-    mockConfig :: Model.MockConfig
-    mockConfig = Model.mockConfig $ mockchain context
-
-    coreTx :: CoreTx
-    coreTx = toLedgerTx context tx
+getBalance
+  context@TxContext
+    { mockchain =
+      Model.Mock
+        { Model.mockUtxos = utxos
+        , Model.mockConfig =
+          Model.MockConfig
+            { Model.mockConfigNetworkId = networkId
+            , Model.mockConfigProtocol = protocol
+            }
+        }
+    , interestingScripts
+    }
+  tx =
+    case (protocol, toLedgerTx context tx) of
+      (Model.AlonzoParams params, Alonzo coreTx) ->
+        go @Alonzo.Era params coreTx
+      (Model.BabbageParams params, Babbage coreTx) ->
+        go @Babbage.Era params coreTx
+      -- this error should be unreachable
+      _ -> error "era mismatch between balance and toLedgerTx"
+    where
+      go ::
+        forall era.
+        ( Core.EraTx era
+        , Class.IsCardanoTx era
+        , CLI era
+        , ShelleyEraTxBody era
+        , Core.Value era ~ MV.MaryValue StandardCrypto
+        ) =>
+        Core.PParams era ->
+        Core.Tx era ->
+        Maybe Value
+      go params coreTx = do
+        let utxoMap = first (`Fork.TxIn` Nothing) <$> Map.toList utxos
+        -- TODO is this nothing right
+        Right utxo <- pure $ Class.toUtxo (Map.map convertScript interestingScripts) networkId utxoMap
+        pure $
+          maryToPlutus $
+            evaluateTransactionBalance @era
+              params
+              utxo
+              (const True) -- TODO is this right?
+              (Class.getTxBody coreTx)
 
 maryToPlutus :: MV.MaryValue StandardCrypto -> Plutus.Value
 maryToPlutus (MV.MaryValue ada rest) =

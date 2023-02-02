@@ -6,6 +6,7 @@ module Hedgehog.Plutus.TestSingleScript (
 import Data.Kind (Type)
 import GHC.Records (HasField (getField))
 
+import Control.Arrow (first)
 import Data.Maybe (isNothing, maybeToList)
 import Data.Proxy (Proxy (Proxy))
 
@@ -37,6 +38,7 @@ import Cardano.Slotting.Time qualified as Cardano
 import Plutus.Model qualified as Model
 import Plutus.Model.Fork.Cardano.Class qualified as Class
 import Plutus.Model.Fork.Ledger.TimeSlot qualified as Fork
+import Plutus.Model.Fork.Ledger.Tx qualified as Fork
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
 import PlutusCore.Evaluation.Machine.Exception qualified as PLC
 import PlutusLedgerApi.Common qualified as Plutus
@@ -48,7 +50,8 @@ import Hedgehog qualified
 
 import Hedgehog.Plutus.Tx (
   CoreTx (Alonzo, Babbage),
-  TxContext (TxContext, mockchain),
+  TxContext (TxContext, interestingScripts, mockchain),
+  convertScript,
   toLedgerScriptPurpose,
   toLedgerTx,
  )
@@ -99,7 +102,9 @@ txRunScript
                 }
             , Model.mockConfigNetworkId = networkId
             }
+        , Model.mockUtxos = utxos
         }
+    , interestingScripts
     }
   ScriptTx {scriptTx, scriptTxPurpose} = case (mockConfigProtocol, toLedgerTx ctx scriptTx) of
     (Model.AlonzoParams params, Alonzo coreTx) ->
@@ -125,8 +130,14 @@ txRunScript
         Ledger.Tx era ->
         Maybe Plutus.EvaluationError
       go _ params coreTx = do
-        Right utxo <- pure $ Class.toUtxo mempty networkId []
-        -- TODO is this empty utxo correct?
+        let utxoMap = first (`Fork.TxIn` Nothing) <$> Map.toList utxos
+        -- TODO is this Nothing correct?
+        Right utxo <-
+          pure $
+            Class.toUtxo
+              (Map.map convertScript interestingScripts)
+              networkId
+              utxoMap
         txRunScript'
           params
           ( Cardano.fixedEpochInfo
