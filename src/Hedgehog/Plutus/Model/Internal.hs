@@ -28,10 +28,11 @@ module Hedgehog.Plutus.Model.Internal (
   CoreTx (..),
   convertScript,
   BalanceError (..),
+  convertTxIn,
 )
 where
 
-import Control.Arrow (first, (>>>))
+import Control.Arrow ((>>>))
 import Control.Monad (guard, liftM2)
 
 import Data.ByteString.Short qualified as SBS
@@ -318,9 +319,19 @@ getBalance
         Core.Tx era ->
         Maybe Value
       go params coreTx = do
-        let utxoMap = first (`Fork.TxIn` Nothing) <$> Map.toList utxos
-        -- TODO is this nothing right
-        Right utxo <- pure $ Class.toUtxo (Map.map convertScript interestingScripts) networkId utxoMap
+        let utxoMap =
+              [ (txIn, txOut)
+              | txIn <- fmap (convertTxIn context) $ Set.toList $ txInputs $ getTx @bal tx
+              , let txOut =
+                      fromMaybe (error "lookup failure") $
+                        Map.lookup (Fork.txInRef txIn) utxos
+              ]
+        Right utxo <-
+          pure $
+            Class.toUtxo
+              (Map.map convertScript interestingScripts)
+              networkId
+              utxoMap
         pure $
           maryToPlutus $
             evaluateTransactionBalance @era
@@ -440,7 +451,7 @@ toSimpleModelTx ::
   MaybeBalanced bal Tx ->
   MaybeBalanced bal Model.Tx
 toSimpleModelTx
-  TxContext
+  ctx@TxContext
     { interestingScripts
     , mockchain
     , datums
@@ -461,7 +472,7 @@ toSimpleModelTx
         { Model.tx'extra = mempty
         , Model.tx'plutus =
             mempty
-              { Fork.txInputs = Set.map convertTxIn txInputs
+              { Fork.txInputs = Set.map (convertTxIn ctx) txInputs
               , Fork.txCollateral = mempty
               , -- TODO our tx type should probably support reference inputs
                 Fork.txReferenceInputs = mempty
@@ -481,7 +492,7 @@ toSimpleModelTx
                     txValidRange
               , Fork.txMintScripts =
                   Set.fromList $
-                    [ scriptToMP $ getScript $ Plutus.ScriptHash cs
+                    [ scriptToMP $ getScript ctx $ Plutus.ScriptHash cs
                     | (Plutus.CurrencySymbol cs, _) <- Map.toList txMint
                     ]
               , Fork.txSignatures =
@@ -502,20 +513,10 @@ toSimpleModelTx
               }
         }
     where
-      getScript :: Plutus.ScriptHash -> Script
-      getScript sh =
-        Map.lookup sh interestingScripts
-          & fromMaybe (error "script lookup failed")
-
       getUser :: PubKeyHash -> Model.User
       getUser pkh =
         Map.lookup pkh (Model.mockUsers mockchain)
           & fromMaybe (error "user lookup failed")
-
-      getUTxO :: Plutus.TxOutRef -> Plutus.TxOut
-      getUTxO ref =
-        Map.lookup ref (Model.mockUtxos mockchain)
-          & fromMaybe (error "utxo lookup failed")
 
       outs' :: [(Plutus.TxOut, Maybe (Plutus.DatumHash, Plutus.Datum))]
       outs' = convertTxOut <$> Vector.toList txOutputs
@@ -535,7 +536,7 @@ toSimpleModelTx
         , -- filter only the scripts being invoked
         -- by checking their address coresponds to some input
         Plutus.scriptHashAddress sh
-          `elem` [ Plutus.txOutAddress $ getUTxO $ txInRef txIn
+          `elem` [ Plutus.txOutAddress $ getUTxO ctx $ txInRef txIn
                  | txIn <- Set.toList txInputs
                  ]
         ]
@@ -579,21 +580,31 @@ toSimpleModelTx
               pure (Model.datumHash datum, datum)
           )
 
-      convertTxIn :: TxIn -> Fork.TxIn
-      convertTxIn TxIn {txInRef, txInScript} =
-        Fork.TxIn
-          { Fork.txInRef = txInRef
-          , Fork.txInType =
-              let Plutus.TxOut {Plutus.txOutAddress = Plutus.Address cred _} =
-                    getUTxO txInRef
-               in case cred of
-                    Plutus.PubKeyCredential _ -> pure Fork.ConsumePublicKeyAddress
-                    Plutus.ScriptCredential sh -> do
-                      InScript {inScriptData} <- txInScript
-                      (redeemer, datum) <- inScriptData
-                      let script = Just $ scriptToVal $ getScript sh
-                      pure $ Fork.ConsumeScriptAddress script redeemer datum
-          }
+convertTxIn :: TxContext -> TxIn -> Fork.TxIn
+convertTxIn ctx TxIn {txInRef, txInScript} =
+  Fork.TxIn
+    { Fork.txInRef = txInRef
+    , Fork.txInType =
+        let Plutus.TxOut {Plutus.txOutAddress = Plutus.Address cred _} =
+              getUTxO ctx txInRef
+         in case cred of
+              Plutus.PubKeyCredential _ -> pure Fork.ConsumePublicKeyAddress
+              Plutus.ScriptCredential sh -> do
+                InScript {inScriptData} <- txInScript
+                (redeemer, datum) <- inScriptData
+                let script = Just $ scriptToVal $ getScript ctx sh
+                pure $ Fork.ConsumeScriptAddress script redeemer datum
+    }
+
+getUTxO :: TxContext -> Plutus.TxOutRef -> Plutus.TxOut
+getUTxO TxContext {mockchain} ref =
+  Map.lookup ref (Model.mockUtxos mockchain)
+    & fromMaybe (error "utxo lookup failed")
+
+getScript :: TxContext -> Plutus.ScriptHash -> Script
+getScript TxContext {interestingScripts} sh =
+  Map.lookup sh interestingScripts
+    & fromMaybe (error "script lookup failed")
 
 -- TODO toV1 is a placeholder
 -- our script type should probably know the version
