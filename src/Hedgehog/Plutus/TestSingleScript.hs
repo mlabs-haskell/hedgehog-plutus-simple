@@ -6,12 +6,12 @@ module Hedgehog.Plutus.TestSingleScript (
 import Data.Kind (Type)
 import GHC.Records (HasField (getField))
 
-import Control.Arrow (first)
-import Data.Maybe (isNothing, maybeToList)
+import Data.Maybe (fromMaybe, isNothing, maybeToList)
 import Data.Proxy (Proxy (Proxy))
 
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Time.Clock.POSIX qualified as Clock
 
@@ -50,8 +50,10 @@ import Hedgehog qualified
 
 import Hedgehog.Plutus.Tx (
   CoreTx (Alonzo, Babbage),
+  Tx (txInputs),
   TxContext (TxContext, interestingScripts, mockchain),
   convertScript,
+  convertTxIn,
   toLedgerScriptPurpose,
   toLedgerTx,
  )
@@ -130,8 +132,13 @@ txRunScript
         Ledger.Tx era ->
         Maybe Plutus.EvaluationError
       go _ params coreTx = do
-        let utxoMap = first (`Fork.TxIn` Nothing) <$> Map.toList utxos
-        -- TODO is this Nothing correct?
+        let utxoMap =
+              [ (txIn, txOut)
+              | txIn <- fmap (convertTxIn ctx) $ Set.toList $ txInputs scriptTx
+              , let txOut =
+                      fromMaybe (error "lookup failure") $
+                        Map.lookup (Fork.txInRef txIn) utxos
+              ]
         Right utxo <-
           pure $
             Class.toUtxo
