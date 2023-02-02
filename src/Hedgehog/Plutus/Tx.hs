@@ -43,7 +43,7 @@ import Data.Vector qualified as Vector
 import Cardano.Crypto.Hash.Class (hashFromBytes, hashToBytes)
 import Cardano.Crypto.Hash.Class qualified as Hash
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
-import Cardano.Ledger.BaseTypes (Network, txIxFromIntegral)
+import Cardano.Ledger.BaseTypes (txIxFromIntegral)
 import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.Crypto (ADDRHASH, HASH, StandardCrypto)
 import Cardano.Ledger.Mary.Value qualified as MV
