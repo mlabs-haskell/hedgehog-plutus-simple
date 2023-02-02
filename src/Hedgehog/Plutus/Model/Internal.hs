@@ -238,10 +238,6 @@ balanceTxWhere ::
 balanceTxWhere context tx predTxout predPkh = do
   let mock = mockchain context
   (valueIn, valueOut) <- labelError GetBalanceFailed $ getValueInAndOut @'False context tx
-  -- TODO we may want to change this to something like
-  -- Either FailReason (Tx 'Balanced)
-  -- to distinguish things like failure by tx lookup
-  -- and failure by not enough value at keys
   let extra = posDif valueIn valueOut
   let deficit = posDif valueOut valueIn
   let alreadySpending txOut =
@@ -326,7 +322,8 @@ getBalance
             evaluateTransactionBalance @era
               params
               utxo
-              (const True) -- TODO is this right?
+              (const True)
+              -- if psm starts supporting staking taking this would need to be fixed
               (Class.getTxBody coreTx)
 
 maryToPlutus :: MV.MaryValue StandardCrypto -> Plutus.Value
@@ -487,10 +484,13 @@ toSimpleModelTx
               , Fork.txSignatures =
                   Map.fromList
                     [ (pkh, Model.userSignKey $ getUser pkh)
-                    | pkh <- Set.toList txExtraSignatures
-                    -- TODO if these are "extra" are the non-extra just
-                    -- the ones required by the inputs?
-                    -- If so add them here
+                    | pkh <-
+                        [ pkh
+                        | TxIn ref _ <- Set.toList txInputs
+                        , Plutus.Address (Plutus.PubKeyCredential pkh) _ <-
+                            pure $ Plutus.txOutAddress $ getUTxO ref
+                        ]
+                          <> Set.toList txExtraSignatures
                     ]
               , Fork.txRedeemers =
                   Map.fromList $
