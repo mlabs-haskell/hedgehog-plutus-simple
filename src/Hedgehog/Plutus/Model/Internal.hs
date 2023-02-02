@@ -1,8 +1,13 @@
-{-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
-module Hedgehog.Plutus.Tx (
+module Hedgehog.Plutus.Model.Internal (
   Tx (..),
-  Balanced (..),
+  BalancedTx (..),
+  forgetBlanced,
+  Balanced,
+  MaybeBalanced,
+  IsBool,
+  getTx,
   TxIn (..),
   TxOut (..),
   Script (..),
@@ -22,6 +27,7 @@ module Hedgehog.Plutus.Tx (
   toLedgerScriptPurpose,
   CoreTx (..),
   convertScript,
+  BalanceError (..),
 )
 where
 
@@ -78,10 +84,8 @@ import PlutusTx.Lattice ((/\))
 import Hedgehog qualified
 import Hedgehog.Gen qualified as Gen
 
-data Balanced = Balanced | Unbalanced
-
 -- | An idealized transaction type, used throughout @hedgehog-plutus-simple@.
-data Tx (bal :: Balanced) = Tx
+data Tx = Tx
   { txInputs :: !(Set TxIn)
   , txOutputs :: !(Vector TxOut)
   , txMint ::
@@ -93,12 +97,44 @@ data Tx (bal :: Balanced) = Tx
   , txValidRange :: !Plutus.POSIXTimeRange
   , txExtraSignatures :: !(Set Plutus.PubKeyHash)
   }
+  deriving stock (Show)
+
+newtype BalancedTx = BalancedTx {getBalanced :: Balanced Tx}
+  deriving newtype (Show)
+
+newtype Balanced tx = UnsafeBalance tx
+  deriving newtype (Show)
+
+type family MaybeBalanced (balanced :: Bool) tx where
+  MaybeBalanced 'True tx = Balanced tx
+  MaybeBalanced 'False tx = tx
+
+{- | IsBool has instances for 'True and 'False
+ IsBool bal is required by some functions
+ to convince ghc the tx either is or isn't balanced
+-}
+class IsBool bal where
+  -- | Get a plain tx out of a Balanced tx or MaybeBalanced bal tx
+  getTx :: forall tx. MaybeBalanced bal tx -> tx
+
+  unsafeMBalance :: forall tx. tx -> MaybeBalanced bal tx
+
+forgetBlanced :: BalancedTx -> Tx
+forgetBlanced = getTx @'True . getBalanced
+
+instance IsBool 'False where
+  getTx = id
+  unsafeMBalance = id
+
+instance IsBool 'True where
+  getTx (UnsafeBalance tx) = tx
+  unsafeMBalance = UnsafeBalance
 
 data TxIn = TxIn
   { txInRef :: !Plutus.TxOutRef
   , txInScript :: !(Maybe InScript)
   }
-  deriving stock (Eq, Ord)
+  deriving stock (Eq, Ord, Show)
 
 data TxOut = TxOut
   { txOutAddress :: !Plutus.Address
@@ -106,21 +142,23 @@ data TxOut = TxOut
   , txOutDatum :: !(Maybe Plutus.Datum)
   , txOutReferenceScript :: !(Maybe Script)
   }
+  deriving stock (Show)
 
 newtype Script = Script
   { unScript :: UPLC.Program UPLC.DeBruijn PLC.DefaultUni PLC.DefaultFun ()
   }
+  deriving stock (Show)
 
 data InScript = InScript
   { inScriptSource :: ScriptSource
   , inScriptData :: Maybe (Plutus.Redeemer, Plutus.Datum)
   }
-  deriving stock (Eq, Ord)
+  deriving stock (Eq, Ord, Show)
 
 data ScriptSource = InTransaction | RefScript !Plutus.TxOutRef
-  deriving stock (Eq, Ord)
+  deriving stock (Eq, Ord, Show)
 
-instance Semigroup (Tx bal) where
+instance Semigroup Tx where
   l <> r =
     Tx
       { txInputs = txInputs l <> txInputs r
@@ -131,7 +169,7 @@ instance Semigroup (Tx bal) where
       , txExtraSignatures = txExtraSignatures l <> txExtraSignatures r
       }
 
-instance Monoid (Tx bal) where
+instance Monoid Tx where
   mempty =
     Tx
       { txInputs = Set.empty
@@ -163,11 +201,20 @@ data ScriptPurpose
 
   In the future, hps should support custom balancers.
 -}
-balanceTx :: TxContext -> Tx 'Unbalanced -> Maybe (Hedgehog.Gen (Tx 'Balanced))
+balanceTx ::
+  TxContext ->
+  Tx ->
+  Either BalanceError (Hedgehog.Gen BalancedTx)
 balanceTx context tx = balanceTxWhere context tx (const True) (const True)
 
--- | as balanceTx but only uses txOuts belonging to a particular PubKeyHash and always sends change to that PubKeyHash
-balanceTxAsPubKey :: TxContext -> Tx 'Unbalanced -> PubKeyHash -> Maybe (Hedgehog.Gen (Tx 'Balanced))
+{- | as balanceTx but only uses txOuts belonging to a particular
+ PubKeyHash and always sends change to that PubKeyHash
+-}
+balanceTxAsPubKey ::
+  TxContext ->
+  Tx ->
+  PubKeyHash ->
+  Either BalanceError (Hedgehog.Gen BalancedTx)
 balanceTxAsPubKey context tx pkh =
   balanceTxWhere
     context
@@ -184,13 +231,13 @@ balanceTxAsPubKey context tx pkh =
 -- | as balanceTx but with additional predicates about which TxOuts and PubKeyHashs can be used
 balanceTxWhere ::
   TxContext ->
-  Tx 'Unbalanced ->
+  Tx ->
   (Plutus.TxOut -> Bool) ->
   (Plutus.PubKeyHash -> Bool) ->
-  Maybe (Hedgehog.Gen (Tx 'Balanced))
+  Either BalanceError (Hedgehog.Gen BalancedTx)
 balanceTxWhere context tx predTxout predPkh = do
   let mock = mockchain context
-  (valueIn, valueOut) <- getValueInAndOut context tx
+  (valueIn, valueOut) <- labelError GetBalanceFailed $ getValueInAndOut @'False context tx
   -- TODO we may want to change this to something like
   -- Either FailReason (Tx 'Balanced)
   -- to distinguish things like failure by tx lookup
@@ -205,7 +252,7 @@ balanceTxWhere context tx predTxout predPkh = do
             ]
   spendGen <- spendWhere mock deficit (liftM2 (&&) (not . alreadySpending) predTxout)
   let payoutKeys = filter predPkh $ Map.keys $ Model.mockUsers mock
-  guard $ not $ null payoutKeys
+  labelError NoPayoutKeys $ guard $ not $ null payoutKeys
   pure $ do
     Spend outRefs moreChange <- spendGen
     payOutKey <- Gen.element payoutKeys
@@ -231,7 +278,12 @@ balanceTxWhere context tx predTxout predPkh = do
       Just tx -> pure tx
       Nothing -> error "balanceTx produced an unbalanced tx"
 
-getBalance :: TxContext -> Tx b -> Maybe Value
+getBalance ::
+  forall (bal :: Bool).
+  IsBool bal =>
+  TxContext ->
+  MaybeBalanced bal Tx ->
+  Maybe Value
 getBalance
   context@TxContext
     { mockchain =
@@ -246,7 +298,7 @@ getBalance
     , interestingScripts
     }
   tx =
-    case (protocol, toLedgerTx context tx) of
+    case (protocol, getTx @bal $ toLedgerTx @bal context tx) of
       (Model.AlonzoParams params, Alonzo coreTx) ->
         go @Alonzo.Era params coreTx
       (Model.BabbageParams params, Babbage coreTx) ->
@@ -291,17 +343,22 @@ maryToPlutus (MV.MaryValue ada rest) =
   where
     unScriptHash (ScriptHash h) = h -- The constructor doesn't have this
 
-getValueInAndOut :: TxContext -> Tx bal -> Maybe (Value, Value)
+getValueInAndOut ::
+  forall (bal :: Bool).
+  IsBool bal =>
+  TxContext ->
+  MaybeBalanced bal Tx ->
+  Maybe (Value, Value)
 getValueInAndOut context tx = do
-  val <- getBalance context tx
+  val <- getBalance @bal context tx
   pure (posDif val mempty, posDif mempty val)
 
 posDif :: Plutus.Value -> Plutus.Value -> Plutus.Value
 posDif = Plutus.unionWith (fmap (max 0) . (-))
 
-confirmBalanced :: TxContext -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
+confirmBalanced :: TxContext -> Tx -> Maybe BalancedTx
 confirmBalanced context tx =
-  (getBalance context tx >>= guard . (== mempty)) $> coerce tx
+  (getBalance @'False context tx >>= guard . (== mempty)) $> BalancedTx (UnsafeBalance tx)
 
 data Spend = Spend
   { spendUtxos :: Vector Plutus.TxOutRef
@@ -322,13 +379,20 @@ spendWhere ::
   Model.Mock ->
   Plutus.Value ->
   (Plutus.TxOut -> Bool) ->
-  Maybe (Hedgehog.Gen Spend)
+  Either BalanceError (Hedgehog.Gen Spend)
 spendWhere mock val pred = do
   let utxos = Map.toList $ Map.filter (liftM2 (&&) nonSpecial pred) $ Model.mockUtxos mock
-  guard $ not $ null utxos
-  detSpend <- toRes $ foldl go (val, Spend Vector.empty mempty) utxos
+  labelError (InsufficentValue {had = Nothing, need = val}) $ guard $ not $ null utxos
+  detSpend <-
+    labelError
+      InsufficentValue
+        { had = Just $ mconcat $ Plutus.txOutValue . snd <$> utxos
+        , need = val
+        }
+      $ toRes
+      $ foldl go (val, Spend Vector.empty mempty) utxos
   -- create a deterministic spend to test that balance is possible
-  Just $ do
+  pure $ do
     newUtxos <- Gen.shuffle utxos
     let spend = toRes $ foldl go (val, Spend Vector.empty mempty) newUtxos
     case spend of
@@ -369,65 +433,74 @@ spendWhere mock val pred = do
 {- | Generate a @plutus-simple-model@ 'Model.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
-toSimpleModelTx :: TxContext -> Tx bal -> Model.Tx
+toSimpleModelTx ::
+  forall (bal :: Bool).
+  IsBool bal =>
+  TxContext ->
+  MaybeBalanced bal Tx ->
+  MaybeBalanced bal Model.Tx
 toSimpleModelTx
   TxContext
     { interestingScripts
     , mockchain
     , datums
     }
-  Tx
-    { txInputs
-    , txOutputs
-    , txMint
-    , txFee
-    , txValidRange
-    , txExtraSignatures
-    } =
-    Model.Tx
-      { Model.tx'extra = mempty
-      , Model.tx'plutus =
-          mempty
-            { Fork.txInputs = Set.map convertTxIn txInputs
-            , Fork.txCollateral = mempty
-            , -- TODO our tx type should probably support reference inputs
-              Fork.txReferenceInputs = mempty
-            , Fork.txOutputs = outs
-            , Fork.txCollateralReturn = Nothing
-            , Fork.txTotalCollateral = Nothing
-            , Fork.txMint =
-                mconcat
-                  [ singleton cs tn amt
-                  | (cs, (toks, _reds)) <- Map.toList txMint
-                  , (tn, amt) <- Map.toList toks
-                  ]
-            , Fork.txFee = txFee
-            , Fork.txValidRange =
-                Time.posixTimeRangeToContainedSlotRange
-                  (Model.mockConfigSlotConfig $ Model.mockConfig mockchain)
-                  txValidRange
-            , Fork.txMintScripts =
-                Set.fromList $
-                  [ scriptToMP $ getScript $ Plutus.ScriptHash cs
-                  | (Plutus.CurrencySymbol cs, _) <- Map.toList txMint
-                  ]
-            , Fork.txSignatures =
-                Map.fromList
-                  [ (pkh, Model.userSignKey $ getUser pkh)
-                  | pkh <- Set.toList txExtraSignatures
-                  -- TODO if these are "extra" are the non-extra just
-                  -- the ones required by the inputs?
-                  -- If so add them here
-                  ]
-            , Fork.txRedeemers =
-                Map.fromList $
-                  zip
-                    [RedeemerPtr Mint i | i <- [0 ..]] -- TODO is this correct?
-                    [red | (_, (_, red)) <- Map.toList txMint]
-            , Fork.txData = txData
-            , Fork.txScripts = Map.fromList $ zip hashes scripts
-            }
-      }
+  ( getTx @bal ->
+      ( Tx
+          { txInputs
+          , txOutputs
+          , txMint
+          , txFee
+          , txValidRange
+          , txExtraSignatures
+          }
+        )
+    ) =
+    unsafeMBalance @bal $
+      Model.Tx
+        { Model.tx'extra = mempty
+        , Model.tx'plutus =
+            mempty
+              { Fork.txInputs = Set.map convertTxIn txInputs
+              , Fork.txCollateral = mempty
+              , -- TODO our tx type should probably support reference inputs
+                Fork.txReferenceInputs = mempty
+              , Fork.txOutputs = outs
+              , Fork.txCollateralReturn = Nothing
+              , Fork.txTotalCollateral = Nothing
+              , Fork.txMint =
+                  mconcat
+                    [ singleton cs tn amt
+                    | (cs, (toks, _reds)) <- Map.toList txMint
+                    , (tn, amt) <- Map.toList toks
+                    ]
+              , Fork.txFee = txFee
+              , Fork.txValidRange =
+                  Time.posixTimeRangeToContainedSlotRange
+                    (Model.mockConfigSlotConfig $ Model.mockConfig mockchain)
+                    txValidRange
+              , Fork.txMintScripts =
+                  Set.fromList $
+                    [ scriptToMP $ getScript $ Plutus.ScriptHash cs
+                    | (Plutus.CurrencySymbol cs, _) <- Map.toList txMint
+                    ]
+              , Fork.txSignatures =
+                  Map.fromList
+                    [ (pkh, Model.userSignKey $ getUser pkh)
+                    | pkh <- Set.toList txExtraSignatures
+                    -- TODO if these are "extra" are the non-extra just
+                    -- the ones required by the inputs?
+                    -- If so add them here
+                    ]
+              , Fork.txRedeemers =
+                  Map.fromList $
+                    zip
+                      [RedeemerPtr Mint i | i <- [0 ..]] -- TODO is this correct?
+                      [red | (_, (_, red)) <- Map.toList txMint]
+              , Fork.txData = txData
+              , Fork.txScripts = Map.fromList $ zip hashes scripts
+              }
+        }
     where
       getScript :: Plutus.ScriptHash -> Script
       getScript sh =
@@ -536,8 +609,13 @@ scriptToVal = coerce . convertScript
 {- | Generate a ledger 'Ledger.Tx' from a @hedgehog-plutus-simple@
  'Tx'. This should automatically add neccesary scripts and signatures.
 -}
-toLedgerTx :: TxContext -> Tx bal -> CoreTx
-toLedgerTx context tx =
+toLedgerTx ::
+  forall (bal :: Bool).
+  IsBool bal =>
+  TxContext ->
+  MaybeBalanced bal Tx ->
+  MaybeBalanced bal CoreTx
+toLedgerTx context tx = unsafeMBalance @bal @CoreTx $
   case Model.mockConfigProtocol $ Model.mockConfig (mockchain context) of
     Model.AlonzoParams (params :: Core.PParams Alonzo.Era) ->
       Alonzo $ cont params
@@ -550,7 +628,7 @@ toLedgerTx context tx =
         (Map.map convertScript $ interestingScripts context)
         (Model.mockConfigNetworkId $ Model.mockConfig $ mockchain context)
         params
-        (toSimpleModelTx context tx)
+        (getTx @bal $ toSimpleModelTx @bal context tx)
         & \case
           Left e -> error ("toLedgerTx failed with:" <> show e)
           Right tx -> tx
@@ -563,7 +641,7 @@ data CoreTx
   | Babbage (Core.Tx Babbage.Era)
 
 -- | Generate the relevant transaction fragment for a 'ScriptPurpose'
-scriptPurposeTx :: ScriptPurpose -> Tx 'Unbalanced
+scriptPurposeTx :: ScriptPurpose -> Tx
 scriptPurposeTx = \case
   Spending ref inscript ->
     mempty
@@ -579,8 +657,9 @@ scriptPurposeTx = \case
 -}
 toLedgerScriptPurpose ::
   forall era.
-  (Hash.HashAlgorithm (ADDRHASH era)) =>
-  (Hash.HashAlgorithm (HASH era)) =>
+  ( Hash.HashAlgorithm (ADDRHASH era)
+  , Hash.HashAlgorithm (HASH era)
+  ) =>
   ScriptPurpose ->
   Ledger.ScriptPurpose era
 toLedgerScriptPurpose = \case
@@ -602,3 +681,13 @@ toLedgerScriptPurpose = \case
         ScriptHash $
           fromMaybe (error "failed to repack currencySymbol to hash") $
             hashFromBytes (Plutus.fromBuiltin sh)
+
+data BalanceError
+  = -- The maybe distinguishes no utxos at all from no value
+    InsufficentValue {had :: Maybe Plutus.Value, need :: Plutus.Value}
+  | GetBalanceFailed
+  | NoPayoutKeys
+  deriving stock (Eq, Show)
+
+labelError :: BalanceError -> Maybe a -> Either BalanceError a
+labelError label = maybe (Left label) Right

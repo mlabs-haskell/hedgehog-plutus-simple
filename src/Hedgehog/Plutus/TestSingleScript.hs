@@ -48,13 +48,13 @@ import UntypedPlutusCore.Evaluation.Machine.Cek qualified as UPLC
 import Hedgehog ((===))
 import Hedgehog qualified
 
-import Hedgehog.Plutus.Tx (
+import Hedgehog.Plutus.Model (
   CoreTx (Alonzo, Babbage),
   TxContext (TxContext, interestingScripts, mockchain),
-  convertScript,
   toLedgerScriptPurpose,
   toLedgerTx,
  )
+import Hedgehog.Plutus.Model.Internal (convertScript)
 import Hedgehog.Plutus.TxTest (
   Bad,
   ScriptTx (ScriptTx, scriptTx, scriptTxPurpose),
@@ -106,12 +106,13 @@ txRunScript
         }
     , interestingScripts
     }
-  ScriptTx {scriptTx, scriptTxPurpose} = case (mockConfigProtocol, toLedgerTx ctx scriptTx) of
-    (Model.AlonzoParams params, Alonzo coreTx) ->
-      go (Proxy @(Alonzo.AlonzoEra Crypto.StandardCrypto)) params coreTx
-    (Model.BabbageParams params, Babbage coreTx) ->
-      go (Proxy @(Babbage.BabbageEra Crypto.StandardCrypto)) params coreTx
-    _ -> error "era mismatch" -- should be unreachable unless toLedgerTx is broken
+  ScriptTx {scriptTx, scriptTxPurpose} =
+    case (mockConfigProtocol, toLedgerTx @'False ctx scriptTx) of
+      (Model.AlonzoParams params, Alonzo coreTx) ->
+        go (Proxy @(Alonzo.AlonzoEra Crypto.StandardCrypto)) params coreTx
+      (Model.BabbageParams params, Babbage coreTx) ->
+        go (Proxy @(Babbage.BabbageEra Crypto.StandardCrypto)) params coreTx
+      _ -> error "era mismatch" -- should be unreachable unless toLedgerTx is broken
     where
       go ::
         forall (era :: Type).

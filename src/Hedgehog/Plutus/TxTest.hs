@@ -19,8 +19,7 @@ import Hedgehog ((===))
 import Hedgehog qualified
 
 import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction, left, right))
-import Hedgehog.Plutus.Tx (
-  Balanced (Unbalanced),
+import Hedgehog.Plutus.Model (
   ScriptPurpose,
   Tx,
   TxContext,
@@ -29,13 +28,13 @@ import Hedgehog.Plutus.Tx (
 
 data ScriptTx = ScriptTx
   { scriptTxPurpose :: ScriptPurpose
-  , scriptTx :: Tx 'Unbalanced
+  , scriptTx :: Tx
   -- ^ The remainder of the transaction, not including the purposes's mint/spend
   }
 
 data family Bad ingrs
 
-txForScriptTx :: TxContext -> ScriptTx -> Tx 'Unbalanced
+txForScriptTx :: TxContext -> ScriptTx -> Tx
 txForScriptTx _ctx (ScriptTx sp tx) = tx <> scriptPurposeTx sp
 
 newtype TxTest ingrs = TxTest (Adjunction (Either (Bad ingrs) ingrs) ScriptTx)
