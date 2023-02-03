@@ -29,6 +29,7 @@ module Hedgehog.Plutus.Model.Internal (
   convertScript,
   BalanceError (..),
   convertTxIn,
+  makeUtxo,
 )
 where
 
@@ -58,6 +59,7 @@ import Cardano.Ledger.SafeHash qualified as SafeHash
 import Cardano.Ledger.Shelley.API.Wallet (CLI, evaluateTransactionBalance)
 import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
 import Cardano.Ledger.Shelley.TxBody (ShelleyEraTxBody)
+import Cardano.Ledger.Shelley.UTxO qualified as Ledger
 import Cardano.Ledger.TxIn qualified as Ledger
 
 import Plutus.Model qualified as Model
@@ -285,14 +287,11 @@ getBalance
   context@TxContext
     { mockchain =
       Model.Mock
-        { Model.mockUtxos = utxos
-        , Model.mockConfig =
+        { Model.mockConfig =
           Model.MockConfig
-            { Model.mockConfigNetworkId = networkId
-            , Model.mockConfigProtocol = protocol
+            { Model.mockConfigProtocol = protocol
             }
         }
-    , interestingScripts
     }
   tx =
     case (protocol, getTx @bal $ toLedgerTx @bal context tx) of
@@ -315,19 +314,7 @@ getBalance
         Core.Tx era ->
         Maybe Value
       go params coreTx = do
-        let utxoMap =
-              [ (txIn, txOut)
-              | txIn <- fmap (convertTxIn context) $ Set.toList $ txInputs $ getTx @bal tx
-              , let txOut =
-                      fromMaybe (error "lookup failure") $
-                        Map.lookup (Fork.txInRef txIn) utxos
-              ]
-        Right utxo <-
-          pure $
-            Class.toUtxo
-              (Map.map convertScript interestingScripts)
-              networkId
-              utxoMap
+        utxo <- makeUtxo context (getTx @bal tx)
         pure $
           maryToPlutus $
             evaluateTransactionBalance @era
@@ -499,7 +486,7 @@ toSimpleModelTx
                         [ pkh
                         | TxIn ref _ <- Set.toList txInputs
                         , Plutus.Address (Plutus.PubKeyCredential pkh) _ <-
-                            pure $ Plutus.txOutAddress $ getUTxO ref
+                            pure $ Plutus.txOutAddress $ getUTxO ctx ref
                         ]
                           <> Set.toList txExtraSignatures
                     ]
@@ -702,3 +689,35 @@ data BalanceError
 
 labelError :: BalanceError -> Maybe a -> Either BalanceError a
 labelError label = maybe (Left label) Right
+
+makeUtxo ::
+  forall era.
+  Class.IsCardanoTx era =>
+  TxContext ->
+  Tx ->
+  Maybe (Ledger.UTxO era)
+makeUtxo
+  ctx@TxContext
+    { interestingScripts
+    , mockchain =
+      Model.Mock
+        { Model.mockUtxos = utxos
+        , Model.mockConfig =
+          Model.MockConfig
+            { Model.mockConfigNetworkId = networkId
+            }
+        }
+    }
+  Tx {txInputs} =
+    Class.toUtxo @era
+      (Map.map convertScript interestingScripts)
+      networkId
+      [ (txIn, txOut)
+      | txIn <- convertTxIn ctx <$> Set.toList txInputs
+      , let txOut =
+              fromMaybe (error "lookup failure") $
+                Map.lookup (Fork.txInRef txIn) utxos
+      ]
+      & \case
+        Left _ -> Nothing
+        Right utxo -> Just utxo

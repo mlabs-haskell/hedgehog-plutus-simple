@@ -6,12 +6,11 @@ module Hedgehog.Plutus.TestSingleScript (
 import Data.Kind (Type)
 import GHC.Records (HasField (getField))
 
-import Data.Maybe (fromMaybe, isNothing, maybeToList)
+import Data.Maybe (isNothing, maybeToList)
 import Data.Proxy (Proxy (Proxy))
 
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Time.Clock.POSIX qualified as Clock
 
@@ -38,7 +37,6 @@ import Cardano.Slotting.Time qualified as Cardano
 import Plutus.Model qualified as Model
 import Plutus.Model.Fork.Cardano.Class qualified as Class
 import Plutus.Model.Fork.Ledger.TimeSlot qualified as Fork
-import Plutus.Model.Fork.Ledger.Tx qualified as Fork
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
 import PlutusCore.Evaluation.Machine.Exception qualified as PLC
 import PlutusLedgerApi.Common qualified as Plutus
@@ -50,12 +48,11 @@ import Hedgehog qualified
 
 import Hedgehog.Plutus.Model (
   CoreTx (Alonzo, Babbage),
-  Tx (txInputs),
-  TxContext (TxContext, interestingScripts, mockchain),
+  TxContext (TxContext, mockchain),
   toLedgerScriptPurpose,
   toLedgerTx,
  )
-import Hedgehog.Plutus.Model.Internal (convertScript, convertTxIn)
+import Hedgehog.Plutus.Model.Internal (makeUtxo)
 import Hedgehog.Plutus.TxTest (
   Bad,
   ScriptTx (ScriptTx, scriptTx, scriptTxPurpose),
@@ -101,11 +98,8 @@ txRunScript
                 { Fork.scSlotLength
                 , Fork.scSlotZeroTime
                 }
-            , Model.mockConfigNetworkId = networkId
             }
-        , Model.mockUtxos = utxos
         }
-    , interestingScripts
     }
   ScriptTx {scriptTx, scriptTxPurpose} =
     case (mockConfigProtocol, toLedgerTx @'False ctx scriptTx) of
@@ -132,19 +126,7 @@ txRunScript
         Ledger.Tx era ->
         Maybe Plutus.EvaluationError
       go _ params coreTx = do
-        let utxoMap =
-              [ (txIn, txOut)
-              | txIn <- fmap (convertTxIn ctx) $ Set.toList $ txInputs scriptTx
-              , let txOut =
-                      fromMaybe (error "lookup failure") $
-                        Map.lookup (Fork.txInRef txIn) utxos
-              ]
-        Right utxo <-
-          pure $
-            Class.toUtxo
-              (Map.map convertScript interestingScripts)
-              networkId
-              utxoMap
+        utxo <- makeUtxo ctx scriptTx
         txRunScript'
           params
           ( Cardano.fixedEpochInfo
