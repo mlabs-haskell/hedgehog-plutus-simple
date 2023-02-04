@@ -18,12 +18,14 @@ import Lens.Micro ((^.))
 
 import Cardano.Ledger.Alonzo qualified as Alonzo
 import Cardano.Ledger.Alonzo.Data qualified as Ledger
+import Cardano.Ledger.Alonzo.PParams (_costmdls, _protocolVersion)
 import Cardano.Ledger.Alonzo.PlutusScriptApi qualified as Alonzo
 import Cardano.Ledger.Alonzo.Scripts qualified as Alonzo
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.Alonzo.TxInfo qualified as Alonzo
 import Cardano.Ledger.Alonzo.TxWitness qualified as Ledger
 import Cardano.Ledger.Babbage qualified as Babbage
+import Cardano.Ledger.Babbage.PParams (_costmdls, _protocolVersion)
 import Cardano.Ledger.BaseTypes qualified as Ledger
 import Cardano.Ledger.Core qualified as Ledger
 import Cardano.Ledger.Crypto qualified as Crypto
