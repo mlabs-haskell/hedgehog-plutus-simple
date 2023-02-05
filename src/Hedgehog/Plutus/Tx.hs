@@ -9,8 +9,6 @@ import Data.Set qualified as Set
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 
-import Cardano.Ledger.Alonzo.Tx qualified as Ledger
-import Cardano.Ledger.Core qualified as Ledger
 import PlutusCore qualified as PLC
 import PlutusLedgerApi.V1.Interval qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus
@@ -19,7 +17,13 @@ import UntypedPlutusCore qualified as UPLC
 
 import Plutus.Model qualified as Model
 
-import Hedgehog qualified
+data ScriptPurpose
+  = SpendingPurpose
+      { spendingRef :: Plutus.TxOutRef
+      }
+  | MintingPurpose
+      { mintingSymbol :: Plutus.CurrencySymbol
+      }
 
 data Balanced = Balanced | Unbalanced
 
@@ -84,72 +88,3 @@ instance Monoid (Tx bal) where
       , txValidRange = Plutus.never
       , txExtraSignatures = Set.empty
       }
-
-data TxContext = TxContext
-  { mockchain :: !Model.Mock
-  , interestingScripts :: !(Map Plutus.ScriptHash Script)
-  , datums :: !(Map Plutus.DatumHash Plutus.Datum)
-  }
-
-data ScriptPurpose
-  = Minting
-      Plutus.CurrencySymbol
-      (Map Plutus.TokenName Integer, Plutus.Redeemer)
-  | Spending Plutus.TxOutRef InScript
-
-{- | Balance a transaction. Algorithm:
-
- * Find the smallest set of 'non-special' UTxOs (PubKey locked no datum) that
-   cover the transaction balance.
-
- * Pay change, if any, to a random PubKeyHash.
-
-  In the future, hps should support custom balancers.
--}
-balanceTx :: Model.Mock -> Tx 'Unbalanced -> Maybe (Hedgehog.Gen (Tx 'Balanced))
-balanceTx = _
-
-confirmBalanced :: Model.Mock -> Tx 'Unbalanced -> Maybe (Tx 'Balanced)
-confirmBalanced = _
-
-data Spend = Spend
-  { spendUtxos :: Vector Plutus.TxOutRef
-  , excess :: Plutus.Value
-  }
-
-{- | Try to satisfy a value from available 'non-special' UTxOs.
-
-A UTxO is 'non-special' iff:
-
-* It is locked by a PubKey
-
-* It does not hold a datum
-
-The refs need not be held by the same PubKey.
--}
-spend :: Model.Mock -> Plutus.Value -> Maybe (Hedgehog.Gen Spend)
-spend = _
-
-{- | Generate a @plutus-simple-model@ 'Model.Tx' from a @hedgehog-plutus-simple@
- 'Tx'. This should automatically add neccesary scripts and signatures.
--}
-toSimpleModelTx :: TxContext -> Tx 'Balanced -> Model.Tx
-toSimpleModelTx = _
-
--- 'era' can be constrained as neccesary.
-
-{- | Generate a ledger 'Ledger.Tx' from a @hedgehog-plutus-simple@
- 'Tx'. This should automatically add neccesary scripts and signatures.
--}
-toLedgerTx :: TxContext -> Tx bal -> Ledger.Tx era
-toLedgerTx = _
-
--- | Generate the relevant transaction fragment for a 'ScriptPurpose'
-scriptPurposeTx :: TxContext -> ScriptPurpose -> Tx 'Unbalanced
-scriptPurposeTx = _
-
-{- | Generate a ledger 'Ledger.ScriptPurpose' from a @hedgehog-plutus-simple@
- 'ScriptPurpose'.
--}
-toLedgerScriptPurpose :: ScriptPurpose -> Ledger.ScriptPurpose era
-toLedgerScriptPurpose = _

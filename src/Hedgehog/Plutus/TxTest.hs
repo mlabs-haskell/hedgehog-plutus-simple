@@ -8,25 +8,17 @@ import Hedgehog ((===))
 import Hedgehog qualified
 
 import Hedgehog.Plutus.Adjunction
-import Hedgehog.Plutus.Tx
 
-data ScriptTx = ScriptTx
-  { scriptTxPurpose :: ScriptPurpose
-  , scriptTx :: Tx 'Unbalanced
-  -- ^ The remainder of the transaction, not including the purposes's mint/spend
-  }
+import Plutus.Model qualified as Model
 
 data family Bad ingrs
 
-txForScriptTx :: TxContext -> ScriptTx -> Tx 'Unbalanced
-txForScriptTx ctx (ScriptTx sp tx) = tx <> scriptPurposeTx ctx sp
-
-newtype TxTest ingrs = TxTest (Adjunction ScriptTx (Either (Bad ingrs) ingrs))
+newtype TxTest ingrs = TxTest (Adjunction Model.Tx (Either (Bad ingrs) ingrs))
 
 txTest ::
-  (Bad ingrs -> ScriptTx) ->
-  (ingrs -> ScriptTx) ->
-  (ScriptTx -> Either (Bad ingrs) ingrs) ->
+  (Bad ingrs -> Model.Tx) ->
+  (ingrs -> Model.Tx) ->
+  (Model.Tx -> Either (Bad ingrs) ingrs) ->
   TxTest ingrs
 txTest b g r =
   TxTest $
@@ -39,20 +31,20 @@ txTestBad ::
   forall (ingrs :: Type).
   TxTest ingrs ->
   Bad ingrs ->
-  ScriptTx
+  Model.Tx
 txTestBad (TxTest Adjunction {lower}) = lower . Left
 
 txTestGood ::
   forall (ingrs :: Type).
   TxTest ingrs ->
   ingrs ->
-  ScriptTx
+  Model.Tx
 txTestGood (TxTest Adjunction {lower}) = lower . Right
 
 txTestRight ::
   forall (ingrs :: Type).
   TxTest ingrs ->
-  ScriptTx ->
+  Model.Tx ->
   Either (Bad ingrs) ingrs
 txTestRight (TxTest Adjunction {raise}) = raise
 
