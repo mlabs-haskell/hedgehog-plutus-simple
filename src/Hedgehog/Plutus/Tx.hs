@@ -17,13 +17,10 @@ import UntypedPlutusCore qualified as UPLC
 
 import Plutus.Model qualified as Model
 
-data ScriptPurpose
-  = SpendingPurpose
-      { spendingRef :: Plutus.TxOutRef
-      }
-  | MintingPurpose
-      { mintingSymbol :: Plutus.CurrencySymbol
-      }
+data ScriptTx = ScriptTx
+  { scriptTx :: Model.Tx
+  , scriptTxPurpose :: Plutus.ScriptPurpose
+  }
 
 data Balanced = Balanced | Unbalanced
 

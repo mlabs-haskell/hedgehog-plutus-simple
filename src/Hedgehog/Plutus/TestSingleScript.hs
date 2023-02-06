@@ -4,7 +4,6 @@ import Data.Kind (Type)
 import GHC.Records (HasField (getField))
 
 import Data.Maybe (maybeToList)
-import Data.Proxy (Proxy (Proxy))
 
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -47,7 +46,7 @@ import Hedgehog.Plutus.Tx
 txRunScript ::
   Model.Mock ->
   Model.Tx ->
-  ScriptPurpose ->
+  Plutus.ScriptPurpose ->
   Maybe Plutus.EvaluationError
 txRunScript
   Model.Mock
@@ -114,11 +113,12 @@ txRunScript
                 tx
           )
           ( case sp of
-              SpendingPurpose {spendingRef} ->
-                Ledger.Spending (unsafeFromEither $ Fork.toTxIn spendingRef)
-              MintingPurpose {mintingSymbol} ->
-                Ledger.Minting
-                  (unsafeFromEither $ Fork.toPolicyId mintingSymbol)
+              Plutus.Spending ref ->
+                Ledger.Spending (unsafeFromEither $ Fork.toTxIn ref)
+              Plutus.Minting sym ->
+                Ledger.Minting (unsafeFromEither $ Fork.toPolicyId sym)
+              Plutus.Rewarding cred -> Ledger.Rewarding _
+              Plutus.Certifying cert -> _
           )
 
       ins :: [Fork.TxIn]
