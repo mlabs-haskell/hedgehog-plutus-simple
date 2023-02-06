@@ -8531,16 +8531,17 @@
         "plutus": "plutus_4"
       },
       "locked": {
-        "lastModified": 1672153441,
-        "narHash": "sha256-uiMXQSr7XAbuA+2OIjlgITS+W0qVwZaMcUNco+gj148=",
+        "lastModified": 1674642357,
+        "narHash": "sha256-PnS9hGvBGquddnY7x0Jjd69xI4Q3jHG2D0b4mSPFP/g=",
         "owner": "mlabs-haskell",
         "repo": "mlabs-tooling.nix",
-        "rev": "3367df5cffc9e6823e88a3b6ac2dae55682a4d15",
+        "rev": "f1e8e9def136b57f38be9c255e1c8228a5fafdea",
         "type": "github"
       },
       "original": {
         "owner": "mlabs-haskell",
         "repo": "mlabs-tooling.nix",
+        "rev": "f1e8e9def136b57f38be9c255e1c8228a5fafdea",
         "type": "github"
       }
     },
