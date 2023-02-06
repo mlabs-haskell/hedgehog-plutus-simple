@@ -10,9 +10,9 @@
   };
 
   inputs = {
-    tooling.url = "github:mlabs-haskell/mlabs-tooling.nix?rev=f1e8e9def136b57f38be9c255e1c8228a5fafdea";
+    tooling.url = "github:mlabs-haskell/mlabs-tooling.nix?rev=516e38050899b624d66e8e744d22a3136024a275";
 
-    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model?ref=ari/expose-tx";
+    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model?ref=ari/remove-plutus-tx";
 
     plutarch.url = "github:Plutonomicon/plutarch-plutus";
   };
@@ -26,6 +26,12 @@
           project.extraHackage = [
             "${plutus-simple-model}"
             "${plutarch}"
+          ];
+          toHaddock = [
+            "plutarch"
+            "plutus-ledger-api"
+            "cardano-crypto"
+            "plutus-simple-model"
           ];
         })
       ];
