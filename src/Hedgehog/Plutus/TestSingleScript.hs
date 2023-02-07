@@ -47,11 +47,11 @@ import Cardano.Slotting.Time qualified as Cardano
 import PlutusLedgerApi.Common qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus hiding (evaluateScriptCounting)
 
+import Cardano.Simple.Cardano.Class qualified as Simple
+import Cardano.Simple.Cardano.Common qualified as Simple
+import Cardano.Simple.Ledger.TimeSlot qualified as Simple
+import Cardano.Simple.Ledger.Tx qualified as Simple
 import Plutus.Model qualified as Model
-import Plutus.Model.Fork.Cardano.Class qualified as Fork
-import Plutus.Model.Fork.Cardano.Common qualified as Fork
-import Plutus.Model.Fork.Ledger.TimeSlot qualified as Fork
-import Plutus.Model.Fork.Ledger.Tx qualified as Fork
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
 
 txRunScript ::
@@ -65,9 +65,9 @@ txRunScript
       Model.MockConfig
         { Model.mockConfigProtocol
         , Model.mockConfigSlotConfig =
-          Fork.SlotConfig
-            { Fork.scSlotLength
-            , Fork.scSlotZeroTime
+          Simple.SlotConfig
+            { Simple.scSlotLength
+            , Simple.scSlotZeroTime
             }
         , Model.mockConfigNetworkId
         }
@@ -92,7 +92,7 @@ txRunScript
             "_costmdls"
             (Ledger.PParams era)
             Alonzo.CostModels
-        , Fork.IsCardanoTx era
+        , Simple.IsCardanoTx era
         ) =>
         Proxy era ->
         Ledger.PParams era ->
@@ -112,14 +112,14 @@ txRunScript
               $ scSlotZeroTime
           )
           ( unsafeFromEither $
-              Fork.toUtxo
-                (Fork.txScripts tx)
+              Simple.toUtxo
+                (Simple.txScripts tx)
                 mockConfigNetworkId
                 (zip ins outs)
           )
           ( unsafeFromEither $
-              Fork.toCardanoTx
-                (Fork.txScripts tx)
+              Simple.toCardanoTx
+                (Simple.txScripts tx)
                 mockConfigNetworkId
                 params
                 extra
@@ -127,20 +127,20 @@ txRunScript
           )
           ( case sp of
               Plutus.Spending ref ->
-                Ledger.Spending (unsafeFromEither $ Fork.toTxIn ref)
+                Ledger.Spending (unsafeFromEither $ Simple.toTxIn ref)
               Plutus.Minting sym ->
-                Ledger.Minting (unsafeFromEither $ Fork.toPolicyId sym)
+                Ledger.Minting (unsafeFromEither $ Simple.toPolicyId sym)
               Plutus.Rewarding (Plutus.StakingHash cred) ->
                 Ledger.Rewarding
                   ( Ledger.RewardAcnt mockConfigNetworkId $
-                      unsafeFromEither (Fork.toCredential cred)
+                      unsafeFromEither (Simple.toCredential cred)
                   )
               Plutus.Rewarding Plutus.StakingPtr {} ->
                 error "StakingPtr not supported"
               Plutus.Certifying cert ->
                 Ledger.Certifying
                   ( unsafeFromEither $
-                      Fork.toDCert
+                      Simple.toDCert
                         mockConfigNetworkId
                         (getField @"_poolDeposit" params)
                         (getField @"_minPoolCost" params)
@@ -148,16 +148,16 @@ txRunScript
                   )
           )
 
-      ins :: [Fork.TxIn]
+      ins :: [Simple.TxIn]
       ins =
         mconcat
-          [ Set.toList $ Fork.txInputs tx
-          , Set.toList $ Fork.txCollateral tx
-          , Set.toList $ Fork.txReferenceInputs tx
+          [ Set.toList $ Simple.txInputs tx
+          , Set.toList $ Simple.txCollateral tx
+          , Set.toList $ Simple.txReferenceInputs tx
           ]
 
       outs :: [Plutus.TxOut]
-      outs = fmap ((mockUtxos Map.!) . Fork.txInRef) ins
+      outs = fmap ((mockUtxos Map.!) . Simple.txInRef) ins
 
 txRunScript' ::
   ( Alonzo.ExtendedUTxO era
