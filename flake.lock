@@ -7582,11 +7582,11 @@
         "tooling": "tooling_3"
       },
       "locked": {
-        "lastModified": 1675619617,
-        "narHash": "sha256-HbigRlNKOHyGU3uWKQTWBPHoAWxaFUIKJvfTIauWfBs=",
+        "lastModified": 1675706465,
+        "narHash": "sha256-k5Frxl0w5xyjbeKTV63fuOydfeO145u71n8+DFwoOUg=",
         "owner": "mlabs-haskell",
         "repo": "plutus-simple-model",
-        "rev": "f8fce1255aa0c97801f76a6e24ed4552fe169308",
+        "rev": "1f29183e39c67a7adb2e06d3adbedf76b3101222",
         "type": "github"
       },
       "original": {
