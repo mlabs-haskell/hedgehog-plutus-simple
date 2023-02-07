@@ -47,11 +47,11 @@ import Cardano.Slotting.Time qualified as Cardano
 import PlutusLedgerApi.Common qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus hiding (evaluateScriptCounting)
 
+import Cardano.Simple.Cardano.Class qualified as Fork
+import Cardano.Simple.Cardano.Common qualified as Fork
+import Cardano.Simple.Ledger.TimeSlot qualified as Fork
+import Cardano.Simple.Ledger.Tx qualified as Fork
 import Plutus.Model qualified as Model
-import Plutus.Model.Fork.Cardano.Class qualified as Fork
-import Plutus.Model.Fork.Cardano.Common qualified as Fork
-import Plutus.Model.Fork.Ledger.TimeSlot qualified as Fork
-import Plutus.Model.Fork.Ledger.Tx qualified as Fork
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
 
 txRunScript ::

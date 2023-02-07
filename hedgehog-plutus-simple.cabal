@@ -27,7 +27,9 @@ common common-lang
     -Wno-partial-type-signatures -Wmissing-export-lists
     -Wincomplete-record-updates -Wmissing-deriving-strategies
     -Wno-name-shadowing -Wunused-foralls -fprint-explicit-foralls
-    -fprint-explicit-kinds -fwarn-missing-import-lists -Werror
+    -fprint-explicit-kinds -fwarn-missing-import-lists
+
+  -- -Werror TODO reenable this
 
   build-depends:      base >=4.14
   default-extensions:
@@ -104,6 +106,7 @@ library
     , cardano-ledger-babbage
     , cardano-ledger-core
     , cardano-ledger-shelley
+    , cardano-simple
     , cardano-slotting
     , containers
     , generics-sop
