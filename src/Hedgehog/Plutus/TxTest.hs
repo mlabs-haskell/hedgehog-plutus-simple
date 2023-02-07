@@ -7,41 +7,29 @@ module Hedgehog.Plutus.TxTest where
 -- import Hedgehog ((===))
 -- import Hedgehog qualified
 
+import Control.Category (Category ((.)))
+import Prelude hiding ((.))
+
 import Plutus.Model qualified as Model
 
 import Hedgehog.Plutus.Adjunction
+import Hedgehog.Plutus.ScriptContext
 import Hedgehog.Plutus.TestData
 
 data family Bad ingrs
 
-newtype TxTest a
-  = TxTest (Adjunction Model.Tx (Either (Generalised a) (Good a)))
+newtype TxTest st a
+  = TxTest
+      ( Model.Mock ->
+        Adjunction (ScriptTx st) (Either (Generalised a) (Good a))
+      )
 
--- txTest ::
---   (Bad ingrs -> Model.Tx) ->
---   (ingrs -> Model.Tx) ->
---   (Model.Tx -> Either (Bad ingrs) ingrs) ->
---   TxTest ingrs
--- txTest b g r =
---   TxTest $
---     Adjunction
---       { lower = either b g
---       , raise = r
---       }
-
--- txTestBad ::
---   forall (ingrs :: Type).
---   TxTest ingrs ->
---   Bad ingrs ->
---   Model.Tx
--- txTestBad (TxTest Adjunction {lower}) = lower . Left
-
--- txTestGood ::
---   forall (ingrs :: Type).
---   TxTest ingrs ->
---   ingrs ->
---   Model.Tx
--- txTestGood (TxTest Adjunction {lower}) = lower . Right
+txTest ::
+  ( Model.Mock ->
+    Adjunction (ScriptContext d st) (Either (Generalised a) (Good a))
+  ) ->
+  TxTest st a
+txTest a = TxTest $ \mock -> a mock . scriptContext mock
 
 -- txTestRight ::
 --   forall (ingrs :: Type).

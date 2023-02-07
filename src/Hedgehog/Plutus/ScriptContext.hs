@@ -6,7 +6,14 @@ import Data.Kind (Type)
 
 import PlutusLedgerApi.V2 qualified as Plutus
 
+import Plutus.Model qualified as Model
+
 import Hedgehog.Plutus.Adjunction
+
+data ScriptTx st = ScriptTx
+  { scriptTx :: Model.Tx
+  , scriptTxPurpose :: ScriptPurpose st
+  }
 
 data ScriptType = Spend Type | Mint | Reward | Certify
 
@@ -30,5 +37,5 @@ data ScriptContext redeemer st = ScriptContext
   , contextTxInfo :: Plutus.TxInfo
   }
 
-scriptContext :: Adjunction (ScriptContext d st) _
+scriptContext :: Model.Mock -> Adjunction (ScriptTx st) (ScriptContext d st)
 scriptContext = _
