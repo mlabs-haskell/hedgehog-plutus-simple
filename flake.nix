@@ -12,7 +12,7 @@
   inputs = {
     tooling.url = "github:mlabs-haskell/mlabs-tooling.nix";
 
-    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model?ref=ari/expose-tx";
+    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model";
 
     plutarch.url = "github:Plutonomicon/plutarch-plutus";
   };
@@ -24,7 +24,8 @@
           project.src = ./.;
 
           project.extraHackage = [
-            "${plutus-simple-model}"
+            "${plutus-simple-model}/psm"
+            "${plutus-simple-model}/cardano-simple"
             "${plutarch}"
           ];
         })

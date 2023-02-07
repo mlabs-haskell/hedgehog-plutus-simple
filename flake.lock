@@ -7582,16 +7582,15 @@
         "tooling": "tooling_3"
       },
       "locked": {
-        "lastModified": 1675619617,
-        "narHash": "sha256-HbigRlNKOHyGU3uWKQTWBPHoAWxaFUIKJvfTIauWfBs=",
+        "lastModified": 1675784500,
+        "narHash": "sha256-YIWRyXvHxsi+XQB/pOHOc3pyJU04H16nGPIrZepEbRE=",
         "owner": "mlabs-haskell",
         "repo": "plutus-simple-model",
-        "rev": "f8fce1255aa0c97801f76a6e24ed4552fe169308",
+        "rev": "387e0baa2234ab7a8f228148218bb8a1e090962e",
         "type": "github"
       },
       "original": {
         "owner": "mlabs-haskell",
-        "ref": "ari/expose-tx",
         "repo": "plutus-simple-model",
         "type": "github"
       }
