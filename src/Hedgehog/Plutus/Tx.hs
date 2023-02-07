@@ -51,14 +51,14 @@ import Cardano.Ledger.Shelley.Scripts (ScriptHash (ScriptHash))
 import Cardano.Ledger.Shelley.TxBody (ShelleyEraTxBody)
 import Cardano.Ledger.TxIn qualified as Ledger
 
+import Cardano.Simple.Cardano.Alonzo qualified as Alonzo
+import Cardano.Simple.Cardano.Babbage qualified as Babbage
+import Cardano.Simple.Cardano.Class qualified as Class
+import Cardano.Simple.Ledger.Scripts (scriptHash)
+import Cardano.Simple.Ledger.TimeSlot qualified as Time
+import Cardano.Simple.Ledger.Tx qualified as Fork
+import Cardano.Simple.PlutusLedgerApi.V1.Scripts qualified as Scripts
 import Plutus.Model qualified as Model
-import Plutus.Model.Fork.Cardano.Alonzo qualified as Alonzo
-import Plutus.Model.Fork.Cardano.Babbage qualified as Babbage
-import Plutus.Model.Fork.Cardano.Class qualified as Class
-import Plutus.Model.Fork.Ledger.Scripts (scriptHash)
-import Plutus.Model.Fork.Ledger.TimeSlot qualified as Time
-import Plutus.Model.Fork.Ledger.Tx qualified as Fork
-import Plutus.Model.Fork.PlutusLedgerApi.V1.Scripts qualified as Scripts
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
 
 import PlutusCore qualified as PLC
@@ -542,14 +542,16 @@ toLedgerTx context tx =
   where
     cont :: Class.IsCardanoTx era => Core.PParams era -> Core.Tx era
     cont params =
-      Class.toCardanoTx
-        (Map.map convertScript $ interestingScripts context)
-        (Model.mockConfigNetworkId $ Model.mockConfig $ mockchain context)
-        params
-        (toSimpleModelTx context tx)
-        & \case
-          Left e -> error ("toLedgerTx failed with:" <> show e)
-          Right tx -> tx
+      let Model.Tx extra ptx = toSimpleModelTx context tx
+       in Class.toCardanoTx
+            (Map.map convertScript $ interestingScripts context)
+            (Model.mockConfigNetworkId $ Model.mockConfig $ mockchain context)
+            params
+            extra
+            ptx
+            & \case
+              Left e -> error ("toLedgerTx failed with:" <> show e)
+              Right tx -> tx
 
 -- Since toLedgerTx can't actually be polymorphic
 -- as the era is forced by the mockchain

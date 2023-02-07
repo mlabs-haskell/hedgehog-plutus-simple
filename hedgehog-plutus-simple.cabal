@@ -106,6 +106,7 @@ library
     , cardano-ledger-core
     , cardano-ledger-shelley
     , cardano-ledger-shelley-ma
+    , cardano-simple
     , cardano-slotting
     , containers
     , hedgehog
