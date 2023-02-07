@@ -12,7 +12,7 @@
   inputs = {
     tooling.url = "github:mlabs-haskell/mlabs-tooling.nix";
 
-    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model";
+    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model?ref=ari/expose-tx";
 
     plutarch.url = "github:Plutonomicon/plutarch-plutus";
   };
