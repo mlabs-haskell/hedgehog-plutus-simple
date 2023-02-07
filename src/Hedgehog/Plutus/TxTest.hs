@@ -2,10 +2,10 @@
 
 module Hedgehog.Plutus.TxTest where
 
-import Data.Kind (Type)
+-- import Data.Kind (Type)
 
-import Hedgehog ((===))
-import Hedgehog qualified
+-- import Hedgehog ((===))
+-- import Hedgehog qualified
 
 import Plutus.Model qualified as Model
 
