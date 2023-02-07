@@ -4,6 +4,7 @@ import Data.Kind (Type)
 import GHC.Records (HasField (getField))
 
 import Data.Maybe (maybeToList)
+import Data.Proxy (Proxy (Proxy))
 
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -13,17 +14,29 @@ import Data.Time.Clock.POSIX qualified as Clock
 
 import Lens.Micro ((^.))
 
+import Cardano.Ledger.Address qualified as Ledger
 import Cardano.Ledger.Alonzo qualified as Alonzo
 import Cardano.Ledger.Alonzo.Data qualified as Ledger
-import Cardano.Ledger.Alonzo.PParams (_costmdls, _protocolVersion)
+import Cardano.Ledger.Alonzo.PParams (
+  _costmdls,
+  _minPoolCost,
+  _poolDeposit,
+  _protocolVersion,
+ )
 import Cardano.Ledger.Alonzo.PlutusScriptApi qualified as Alonzo
 import Cardano.Ledger.Alonzo.Scripts qualified as Alonzo
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.Alonzo.TxInfo qualified as Alonzo
 import Cardano.Ledger.Alonzo.TxWitness qualified as Ledger
 import Cardano.Ledger.Babbage qualified as Babbage
-import Cardano.Ledger.Babbage.PParams (_costmdls, _protocolVersion)
+import Cardano.Ledger.Babbage.PParams (
+  _costmdls,
+  _minPoolCost,
+  _poolDeposit,
+  _protocolVersion,
+ )
 import Cardano.Ledger.BaseTypes qualified as Ledger
+import Cardano.Ledger.Coin qualified as Ledger
 import Cardano.Ledger.Core qualified as Ledger
 import Cardano.Ledger.Crypto qualified as Crypto
 import Cardano.Ledger.Language qualified as Ledger
@@ -40,8 +53,6 @@ import Plutus.Model.Fork.Cardano.Common qualified as Fork
 import Plutus.Model.Fork.Ledger.TimeSlot qualified as Fork
 import Plutus.Model.Fork.Ledger.Tx qualified as Fork
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
-
-import Hedgehog.Plutus.Tx
 
 txRunScript ::
   Model.Mock ->
@@ -75,6 +86,8 @@ txRunScript
         , Alonzo.ExtendedUTxO era
         , Ledger.AlonzoEraTx era
         , HasField "_protocolVersion" (Ledger.PParams era) Ledger.ProtVer
+        , HasField "_poolDeposit" (Ledger.PParams era) Ledger.Coin
+        , HasField "_minPoolCost" (Ledger.PParams era) Ledger.Coin
         , HasField
             "_costmdls"
             (Ledger.PParams era)
@@ -117,8 +130,22 @@ txRunScript
                 Ledger.Spending (unsafeFromEither $ Fork.toTxIn ref)
               Plutus.Minting sym ->
                 Ledger.Minting (unsafeFromEither $ Fork.toPolicyId sym)
-              Plutus.Rewarding cred -> Ledger.Rewarding _
-              Plutus.Certifying cert -> _
+              Plutus.Rewarding (Plutus.StakingHash cred) ->
+                Ledger.Rewarding
+                  ( Ledger.RewardAcnt mockConfigNetworkId $
+                      unsafeFromEither (Fork.toCredential cred)
+                  )
+              Plutus.Rewarding Plutus.StakingPtr {} ->
+                error "StakingPtr not supported"
+              Plutus.Certifying cert ->
+                Ledger.Certifying
+                  ( unsafeFromEither $
+                      Fork.toDCert
+                        mockConfigNetworkId
+                        (getField @"_poolDeposit" params)
+                        (getField @"_minPoolCost" params)
+                        cert
+                  )
           )
 
       ins :: [Fork.TxIn]

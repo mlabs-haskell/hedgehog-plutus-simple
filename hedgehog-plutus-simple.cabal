@@ -93,6 +93,7 @@ library
   exposed-modules:
     Hedgehog.Plutus.Adjunction
     Hedgehog.Plutus.Simple
+    Hedgehog.Plutus.TestData
     Hedgehog.Plutus.TestSingleScript
     Hedgehog.Plutus.Tx
     Hedgehog.Plutus.TxTest
@@ -105,6 +106,7 @@ library
     , cardano-ledger-shelley
     , cardano-slotting
     , containers
+    , generics-sop
     , hedgehog
     , microlens
     , plutus-core
