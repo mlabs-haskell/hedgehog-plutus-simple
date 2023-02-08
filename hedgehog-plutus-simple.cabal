@@ -105,6 +105,7 @@ library
     , cardano-ledger-babbage
     , cardano-ledger-core
     , cardano-ledger-shelley
+    , cardano-simple
     , cardano-slotting
     , containers
     , generics-sop

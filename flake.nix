@@ -30,6 +30,10 @@
           toHaddock = [
             "plutarch"
             "plutus-ledger-api"
+            "cardano-ledger-alonzo"
+            "cardano-ledger-babbage"
+            "cardano-ledger-core"
+            "cardano-ledger-shelley"
             "cardano-crypto"
             "plutus-simple-model"
           ];
