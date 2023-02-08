@@ -7510,16 +7510,17 @@
         "tooling": "tooling"
       },
       "locked": {
-        "lastModified": 1670045459,
-        "narHash": "sha256-WrOPEZ1s9Yuc2sLH6avqM8lBS8rVIQ6GOYCgZ+Azr4s=",
+        "lastModified": 1675688785,
+        "narHash": "sha256-wLVsGPoCmntA/2TMXaIU36YRHydY99g71PqjpDDMruE=",
         "owner": "Plutonomicon",
         "repo": "plutarch-plutus",
-        "rev": "01a67f56b2bf428538e92ed9ada0ce88d90ab636",
+        "rev": "f535a6894a25e6d46d16958273769bffa8880090",
         "type": "github"
       },
       "original": {
         "owner": "Plutonomicon",
         "repo": "plutarch-plutus",
+        "rev": "f535a6894a25e6d46d16958273769bffa8880090",
         "type": "github"
       }
     },
@@ -7582,11 +7583,11 @@
         "tooling": "tooling_3"
       },
       "locked": {
-        "lastModified": 1675788579,
-        "narHash": "sha256-Sc9x0UMzydw+MvmyucZFbx94UMwIPg0yR3PO9X++fK8=",
+        "lastModified": 1675866550,
+        "narHash": "sha256-LHMTm8mTWPVj/zu/GaemS1i/2mon1StMvWXCQzR/h+0=",
         "owner": "mlabs-haskell",
         "repo": "plutus-simple-model",
-        "rev": "827b6d66c10bcd605939fe3fc06ad04dfc12747f",
+        "rev": "b54bc8410a99bf142199c32a79eeadcef69a305f",
         "type": "github"
       },
       "original": {
@@ -8530,11 +8531,11 @@
         "plutus": "plutus_4"
       },
       "locked": {
-        "lastModified": 1672153441,
-        "narHash": "sha256-uiMXQSr7XAbuA+2OIjlgITS+W0qVwZaMcUNco+gj148=",
+        "lastModified": 1675797045,
+        "narHash": "sha256-FO6MX9hcXoTf2bUyO5o2BTlzKDVtLSuBX2lOwsLEcQs=",
         "owner": "mlabs-haskell",
         "repo": "mlabs-tooling.nix",
-        "rev": "3367df5cffc9e6823e88a3b6ac2dae55682a4d15",
+        "rev": "6f78b002ab2c477a928a9332b6e0e18828cffc62",
         "type": "github"
       },
       "original": {

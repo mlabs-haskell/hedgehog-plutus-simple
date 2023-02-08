@@ -3,18 +3,17 @@
 
   nixConfig = {
     extra-experimental-features = [ "nix-command" "flakes" "ca-derivations" ];
-    extra-substituters = [ "https://cache.iog.io" "https://public-plutonomicon.cachix.org" ];
-    extra-trusted-public-keys = [ "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=" "public-plutonomicon.cachix.org-1:3AKJMhCLn32gri1drGuaZmFrmnue+KkKrhhubQk/CWc=" ];
+    extra-substituters = [ "https://cache.iog.io" ];
+    extra-trusted-public-keys = [ "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=" ];
     allow-import-from-derivation = "true";
     bash-prompt = "\\[\\e[0m\\][\\[\\e[0;2m\\]nix \\[\\e[0;1m\\]hps \\[\\e[0;93m\\]\\w\\[\\e[0m\\]]\\[\\e[0m\\]$ \\[\\e[0m\\]";
   };
 
   inputs = {
     tooling.url = "github:mlabs-haskell/mlabs-tooling.nix";
-
-    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model";
-
-    plutarch.url = "github:Plutonomicon/plutarch-plutus";
+    plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model/";
+    plutarch.url = "github:Plutonomicon/plutarch-plutus/?rev=f535a6894a25e6d46d16958273769bffa8880090";
+    # plutarch has a parse error on the newest commit right now
   };
 
   outputs = inputs@{ self, tooling, plutus-simple-model, plutarch, ... }: tooling.lib.mkFlake { inherit self; }
@@ -24,9 +23,15 @@
           project.src = ./.;
 
           project.extraHackage = [
+            "${plutarch}"
             "${plutus-simple-model}/psm"
             "${plutus-simple-model}/cardano-simple"
-            "${plutarch}"
+          ];
+          toHaddock = [
+            "plutarch"
+            "plutus-ledger-api"
+            "cardano-crypto"
+            "plutus-simple-model"
           ];
         })
       ];
