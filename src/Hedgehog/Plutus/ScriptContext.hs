@@ -39,3 +39,6 @@ data ScriptContext redeemer st = ScriptContext
 
 scriptContext :: Model.Mock -> Adjunction (ScriptTx st) (ScriptContext d st)
 scriptContext = _
+
+plutusScriptContext :: ScriptContext d st -> Plutus.ScriptContext
+plutusScriptContext = _
