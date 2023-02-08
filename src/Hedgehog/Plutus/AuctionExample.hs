@@ -21,10 +21,6 @@ import Data.Maybe (fromJust)
 
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Set (Set)
-import Data.Set qualified as Set
-import Data.Vector (Vector)
-import Data.Vector qualified as Vector
 
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusTx qualified
@@ -354,9 +350,6 @@ raiseAuctionTest ::
   Generalised AuctionTest
 raiseAuctionTest
   Model.Mock {Model.mockUtxos}
-  -- ScriptTx
-  --   { scriptTx = Tx {txInputs, txOutputs}
-  --   , scriptTxPurpose = Spending ref (InScript _ (Just (rdmr, _)))
   ScriptContext
     { contextRedeemer
     , contextDatum
@@ -389,14 +382,11 @@ raiseAuctionTest
                       txInfoOutputs of
                       [o] -> ShouldBe (selfOutput o bid)
                       os -> Shouldn'tBe (Only os)
-                      -- if length os == 1
-                      --     then ShouldBe (selfOutput (Vector.head os) bid)
-                      --     else Shouldn'tBe (Only os)
                 }
             Close -> TestRedeemerClose
       }
     where
-      selfOutput :: () -> Bid -> SelfOutput 'IsGeneralised
+      selfOutput :: Plutus.TxOut -> Bid -> SelfOutput 'IsGeneralised
       selfOutput o rBid =
         SelfOutput
           ( if correctAuction && correctBid
@@ -416,7 +406,7 @@ raiseAuctionTest
                   (adAuction contextDatum)
                   <> lovelaceValue (minLovelace + bBid rBid)
               )
-              (txOutValue o)
+              (Plutus.txOutValue o)
           )
         where
           outDatum :: AuctionDatum
@@ -520,18 +510,20 @@ lowerAuctionTest = undefined
 -- bidAmt :: TxContext -> Plutus.TxOutRef -> Integer -> Integer
 -- bidAmt txc ref mag = minBid txc ref + mag
 
--- decodeDatum :: Plutus.Datum -> AuctionDatum
--- decodeDatum = fromJust . Plutus.fromBuiltinData . Plutus.getDatum
+decodeDatum :: Plutus.Datum -> AuctionDatum
+decodeDatum = fromJust . Plutus.fromBuiltinData . Plutus.getDatum
 
 -- datum :: Model.Mock -> Plutus.TxOutRef -> AuctionDatum
 -- datum TxContext {mockchain = Model.Mock {Model.mockUtxos}, datums} ref =
 --   decodeDatum . unsafeGetDatum datums . Plutus.txOutDatum $ mockUtxos Map.! ref
 
+datum Plutus.TxInfo {Plutus.txInfoData} = decodeDatum (_ Map.! txInfoData)
+
 -- auction :: TxContext -> Plutus.TxOutRef -> Auction
 -- auction txc = adAuction . datum txc
 
--- token :: Auction -> Plutus.Value
--- token Auction {aCurrency, aToken} = Plutus.singleton aCurrency aToken 1
+token :: Auction -> Plutus.Value
+token Auction {aCurrency, aToken} = Plutus.singleton aCurrency aToken 1
 
 -- hiBid :: TxContext -> Plutus.TxOutRef -> Maybe Bid
 -- hiBid txc = adHighestBid . datum txc
