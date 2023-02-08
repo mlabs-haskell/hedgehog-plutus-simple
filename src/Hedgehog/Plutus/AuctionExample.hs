@@ -31,7 +31,6 @@ import PlutusTx qualified
 import Hedgehog.Plutus.Adjunction
 import Hedgehog.Plutus.TestData
 import Hedgehog.Plutus.TestSingleScript
-import Hedgehog.Plutus.Tx
 
 import Data.Vector qualified as Vector
 import Plutus.Model qualified as Model
@@ -321,7 +320,7 @@ data AuctionTestRedeemer q
       { testRedeemerBidder :: !(Only Plutus.PubKeyHash q)
       , testRedeemerBidMagnitude :: !(ShouldBeNatural q)
       -- ^ Difference between bid and minBid
-      , selfOutputs :: !(EitherOr (Only (Vector TxOut)) SelfOutput q)
+      , selfOutputs :: !(EitherOr (Only (Vector Plutus.TxOut)) SelfOutput q)
       }
   | TestRedeemerClose
   deriving stock (GHC.Generic)

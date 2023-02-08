@@ -4,7 +4,6 @@ import Data.Kind (Type)
 import GHC.Records (HasField (getField))
 
 import Data.Maybe (maybeToList)
-import Data.Proxy (Proxy (Proxy))
 
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -28,7 +27,6 @@ import Cardano.Ledger.Alonzo.Scripts qualified as Alonzo
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.Alonzo.TxInfo qualified as Alonzo
 import Cardano.Ledger.Alonzo.TxWitness qualified as Ledger
-import Cardano.Ledger.Babbage qualified as Babbage
 import Cardano.Ledger.Babbage.PParams (
   _costmdls,
   _minPoolCost,
