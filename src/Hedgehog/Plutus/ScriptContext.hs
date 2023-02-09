@@ -31,10 +31,9 @@ data ScriptPurpose st where
 
 type ScriptContext :: Type -> ScriptType -> Type
 data ScriptContext redeemer st = ScriptContext
-  { contextRedeemer :: redeemer
-  , contextDatum :: DatumOf st
-  , contextPurpose :: ScriptPurpose st
-  , contextTxInfo :: Plutus.TxInfo
+  { contextRedeemer :: !redeemer
+  , contextPurpose :: !(ScriptPurpose st)
+  , contextTxInfo :: !Plutus.TxInfo
   }
 
 scriptContext :: Model.Mock -> Adjunction (ScriptTx st) (ScriptContext d st)
