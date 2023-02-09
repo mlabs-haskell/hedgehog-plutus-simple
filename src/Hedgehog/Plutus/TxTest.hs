@@ -20,14 +20,19 @@ import Hedgehog.Plutus.TestData
 newtype TxTest st a
   = TxTest
       ( Model.Mock ->
+        DatumOf st ->
         Adjunction (ScriptTx st) (Either (Bad a) (Good a))
       )
 
 txTest ::
   (TestData a) =>
-  (Model.Mock -> Adjunction (ScriptContext d st) (Generalised a)) ->
+  ( Model.Mock ->
+    DatumOf st ->
+    Adjunction (ScriptContext r st) (Generalised a)
+  ) ->
   TxTest st a
-txTest f = TxTest $ \mock -> testDataAdjunction . f mock . scriptContext mock
+txTest f = TxTest $ \mock datum ->
+  testDataAdjunction . f mock datum . scriptContext mock
 
 -- txTestRight ::
 --   forall (ingrs :: Type).
