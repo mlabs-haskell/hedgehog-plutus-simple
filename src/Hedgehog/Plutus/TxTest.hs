@@ -2,12 +2,12 @@
 
 module Hedgehog.Plutus.TxTest where
 
--- import Data.Kind (Type)
-
--- import Hedgehog ((===))
--- import Hedgehog qualified
+import Data.Kind (Constraint, Type)
 
 import Prelude hiding ((.))
+
+import PlutusLedgerApi.V2 qualified as Plutus
+import PlutusTx.AssocMap qualified
 
 import Control.Category (Category ((.)))
 
@@ -24,6 +24,22 @@ newtype TxTest st a
         Adjunction (ScriptTx st) (Either (Bad a) (Good a))
       )
 
+{- | Given an adjunction from a 'Generalised' to a 'ScriptContext', generate
+a 'TxTest.
+
+In the 'raise' direction, the supplied adjunction may omit the following
+details, which will be supplied for you:
+
+  * 'txInfoSignatories' corresponding to 'PubKeyHash' inputs
+
+  * 'txInfoRedeemers'
+
+  * 'txInfoData'
+
+  * 'txInfoId'
+
+For the final three, you can use the 'omitted' function to signal this.
+-}
 txTest ::
   (TestData a) =>
   ( Model.Mock ->
@@ -32,7 +48,27 @@ txTest ::
   ) ->
   TxTest st a
 txTest f = TxTest $ \mock datum ->
-  testDataAdjunction . f mock datum . scriptContext mock
+  testDataAdjunction
+    . f mock datum
+    . scriptContext mock datum
+
+scriptContext ::
+  Model.Mock ->
+  DatumOf st ->
+  Adjunction (ScriptTx st) (ScriptContext r st)
+scriptContext = _
+
+type Omittable :: Type -> Constraint
+class Omittable a
+instance Omittable (PlutusTx.AssocMap.Map Plutus.ScriptPurpose Plutus.Redeemer)
+instance Omittable (PlutusTx.AssocMap.Map Plutus.DatumHash Plutus.Datum)
+instance Omittable Plutus.TxId
+
+omitted :: (Omittable a) => a
+omitted = undefined
+
+resolveOmitted :: Model.Mock -> datum -> Plutus.TxInfo -> Plutus.TxInfo
+resolveOmitted = _
 
 -- txTestRight ::
 --   forall (ingrs :: Type).
