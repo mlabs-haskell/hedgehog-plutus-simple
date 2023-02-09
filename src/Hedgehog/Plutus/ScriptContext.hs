@@ -8,8 +8,6 @@ import PlutusLedgerApi.V2 qualified as Plutus
 
 import Plutus.Model qualified as Model
 
-import Hedgehog.Plutus.Adjunction
-
 data ScriptTx st = ScriptTx
   { scriptTx :: Model.Tx
   , scriptTxPurpose :: ScriptPurpose st
@@ -35,9 +33,6 @@ data ScriptContext redeemer st = ScriptContext
   , contextPurpose :: !(ScriptPurpose st)
   , contextTxInfo :: !Plutus.TxInfo
   }
-
-scriptContext :: Model.Mock -> Adjunction (ScriptTx st) (ScriptContext d st)
-scriptContext = _
 
 plutusScriptContext :: ScriptContext d st -> Plutus.ScriptContext
 plutusScriptContext = _
