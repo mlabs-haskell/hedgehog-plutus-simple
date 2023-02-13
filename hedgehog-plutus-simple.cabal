@@ -31,6 +31,7 @@ common common-lang
 
   build-depends:      base >=4.14
   default-extensions:
+    NoFieldSelectors
     NoStarIsType
     BangPatterns
     BinaryLiterals

@@ -337,21 +337,22 @@ data AuctionTestDatum q = AuctionTestDatum
   }
 
 auctionTest :: TxTest ('Spend AuctionDatum) AuctionTest
-auctionTest = txTest $ \mock ->
+auctionTest = txTest $ \mock datum ->
   Adjunction
-    { raise = raiseAuctionTest mock
+    { raise = raiseAuctionTest mock datum
     , lower = lowerAuctionTest mock
     }
 
 raiseAuctionTest ::
   Model.Mock ->
+  AuctionDatum ->
   ScriptContext AuctionAction ('Spend AuctionDatum) ->
   Generalised AuctionTest
 raiseAuctionTest
   Model.Mock {}
+  inDatum
   sc@ScriptContext
     { contextRedeemer
-    , contextDatum
     , contextTxInfo = txi@Plutus.TxInfo {Plutus.txInfoInputs}
     , contextPurpose = Spending ref
     } =
@@ -401,16 +402,16 @@ raiseAuctionTest
                 IsPresent
                   ( AuctionTestDatum
                       { auctionTestAuction =
-                          expect (adAuction contextDatum) (adAuction outDatum)
+                          expect inDatum.adAuction outDatum.adAuction
                       , auctionTestHiBid =
-                          expect (Just rBid) (adHighestBid outDatum)
+                          expect (Just rBid) outDatum.adHighestBid
                       }
                   )
           )
           ( expect
               ( token
-                  (adAuction contextDatum)
-                  <> lovelaceValue (minLovelace + bBid rBid)
+                  inDatum.adAuction
+                  <> lovelaceValue (minLovelace + rBid.bBid)
               )
               (Plutus.txOutValue o)
           )
@@ -419,10 +420,10 @@ raiseAuctionTest
           outDatum = datum txi o
 
           correctAuction :: Bool
-          correctAuction = adAuction outDatum == adAuction contextDatum
+          correctAuction = outDatum.adAuction == inDatum.adAuction
 
           correctBid :: Bool
-          correctBid = adHighestBid outDatum == Just rBid
+          correctBid = outDatum.adHighestBid == Just rBid
 
 lowerAuctionTest ::
   Model.Mock ->
@@ -516,7 +517,7 @@ datum :: Plutus.TxInfo -> Plutus.TxOut -> AuctionDatum
 datum i o = decodeDatum (resolveDatum i o)
 
 auction :: Plutus.TxInfo -> Plutus.TxOut -> Auction
-auction o = adAuction . datum o
+auction o = (.adAuction) . datum o
 
 resolveDatum :: Plutus.TxInfo -> Plutus.TxOut -> Plutus.Datum
 resolveDatum i o = case Plutus.txOutDatum o of
@@ -528,11 +529,11 @@ token :: Auction -> Plutus.Value
 token Auction {aCurrency, aToken} = Plutus.singleton aCurrency aToken 1
 
 hiBid :: Plutus.TxInfo -> Plutus.TxOut -> Maybe Bid
-hiBid o = adHighestBid . datum o
+hiBid o = (.adHighestBid) . datum o
 
 minBid :: Plutus.TxInfo -> Plutus.TxOut -> Integer
 minBid i o =
-  maybe (aMinBid $ auction i o) ((+ 1) . bBid) (hiBid i o)
+  maybe (auction i o).aMinBid ((+ 1) . (.bBid)) (hiBid i o)
 
 selfAddress ::
   Map Plutus.TxOutRef Plutus.TxOut ->

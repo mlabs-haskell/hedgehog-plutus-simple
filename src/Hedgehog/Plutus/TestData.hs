@@ -42,7 +42,7 @@ testDataAdjunction ::
   Adjunction (Generalised a) (Either (Bad a) (Good a))
 testDataAdjunction =
   Adjunction
-    { lower = either getBad generalise
+    { lower = either (.getBad) generalise
     , raise = \g -> maybe (Left (Bad g)) Right (validate g)
     }
 
@@ -206,7 +206,7 @@ instance (ValidateGeneric a) => TestData (Generically' a) where
     Generically
       . SOP.gto
       . sopGetAp @'IsGeneralised (Proxy @a)
-      . SOP.htrans (Proxy @Gen) (Ap . generalise . getAp)
+      . SOP.htrans (Proxy @Gen) (Ap . generalise . (.getAp))
       . sopAp @'IsGood (Proxy @a)
       $ SOP.gfrom a
 
@@ -219,7 +219,7 @@ sopGetAp ::
   Proxy f ->
   SOP.SOP (Ap a) (UnAp2 (SOP.GCode (f a))) ->
   SOP.SOP SOP.I (SOP.GCode (f a))
-sopGetAp _ = SOP.htrans (Proxy @(GetAp a)) (SOP.I . getAp)
+sopGetAp _ = SOP.htrans (Proxy @(GetAp a)) (SOP.I . (.getAp))
 
 sopAp ::
   forall a f.
