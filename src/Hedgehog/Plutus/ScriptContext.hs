@@ -1,6 +1,13 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 
-module Hedgehog.Plutus.ScriptContext where
+module Hedgehog.Plutus.ScriptContext (
+  ScriptTx (..),
+  ScriptType (..),
+  DatumOf,
+  ScriptContext (..),
+  ScriptPurpose (..),
+  plutusScriptContext,
+) where
 
 import Data.Kind (Type)
 
@@ -35,4 +42,13 @@ data ScriptContext redeemer st = ScriptContext
   }
 
 plutusScriptContext :: ScriptContext d st -> Plutus.ScriptContext
-plutusScriptContext = _
+plutusScriptContext
+  ScriptContext
+    { contextTxInfo = txInfo
+    , contextPurpose = sp
+    } = Plutus.ScriptContext txInfo $
+    case sp of
+      Spending ref -> Plutus.Spending ref
+      Minting cs -> Plutus.Minting cs
+      Rewarding sc -> Plutus.Rewarding sc
+      Certifying cert -> Plutus.Certifying cert
