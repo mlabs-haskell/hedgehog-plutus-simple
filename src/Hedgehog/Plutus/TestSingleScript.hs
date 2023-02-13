@@ -1,7 +1,7 @@
 module Hedgehog.Plutus.TestSingleScript where
 
 import Data.Kind (Type)
-import GHC.Records (HasField (getField))
+import GHC.Records (HasField)
 
 import Data.Maybe (maybeToList)
 
@@ -138,8 +138,8 @@ txRunScript
                   ( unsafeFromEither $
                       Simple.toDCert
                         mockConfigNetworkId
-                        (getField @"_poolDeposit" params)
-                        (getField @"_minPoolCost" params)
+                        params._poolDeposit
+                        params._minPoolCost
                         cert
                   )
           )
@@ -180,7 +180,7 @@ txRunScript' pparams ei sysS utxo tx sp = do
   evalScript
     lang
     pparams
-    (Alonzo.unCostModels (getField @"_costmdls" pparams) Map.! lang)
+    (Alonzo.unCostModels pparams._costmdls Map.! lang)
     scr'
     =<< txGetData pparams ei sysS tx utxo lang sp rptr
 
@@ -237,7 +237,7 @@ evalScript lang pparams cm script args =
   either Just (const Nothing) . snd $
     Plutus.evaluateScriptCounting
       (toPlutusLang lang)
-      (Alonzo.transProtocolVersion $ getField @"_protocolVersion" pparams)
+      (Alonzo.transProtocolVersion pparams._protocolVersion)
       Plutus.Verbose
       (Alonzo.getEvaluationContext cm)
       script
