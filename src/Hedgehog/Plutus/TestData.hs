@@ -3,7 +3,14 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 
-module Hedgehog.Plutus.TestData where
+module Hedgehog.Plutus.TestData (
+  TestData,
+  testDataAdjunction,
+  expect,
+  Bad,
+  Good,
+  Generalised,
+) where
 
 import Data.Coerce (coerce)
 import Data.Kind (Constraint, Type)
@@ -17,7 +24,7 @@ import Generics.SOP qualified as SOP
 import Generics.SOP.GGP qualified as SOP
 
 import Generics.SOP.NS (sequence'_SOP)
-import Hedgehog.Plutus.Adjunction
+import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction, lower, raise))
 
 type Quality :: Type
 data Quality = IsGeneralised | IsGood

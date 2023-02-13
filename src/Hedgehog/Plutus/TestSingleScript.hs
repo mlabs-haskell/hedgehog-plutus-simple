@@ -1,4 +1,6 @@
-module Hedgehog.Plutus.TestSingleScript where
+module Hedgehog.Plutus.TestSingleScript (
+  txRunScript,
+) where
 
 import Data.Kind (Type)
 import GHC.Records (HasField (getField))
