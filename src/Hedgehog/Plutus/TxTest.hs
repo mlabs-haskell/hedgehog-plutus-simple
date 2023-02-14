@@ -30,12 +30,12 @@ import PlutusLedgerApi.V2.Tx qualified as Plutus
 import Plutus.Model qualified as Model
 import PlutusTx.AssocMap qualified as PlutusTx
 
-import Cardano.Simple.Ledger.Tx (Tx (..), TxIn (..))
+import Cardano.Simple.Ledger.TimeSlot qualified as Time
+import Cardano.Simple.Ledger.Tx (Tx (..), TxIn (..), TxInType (..))
 import Hedgehog.Plutus.Adjunction (Adjunction (..), adjunctionTest)
 import Hedgehog.Plutus.ScriptContext (
   DatumOf,
   ScriptContext (..),
-  ScriptTx (..),
   ScriptTx (..),
   scriptTxValid,
  )
@@ -92,39 +92,93 @@ scriptContext ::
   DatumOf st ->
   Adjunction (ScriptTx st) (ScriptContext r st)
 scriptContext
-  Model.Mock {Model.mockUtxos = utxos}
+  Model.Mock
+    { Model.mockUtxos = utxos
+    , Model.mockUsers = users
+    , Model.mockConfig =
+      Model.MockConfig
+        { Model.mockConfigSlotConfig = slotCfg
+        }
+    }
   _ =
     Adjunction {lower, raise}
     where
       lower :: ScriptContext r st -> ScriptTx st
       lower
         ScriptContext
-          { contextTxInfo = _
+          { contextTxInfo =
+            Plutus.TxInfo
+              { Plutus.txInfoInputs = txInputs
+              , Plutus.txInfoReferenceInputs = referenceInputs
+              , Plutus.txInfoOutputs = txOutputs
+              , Plutus.txInfoFee = fee
+              , Plutus.txInfoMint = mint
+              , Plutus.txInfoValidRange = posixRange
+              , Plutus.txInfoSignatories = sigs
+              , Plutus.txInfoRedeemers = redeemers
+              , Plutus.txInfoData = dataTable
+              }
           , contextPurpose
           , contextRedeemer = _
           } =
-          ScriptTx
-            { scriptTxPurpose = contextPurpose
-            , scriptTx =
-                Model.Tx
-                  (error "TODO extra")
-                  $ Tx
-                    -- TODO is there a better option than construction the tx by hand here?
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-                    (error "TODO")
-            }
+          let
+            toAda :: Plutus.Value -> Model.Ada
+            toAda = error "TODO"
+            -- should this err on any non-ada value?
+            convertIn :: Plutus.TxInInfo -> TxIn
+            convertIn
+              Plutus.TxInInfo
+                { Plutus.txInInfoOutRef = txInRef
+                , Plutus.txInInfoResolved =
+                  Plutus.TxOut
+                    { Plutus.txOutAddress =
+                      Plutus.Address
+                        { Plutus.addressCredential = cred
+                        }
+                    }
+                } =
+                TxIn {txInRef, txInType}
+                where
+                  txInType = Just $ case cred of
+                    Plutus.PubKeyCredential _pkh ->
+                      ConsumePublicKeyAddress
+                    Plutus.ScriptCredential _sh ->
+                      ConsumeScriptAddress
+                        (error "TODO")
+                        (error "TODO")
+                        (error "TODO")
+           in
+            ScriptTx
+              { scriptTxPurpose = contextPurpose
+              , scriptTx =
+                  Model.Tx
+                    (error "TODO extra")
+                    $ Tx
+                      { txInputs = Set.fromList $ convertIn <$> txInputs
+                      , txReferenceInputs = Set.fromList $ convertIn <$> referenceInputs
+                      , txOutputs = txOutputs
+                      , txFee = toAda fee
+                      , txMint = mint
+                      , txValidRange =
+                          Time.posixTimeRangeToContainedSlotRange slotCfg posixRange
+                      , txSignatures =
+                          Map.fromList
+                            [ ( pkh
+                              , fromMaybe (error "user not found") $
+                                  Model.userSignKey
+                                    <$> Map.lookup pkh users
+                              )
+                            | pkh <- sigs
+                            ]
+                      , txRedeemers = error "TODO" $ redeemers
+                      , txData = Map.fromList $ PlutusTx.toList dataTable
+                      , txCollateral = error "TODO"
+                      , txCollateralReturn = error "TODO"
+                      , txTotalCollateral = error "TODO"
+                      , txScripts = error "TODO"
+                      , txMintScripts = error "TODO"
+                      }
+              }
       raise :: ScriptTx st -> ScriptContext r st
       raise
         ScriptTx
@@ -143,7 +197,6 @@ scriptContext
                   , txSignatures
                   , txRedeemers
                   , txData
-                  -- ,txId
                   }
               }
           } =
@@ -157,6 +210,7 @@ scriptContext
 
             adaToValue :: Model.Ada -> Plutus.Value
             adaToValue = error "TODO"
+
             redeemerPtr :: Plutus.RedeemerPtr
             redeemerPtr = error "TODO"
             -- TODO how can I get this?
@@ -177,15 +231,21 @@ scriptContext
               , contextTxInfo =
                   Plutus.TxInfo
                     { Plutus.txInfoInputs = convertIn <$> Set.toList txInputs
-                    , Plutus.txInfoReferenceInputs = convertIn <$> Set.toList txReferenceInputs
+                    , Plutus.txInfoReferenceInputs =
+                        convertIn <$> Set.toList txReferenceInputs
                     , Plutus.txInfoOutputs = txOutputs
                     , Plutus.txInfoFee = adaToValue txFee
                     , Plutus.txInfoMint = txMint
                     , Plutus.txInfoDCert = error "TODO"
                     , Plutus.txInfoWdrl = error "TODO"
-                    , Plutus.txInfoValidRange = error "TODO" $ txValidRange
+                    , Plutus.txInfoValidRange =
+                        Time.slotRangeToPOSIXTimeRange slotCfg $ txValidRange
                     , Plutus.txInfoSignatories = Map.keys txSignatures
-                    , Plutus.txInfoRedeemers = PlutusTx.fromList $ map (first (error "TODO")) $ Map.toList $ txRedeemers
+                    , Plutus.txInfoRedeemers =
+                        PlutusTx.fromList $
+                          map (first (error "TODO")) $
+                            Map.toList $
+                              txRedeemers
                     , Plutus.txInfoData = PlutusTx.fromList $ Map.toList txData
                     , Plutus.txInfoId = error "TODO"
                     }
