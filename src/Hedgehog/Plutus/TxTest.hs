@@ -161,13 +161,14 @@ scriptContext
                       , txSignatures =
                           Map.fromList
                             [ ( pkh
-                              , fromMaybe (error "user not found") $
+                              , maybe
+                                  (error "user not found")
                                   Model.userSignKey
-                                    <$> Map.lookup pkh users
+                                  (Map.lookup pkh users)
                               )
                             | pkh <- sigs
                             ]
-                      , txRedeemers = error "TODO" $ redeemers
+                      , txRedeemers = error "TODO" redeemers
                       , txData = Map.fromList $ PlutusTx.toList dataTable
                       , txCollateral = error "TODO"
                       , txCollateralReturn = error "TODO"
@@ -236,13 +237,12 @@ scriptContext
                     , Plutus.txInfoDCert = error "TODO"
                     , Plutus.txInfoWdrl = error "TODO"
                     , Plutus.txInfoValidRange =
-                        Time.slotRangeToPOSIXTimeRange slotCfg $ txValidRange
+                        Time.slotRangeToPOSIXTimeRange slotCfg txValidRange
                     , Plutus.txInfoSignatories = Map.keys txSignatures
                     , Plutus.txInfoRedeemers =
                         PlutusTx.fromList $
-                          map (first (error "TODO")) $
-                            Map.toList $
-                              txRedeemers
+                          first (error "TODO")
+                            <$> Map.toList txRedeemers
                     , Plutus.txInfoData = PlutusTx.fromList $ Map.toList txData
                     , Plutus.txInfoId = error "TODO"
                     }
@@ -255,7 +255,7 @@ instance Omittable (PlutusTx.AssocMap.Map Plutus.DatumHash Plutus.Datum)
 instance Omittable Plutus.TxId
 
 omitted :: (Omittable a) => a
-omitted = undefined
+omitted = error "ommited value read"
 
 resolveOmitted :: Model.Mock -> datum -> Plutus.TxInfo -> Plutus.TxInfo
 resolveOmitted _mock _d txinfo =
