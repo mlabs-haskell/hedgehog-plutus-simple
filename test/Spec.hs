@@ -22,7 +22,7 @@ main =
     [ checkParallel $
         Group
           "time adjunction"
-          [ ("from POSIX", fromPosix)
+          [ ("from POSIX", fromPosix) -- This fails
           , ("from Slot", fromSlot)
           ]
     ]
