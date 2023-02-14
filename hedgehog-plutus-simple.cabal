@@ -96,6 +96,7 @@ library
     Hedgehog.Plutus.Simple
     Hedgehog.Plutus.TestData
     Hedgehog.Plutus.TestSingleScript
+    Hedgehog.Plutus.TimeTest
     Hedgehog.Plutus.TxTest
 
   build-depends:
@@ -119,3 +120,17 @@ library
     , vector
 
   hs-source-dirs:  src
+
+test-suite hedgehog-plutus-simple
+  import:         common-lang
+  type:           exitcode-stdio-1.0
+  main-is:        Spec.hs
+  hs-source-dirs: ./test
+  build-depends:
+    , cardano-simple
+    , hedgehog
+    , hedgehog-plutus-simple
+    , plutus-ledger-api
+
+--, tasty
+--, tasty-hedgehog
