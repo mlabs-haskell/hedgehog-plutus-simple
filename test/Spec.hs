@@ -18,7 +18,7 @@ import PlutusLedgerApi.V2 (
 
 main :: IO ()
 main =
-  defaultMain $
+  defaultMain
     [ checkParallel $
         Group
           "time adjunction"
@@ -41,9 +41,7 @@ fromSlot = property $ do
 
 -- generates a POSIXTimeRange which coresponds to a SlotRange exactly
 genPOSIXRange :: SlotConfig -> Gen POSIXTimeRange
-genPOSIXRange sc = do
-  slotRange <- genSlotRange
-  pure $ slotRangeToPOSIXTimeRange sc slotRange
+genPOSIXRange sc = slotRangeToPOSIXTimeRange sc <$> genSlotRange
 
 genSlotRange :: Gen SlotRange
 genSlotRange = do
@@ -51,9 +49,9 @@ genSlotRange = do
   b <- Gen.filter (/= a) $ genExtended genSlot
   let l = min a b
   let r = max a b
-  cl <- Gen.bool
-  cr <- Gen.bool
-  pure $ Interval (LowerBound l cl) (UpperBound r cr)
+  Interval
+    <$> (LowerBound l <$> Gen.bool)
+    <*> (UpperBound r <$> Gen.bool)
 
 genSlot :: Gen Slot
 genSlot = Gen.integral $ Range.linear 0 1_000_000
