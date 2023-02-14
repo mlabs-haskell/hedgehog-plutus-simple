@@ -89,7 +89,11 @@ scriptContext ::
   Model.Mock ->
   DatumOf st ->
   Adjunction (ScriptTx st) (ScriptContext r st)
-scriptContext
+scriptContext m d =
+  Adjunction {lower = lowerSc m d, raise = raiseSc m d}
+
+lowerSc :: Model.Mock -> DatumOf st -> ScriptContext r st -> ScriptTx st
+lowerSc
   Model.Mock
     { Model.mockUtxos = utxos
     , Model.mockUsers = users
@@ -98,238 +102,247 @@ scriptContext
         { Model.mockConfigSlotConfig = slotCfg
         }
     }
-  _ =
-    Adjunction {lower, raise}
+  _
+  ScriptContext
+    { contextTxInfo =
+      Plutus.TxInfo
+        { Plutus.txInfoInputs = txInputs
+        , Plutus.txInfoReferenceInputs = referenceInputs
+        , Plutus.txInfoOutputs = txOutputs
+        , Plutus.txInfoFee = fee
+        , Plutus.txInfoMint = mint
+        , Plutus.txInfoValidRange = posixRange
+        , Plutus.txInfoSignatories = sigs
+        , Plutus.txInfoRedeemers = redeemers
+        , Plutus.txInfoData = dataTable
+        }
+    , contextPurpose
+    , contextRedeemer = _
+    } =
+    ScriptTx
+      { scriptTxPurpose = contextPurpose
+      , scriptTx =
+          Model.Tx
+            (error "TODO extra")
+            $ Tx
+              { txInputs = inputs
+              , txReferenceInputs =
+                  Set.fromList $ convertIn <$> referenceInputs
+              , txOutputs = txOutputs
+              , txFee = toAda fee
+              , txMint = mint
+              , txValidRange =
+                  Time.posixTimeRangeToContainedSlotRange
+                    slotCfg
+                    posixRange
+              , txSignatures =
+                  Map.fromList
+                    [ ( pkh
+                      , maybe
+                          (error "user not found")
+                          Model.userSignKey
+                          (Map.lookup pkh users)
+                      )
+                    | pkh <- sigs
+                    ]
+              , txRedeemers =
+                  Map.fromList $
+                    first (error "TODO redeemer ptr stuff")
+                      <$> PlutusTx.toList redeemers
+              , txData = Map.fromList $ PlutusTx.toList dataTable
+              , txCollateral = collateral
+              , txCollateralReturn = Just collateralRet
+              , txTotalCollateral = Just $ toAda totalCollateralValue
+              , txScripts = error "TODO"
+              , -- TODO if we add the scripts argument this
+                -- can be a filter of that
+                txMintScripts = error "TODO"
+                -- TODO do we need a table to look these up
+                -- from currencySybmols
+              }
+      }
     where
       scripts :: Map Plutus.ScriptHash (Model.Versioned Model.Validator)
       scripts = error "TODO" -- probably take this map as an argument?
-      lower :: ScriptContext r st -> ScriptTx st
-      lower
-        ScriptContext
-          { contextTxInfo =
-            Plutus.TxInfo
-              { Plutus.txInfoInputs = txInputs
-              , Plutus.txInfoReferenceInputs = referenceInputs
-              , Plutus.txInfoOutputs = txOutputs
-              , Plutus.txInfoFee = fee
-              , Plutus.txInfoMint = mint
-              , Plutus.txInfoValidRange = posixRange
-              , Plutus.txInfoSignatories = sigs
-              , Plutus.txInfoRedeemers = redeemers
-              , Plutus.txInfoData = dataTable
-              }
-          , contextPurpose
-          , contextRedeemer = _
-          } =
-          let
-            toAda :: Plutus.Value -> Model.Ada
-            toAda v = Model.Lovelace $ valueOf v "" ""
 
-            convertIn :: Plutus.TxInInfo -> TxIn
-            convertIn
-              Plutus.TxInInfo
-                { Plutus.txInInfoOutRef = txInRef
-                , Plutus.txInInfoResolved =
-                  Plutus.TxOut
-                    { Plutus.txOutAddress =
-                      Plutus.Address
-                        { Plutus.addressCredential = cred
-                        }
-                    }
-                } =
-                TxIn {txInRef, txInType}
-                where
-                  txInType = Just $ case cred of
-                    Plutus.PubKeyCredential _pkh ->
-                      ConsumePublicKeyAddress
-                    Plutus.ScriptCredential sh ->
-                      ConsumeScriptAddress
-                        ( Just $
-                            fromMaybe (error "script not found") $
-                              Map.lookup sh scripts
-                        )
-                        ( fromMaybe (error "redeemer not found") $
-                            PlutusTx.lookup
-                              (error "TODO convert script purpouse")
-                              redeemers
-                        )
-                        ( let
-                            Plutus.TxOut {Plutus.txOutDatum = outDatum} =
-                              fromMaybe (error "utxo lookup failed") $
-                                Map.lookup txInRef utxos
-                           in
-                            case outDatum of
-                              Plutus.OutputDatum d -> d
-                              Plutus.OutputDatumHash dh ->
-                                fromMaybe (error "datum lookup failed") $
-                                  PlutusTx.lookup dh dataTable
-                              Plutus.NoOutputDatum -> error "No output datum"
-                        )
-            inputs :: Set TxIn
-            inputs = Set.fromList $ convertIn <$> txInputs
-
-            -- Use all pubkey inputs as collateral
-            collateral :: Set TxIn
-            collateral =
-              Set.filter
-                ( \TxIn {txInRef} ->
-                    let
-                      Plutus.TxOut
-                        { Plutus.txOutAddress =
-                          Plutus.Address cred _
-                        } =
-                          fromMaybe (error "utxo lookup failed") $
-                            Map.lookup txInRef utxos
-                     in
-                      case cred of
-                        Plutus.PubKeyCredential _ -> True
-                        _ -> False
-                )
-                inputs
-
-            totalCollateralValue :: Plutus.Value
-            totalCollateralValue =
-              mconcat
-                [ val
-                | TxIn {txInRef} <- Set.toList collateral
-                , let
-                    Plutus.TxOut {Plutus.txOutValue = val} =
-                      fromMaybe (error "utxo lookup failed") $
-                        Map.lookup txInRef utxos
-                ]
-
-            -- Return everything to the first user in the mock users
-            collateralRet :: Plutus.TxOut
-            collateralRet =
-              Plutus.TxOut
-                { Plutus.txOutAddress =
-                    Plutus.Address
-                      ( Plutus.PubKeyCredential
-                          ( fromMaybe (error "no users") $
-                              listToMaybe $
-                                Map.keys users
-                          )
-                      )
-                      Nothing
-                , Plutus.txOutValue = totalCollateralValue
-                , Plutus.txOutDatum = Plutus.NoOutputDatum
-                , Plutus.txOutReferenceScript = Nothing
-                }
-           in
-            ScriptTx
-              { scriptTxPurpose = contextPurpose
-              , scriptTx =
-                  Model.Tx
-                    (error "TODO extra")
-                    $ Tx
-                      { txInputs = inputs
-                      , txReferenceInputs =
-                          Set.fromList $ convertIn <$> referenceInputs
-                      , txOutputs = txOutputs
-                      , txFee = toAda fee
-                      , txMint = mint
-                      , txValidRange =
-                          Time.posixTimeRangeToContainedSlotRange
-                            slotCfg
-                            posixRange
-                      , txSignatures =
-                          Map.fromList
-                            [ ( pkh
-                              , maybe
-                                  (error "user not found")
-                                  Model.userSignKey
-                                  (Map.lookup pkh users)
-                              )
-                            | pkh <- sigs
-                            ]
-                      , txRedeemers =
-                          Map.fromList $
-                            first (error "TODO redeemer ptr stuff")
-                              <$> PlutusTx.toList redeemers
-                      , txData = Map.fromList $ PlutusTx.toList dataTable
-                      , txCollateral = collateral
-                      , txCollateralReturn = Just collateralRet
-                      , txTotalCollateral = Just $ toAda totalCollateralValue
-                      , txScripts = error "TODO"
-                      , -- TODO if we add the scripts argument this
-                        -- can be a filter of that
-                        txMintScripts = error "TODO"
-                        -- TODO do we need a table to look these up
-                        -- from currencySybmols
-                      }
-              }
-      raise :: ScriptTx st -> ScriptContext r st
-      raise
-        ScriptTx
-          { scriptTxPurpose
-          , scriptTx =
-            Model.Tx
-              { Model.tx'extra = _
-              , Model.tx'plutus =
-                Tx
-                  { txInputs
-                  , txReferenceInputs
-                  , txOutputs
-                  , txFee
-                  , txMint
-                  , txValidRange
-                  , txSignatures
-                  , txRedeemers
-                  , txData
+      -- TODO maybe pull this out and just have it take a mock
+      convertIn :: Plutus.TxInInfo -> TxIn
+      convertIn
+        Plutus.TxInInfo
+          { Plutus.txInInfoOutRef = txInRef
+          , Plutus.txInInfoResolved =
+            Plutus.TxOut
+              { Plutus.txOutAddress =
+                Plutus.Address
+                  { Plutus.addressCredential = cred
                   }
               }
           } =
-          let
-            convertIn :: TxIn -> Plutus.TxInInfo
-            convertIn TxIn {txInRef} = Plutus.TxInInfo txInRef out
-              where
-                out =
-                  fromMaybe (error "lookup failure") $
-                    Map.lookup txInRef utxos
+          TxIn {txInRef, txInType}
+          where
+            txInType = Just $ case cred of
+              Plutus.PubKeyCredential _pkh ->
+                ConsumePublicKeyAddress
+              Plutus.ScriptCredential sh ->
+                ConsumeScriptAddress
+                  ( Just $
+                      fromMaybe (error "script not found") $
+                        Map.lookup sh scripts
+                  )
+                  ( fromMaybe (error "redeemer not found") $
+                      PlutusTx.lookup
+                        (error "TODO convert script purpouse")
+                        redeemers
+                  )
+                  ( let
+                      Plutus.TxOut {Plutus.txOutDatum = outDatum} =
+                        fromMaybe (error "utxo lookup failed") $
+                          Map.lookup txInRef utxos
+                     in
+                      case outDatum of
+                        Plutus.OutputDatum d -> d
+                        Plutus.OutputDatumHash dh ->
+                          fromMaybe (error "datum lookup failed") $
+                            PlutusTx.lookup dh dataTable
+                        Plutus.NoOutputDatum -> error "No output datum"
+                  )
 
-            adaToValue :: Model.Ada -> Plutus.Value
-            adaToValue (Model.Lovelace n) = Plutus.singleton "" "" n
+      inputs :: Set TxIn
+      inputs = Set.fromList $ convertIn <$> txInputs
 
-            redeemerPtr :: Plutus.RedeemerPtr
-            redeemerPtr = error "TODO"
-            -- TODO how can I get this?
-            -- is this all wrong and I can get the redeemer from Extra?
+      -- Use all pubkey inputs as collateral
+      collateral :: Set TxIn
+      collateral =
+        Set.filter
+          ( \TxIn {txInRef} ->
+              let
+                Plutus.TxOut
+                  { Plutus.txOutAddress =
+                    Plutus.Address cred _
+                  } =
+                    fromMaybe (error "utxo lookup failed") $
+                      Map.lookup txInRef utxos
+               in
+                case cred of
+                  Plutus.PubKeyCredential _ -> True
+                  _ -> False
+          )
+          inputs
 
-            redeemer :: Plutus.Redeemer
-            redeemer =
-              fromMaybe (error "redeemer ptr not found") $
-                Map.lookup redeemerPtr txRedeemers
+      totalCollateralValue :: Plutus.Value
+      totalCollateralValue =
+        mconcat
+          [ val
+          | TxIn {txInRef} <- Set.toList collateral
+          , let
+              Plutus.TxOut {Plutus.txOutValue = val} =
+                fromMaybe (error "utxo lookup failed") $
+                  Map.lookup txInRef utxos
+          ]
 
-            redeemerData :: Plutus.BuiltinData
-            redeemerData = case redeemer of
-              Plutus.Redeemer d -> d
-           in
-            ScriptContext
-              { contextRedeemer =
-                  fromMaybe (error "failed to parse redeemer") $
-                    Plutus.fromBuiltinData redeemerData
-              , contextPurpose = scriptTxPurpose
-              , contextTxInfo =
-                  Plutus.TxInfo
-                    { Plutus.txInfoInputs = convertIn <$> Set.toList txInputs
-                    , Plutus.txInfoReferenceInputs =
-                        convertIn <$> Set.toList txReferenceInputs
-                    , Plutus.txInfoOutputs = txOutputs
-                    , Plutus.txInfoFee = adaToValue txFee
-                    , Plutus.txInfoMint = txMint
-                    , Plutus.txInfoDCert = error "TODO"
-                    , Plutus.txInfoWdrl = error "TODO"
-                    , Plutus.txInfoValidRange =
-                        Time.slotRangeToPOSIXTimeRange slotCfg txValidRange
-                    , Plutus.txInfoSignatories = Map.keys txSignatures
-                    , Plutus.txInfoRedeemers =
-                        PlutusTx.fromList $
-                          first (error "TODO redeemer ptr stuff")
-                            <$> Map.toList txRedeemers
-                    , Plutus.txInfoData = PlutusTx.fromList $ Map.toList txData
-                    , Plutus.txInfoId = error "TODO"
-                    }
-              }
+      -- Return everything to the first user in the mock users
+      collateralRet :: Plutus.TxOut
+      collateralRet =
+        Plutus.TxOut
+          { Plutus.txOutAddress =
+              Plutus.Address
+                ( Plutus.PubKeyCredential
+                    ( fromMaybe (error "no users") $
+                        listToMaybe $
+                          Map.keys users
+                    )
+                )
+                Nothing
+          , Plutus.txOutValue = totalCollateralValue
+          , Plutus.txOutDatum = Plutus.NoOutputDatum
+          , Plutus.txOutReferenceScript = Nothing
+          }
+
+raiseSc ::
+  Plutus.FromData r =>
+  Model.Mock ->
+  DatumOf st ->
+  ScriptTx st ->
+  ScriptContext r st
+raiseSc
+  Model.Mock
+    { Model.mockUtxos = utxos
+    , Model.mockConfig =
+      Model.MockConfig
+        { Model.mockConfigSlotConfig = slotCfg
+        }
+    }
+  _
+  ScriptTx
+    { scriptTxPurpose
+    , scriptTx =
+      Model.Tx
+        { Model.tx'extra = _
+        , Model.tx'plutus =
+          Tx
+            { txInputs
+            , txReferenceInputs
+            , txOutputs
+            , txFee
+            , txMint
+            , txValidRange
+            , txSignatures
+            , txRedeemers
+            , txData
+            }
+        }
+    } =
+    ScriptContext
+      { contextRedeemer =
+          fromMaybe (error "failed to parse redeemer") $
+            Plutus.fromBuiltinData redeemer
+      , contextPurpose = scriptTxPurpose
+      , contextTxInfo =
+          Plutus.TxInfo
+            { Plutus.txInfoInputs = convertIn <$> Set.toList txInputs
+            , Plutus.txInfoReferenceInputs =
+                convertIn <$> Set.toList txReferenceInputs
+            , Plutus.txInfoOutputs = txOutputs
+            , Plutus.txInfoFee = adaToValue txFee
+            , Plutus.txInfoMint = txMint
+            , Plutus.txInfoDCert = error "TODO"
+            , Plutus.txInfoWdrl = error "TODO"
+            , Plutus.txInfoValidRange =
+                Time.slotRangeToPOSIXTimeRange slotCfg txValidRange
+            , Plutus.txInfoSignatories = Map.keys txSignatures
+            , Plutus.txInfoRedeemers =
+                PlutusTx.fromList $
+                  first (error "TODO redeemer ptr stuff")
+                    <$> Map.toList txRedeemers
+            , Plutus.txInfoData = PlutusTx.fromList $ Map.toList txData
+            , Plutus.txInfoId = error "TODO"
+            }
+      }
+    where
+      convertIn :: TxIn -> Plutus.TxInInfo
+      convertIn TxIn {txInRef} = Plutus.TxInInfo txInRef out
+        where
+          out =
+            fromMaybe (error "lookup failure") $
+              Map.lookup txInRef utxos
+
+      redeemerPtr :: Plutus.RedeemerPtr
+      redeemerPtr = error "TODO"
+      -- TODO how can I get this?
+      -- is this all wrong and I can get the redeemer from Extra?
+
+      redeemer :: Plutus.BuiltinData
+      redeemer =
+        Plutus.getRedeemer $
+          fromMaybe (error "redeemer ptr not found") $
+            Map.lookup redeemerPtr txRedeemers
+
+-- Gets the ada portion of a value
+toAda :: Plutus.Value -> Model.Ada
+toAda v = Model.Lovelace $ valueOf v "" ""
+
+adaToValue :: Model.Ada -> Plutus.Value
+adaToValue (Model.Lovelace n) = Plutus.singleton "" "" n
 
 type Omittable :: Type -> Constraint
 class Omittable a
