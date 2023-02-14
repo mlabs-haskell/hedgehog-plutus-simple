@@ -18,7 +18,6 @@ timeAdjunctionPosix slotCfg =
     (posixTimeRangeToContainedSlotRange slotCfg)
     (slotRangeToPOSIXTimeRange slotCfg)
 
--- TODO good name
 timeAdjunctionSlot :: SlotConfig -> Adjunction POSIXTimeRange SlotRange
 timeAdjunctionSlot slotCfg =
   Adjunction
