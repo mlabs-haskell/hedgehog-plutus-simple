@@ -16,6 +16,7 @@ module Hedgehog.Plutus.TxTest (
 import Prelude hiding ((.))
 
 import Control.Arrow (first)
+import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
@@ -33,6 +34,7 @@ import PlutusTx.AssocMap qualified as PlutusTx
 import Cardano.Simple.Ledger.TimeSlot qualified as Time
 import Cardano.Simple.Ledger.Tx (Tx (..), TxIn (..), TxInType (..))
 import Hedgehog.Plutus.Adjunction (Adjunction (..), adjunctionTest)
+
 import Hedgehog.Plutus.ScriptContext (
   DatumOf,
   ScriptContext (..),
@@ -107,6 +109,8 @@ scriptContext
   _ =
     Adjunction {lower, raise}
     where
+      scripts :: Map Plutus.ScriptHash (Model.Versioned Model.Validator)
+      scripts = error "TODO" -- probably take this map as an argument?
       lower :: ScriptContext r st -> ScriptTx st
       lower
         ScriptContext
@@ -126,10 +130,11 @@ scriptContext
           , contextRedeemer = _
           } =
           let
-            toAda :: Plutus.Value -> Model.Ada
-            toAda v = Model.Lovelace $ valueOf v "" ""
             -- should this err on any non-ada value?
             -- (it currently doesn't)
+            toAda :: Plutus.Value -> Model.Ada
+            toAda v = Model.Lovelace $ valueOf v "" ""
+
             convertIn :: Plutus.TxInInfo -> TxIn
             convertIn
               Plutus.TxInInfo
@@ -147,11 +152,29 @@ scriptContext
                   txInType = Just $ case cred of
                     Plutus.PubKeyCredential _pkh ->
                       ConsumePublicKeyAddress
-                    Plutus.ScriptCredential _sh ->
+                    Plutus.ScriptCredential sh ->
                       ConsumeScriptAddress
-                        (error "TODO")
-                        (error "TODO")
-                        (error "TODO")
+                        ( Just $
+                            fromMaybe (error "script not found") $
+                              Map.lookup sh scripts
+                        )
+                        ( fromMaybe (error "redeemer not found") $
+                            PlutusTx.lookup
+                              (error "TODO convert script purpouse")
+                              redeemers
+                        )
+                        ( let
+                            Plutus.TxOut {Plutus.txOutDatum = outDatum} =
+                              fromMaybe (error "utxo lookup failed") $
+                                Map.lookup txInRef utxos
+                           in
+                            case outDatum of
+                              Plutus.OutputDatum d -> d
+                              Plutus.OutputDatumHash dh ->
+                                fromMaybe (error "datum lookup failed") $
+                                  PlutusTx.lookup dh dataTable
+                              Plutus.NoOutputDatum -> error "No output datum"
+                        )
            in
             ScriptTx
               { scriptTxPurpose = contextPurpose
@@ -176,13 +199,18 @@ scriptContext
                               )
                             | pkh <- sigs
                             ]
-                      , txRedeemers = error "TODO" redeemers
+                      , txRedeemers = Map.fromList $ first (error "TODO redeemer ptr stuff") <$> PlutusTx.toList redeemers
                       , txData = Map.fromList $ PlutusTx.toList dataTable
-                      , txCollateral = error "TODO"
+                      , -- TODO I think you have to make up colateral heapProfileIntervalTicks
+                        -- maybe just chose some pubkey input?
+                        txCollateral = error "TODO"
                       , txCollateralReturn = error "TODO"
                       , txTotalCollateral = error "TODO"
                       , txScripts = error "TODO"
-                      , txMintScripts = error "TODO"
+                      , -- TODO if we add the scripts argument this
+                        -- can be a filter of that
+                        txMintScripts = error "TODO"
+                        -- TODO do we need a table to look these up from currencySybmols
                       }
               }
       raise :: ScriptTx st -> ScriptContext r st
@@ -221,10 +249,12 @@ scriptContext
             redeemerPtr = error "TODO"
             -- TODO how can I get this?
             -- is this all wrong and I can get the redeemer from Extra?
+
             redeemer :: Plutus.Redeemer
             redeemer =
               fromMaybe (error "redeemer ptr not found") $
                 Map.lookup redeemerPtr txRedeemers
+
             redeemerData :: Plutus.BuiltinData
             redeemerData = case redeemer of
               Plutus.Redeemer d -> d
@@ -249,7 +279,7 @@ scriptContext
                     , Plutus.txInfoSignatories = Map.keys txSignatures
                     , Plutus.txInfoRedeemers =
                         PlutusTx.fromList $
-                          first (error "TODO")
+                          first (error "TODO redeemer ptr stuff")
                             <$> Map.toList txRedeemers
                     , Plutus.txInfoData = PlutusTx.fromList $ Map.toList txData
                     , Plutus.txInfoId = error "TODO"
