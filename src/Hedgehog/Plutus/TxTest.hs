@@ -41,6 +41,7 @@ import Hedgehog.Plutus.TestData (
   TestData,
   testDataAdjunction,
  )
+import PlutusLedgerApi.V1.Value (valueOf)
 
 newtype TxTest st a
   = TxTest
@@ -77,6 +78,9 @@ txTest f = TxTest $ \mock datum ->
     . f mock datum
     . scriptContext mock datum
 
+-- Not lawful when
+-- the POSIXTimeRange doesn't coresponds to a SlotRange exactly
+-- the fee contains non-ada value
 scriptContext ::
   forall st r.
   Plutus.FromData r =>
@@ -115,8 +119,9 @@ scriptContext
           } =
           let
             toAda :: Plutus.Value -> Model.Ada
-            toAda = error "TODO"
+            toAda v = Model.Lovelace $ valueOf v "" ""
             -- should this err on any non-ada value?
+            -- (it currently doesn't)
             convertIn :: Plutus.TxInInfo -> TxIn
             convertIn
               Plutus.TxInInfo
@@ -201,7 +206,7 @@ scriptContext
                     Map.lookup txInRef utxos
 
             adaToValue :: Model.Ada -> Plutus.Value
-            adaToValue = error "TODO"
+            adaToValue (Model.Lovelace n) = Plutus.singleton "" "" n
 
             redeemerPtr :: Plutus.RedeemerPtr
             redeemerPtr = error "TODO"
