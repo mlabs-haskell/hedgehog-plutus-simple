@@ -14,7 +14,8 @@ import Control.Arrow (first)
 import Data.Kind (Constraint, Type)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
+import Data.Set (Set)
 import Data.Set qualified as Set
 
 import Control.Category (Category ((.)))
@@ -121,8 +122,6 @@ scriptContext
           , contextRedeemer = _
           } =
           let
-            -- should this err on any non-ada value?
-            -- (it currently doesn't)
             toAda :: Plutus.Value -> Model.Ada
             toAda v = Model.Lovelace $ valueOf v "" ""
 
@@ -166,6 +165,56 @@ scriptContext
                                   PlutusTx.lookup dh dataTable
                               Plutus.NoOutputDatum -> error "No output datum"
                         )
+            inputs :: Set TxIn
+            inputs = Set.fromList $ convertIn <$> txInputs
+
+            -- Use all pubkey inputs as collateral
+            collateral :: Set TxIn
+            collateral =
+              Set.filter
+                ( \TxIn {txInRef} ->
+                    let
+                      Plutus.TxOut
+                        { Plutus.txOutAddress =
+                          Plutus.Address cred _
+                        } =
+                          fromMaybe (error "utxo lookup failed") $
+                            Map.lookup txInRef utxos
+                     in
+                      case cred of
+                        Plutus.PubKeyCredential _ -> True
+                        _ -> False
+                )
+                inputs
+
+            totalCollateralValue :: Plutus.Value
+            totalCollateralValue =
+              mconcat
+                [ val
+                | TxIn {txInRef} <- Set.toList collateral
+                , let
+                    Plutus.TxOut {Plutus.txOutValue = val} =
+                      fromMaybe (error "utxo lookup failed") $
+                        Map.lookup txInRef utxos
+                ]
+
+            -- Return everything to the first user in the mock users
+            collateralRet :: Plutus.TxOut
+            collateralRet =
+              Plutus.TxOut
+                { Plutus.txOutAddress =
+                    Plutus.Address
+                      ( Plutus.PubKeyCredential
+                          ( fromMaybe (error "no users") $
+                              listToMaybe $
+                                Map.keys users
+                          )
+                      )
+                      Nothing
+                , Plutus.txOutValue = totalCollateralValue
+                , Plutus.txOutDatum = Plutus.NoOutputDatum
+                , Plutus.txOutReferenceScript = Nothing
+                }
            in
             ScriptTx
               { scriptTxPurpose = contextPurpose
@@ -173,13 +222,16 @@ scriptContext
                   Model.Tx
                     (error "TODO extra")
                     $ Tx
-                      { txInputs = Set.fromList $ convertIn <$> txInputs
-                      , txReferenceInputs = Set.fromList $ convertIn <$> referenceInputs
+                      { txInputs = inputs
+                      , txReferenceInputs =
+                          Set.fromList $ convertIn <$> referenceInputs
                       , txOutputs = txOutputs
                       , txFee = toAda fee
                       , txMint = mint
                       , txValidRange =
-                          Time.posixTimeRangeToContainedSlotRange slotCfg posixRange
+                          Time.posixTimeRangeToContainedSlotRange
+                            slotCfg
+                            posixRange
                       , txSignatures =
                           Map.fromList
                             [ ( pkh
@@ -190,18 +242,20 @@ scriptContext
                               )
                             | pkh <- sigs
                             ]
-                      , txRedeemers = Map.fromList $ first (error "TODO redeemer ptr stuff") <$> PlutusTx.toList redeemers
+                      , txRedeemers =
+                          Map.fromList $
+                            first (error "TODO redeemer ptr stuff")
+                              <$> PlutusTx.toList redeemers
                       , txData = Map.fromList $ PlutusTx.toList dataTable
-                      , -- TODO I think you have to make up colateral heapProfileIntervalTicks
-                        -- maybe just chose some pubkey input?
-                        txCollateral = error "TODO"
-                      , txCollateralReturn = error "TODO"
-                      , txTotalCollateral = error "TODO"
+                      , txCollateral = collateral
+                      , txCollateralReturn = Just collateralRet
+                      , txTotalCollateral = Just $ toAda totalCollateralValue
                       , txScripts = error "TODO"
                       , -- TODO if we add the scripts argument this
                         -- can be a filter of that
                         txMintScripts = error "TODO"
-                        -- TODO do we need a table to look these up from currencySybmols
+                        -- TODO do we need a table to look these up
+                        -- from currencySybmols
                       }
               }
       raise :: ScriptTx st -> ScriptContext r st
