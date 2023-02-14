@@ -6,9 +6,9 @@ import Hedgehog.Range qualified as Range
 import Hedgehog.Plutus.Adjunction (adjunctionTest)
 
 import Cardano.Simple.Ledger.Slot (Slot, SlotRange)
-import Cardano.Simple.Ledger.TimeSlot (SlotConfig (SlotConfig, scSlotLength, scSlotZeroTime))
+import Cardano.Simple.Ledger.TimeSlot (SlotConfig (SlotConfig), slotRangeToPOSIXTimeRange)
 import Hedgehog.Plutus.TimeTest (timeAdjunctionPosix, timeAdjunctionSlot)
-import PlutusLedgerApi.V1 (POSIXTime, POSIXTimeRange)
+import PlutusLedgerApi.V1 (POSIXTimeRange)
 import PlutusLedgerApi.V2 (
   Extended (Finite, NegInf, PosInf),
   Interval (Interval),
@@ -22,7 +22,7 @@ main =
     [ checkParallel $
         Group
           "time adjunction"
-          [ ("from POSIX", fromPosix) -- This fails
+          [ ("from POSIX", fromPosix)
           , ("from Slot", fromSlot)
           ]
     ]
@@ -39,16 +39,16 @@ fromSlot = property $ do
   slotRange <- forAll genSlotRange
   adjunctionTest (timeAdjunctionSlot slotCfg) slotRange
 
+-- generates a POSIXTimeRange which coresponds to a SlotRange exactly
 genPOSIXRange :: SlotConfig -> Gen POSIXTimeRange
-genPOSIXRange sc = genInterval (genPOSIXTime sc)
+genPOSIXRange sc = do
+  slotRange <- genSlotRange
+  pure $ slotRangeToPOSIXTimeRange sc slotRange
 
 genSlotRange :: Gen SlotRange
-genSlotRange = genInterval genSlot
-
-genInterval :: Ord a => Gen a -> Gen (Interval a)
-genInterval g = do
-  a <- genExtended g
-  b <- Gen.filter (/= a) $ genExtended g
+genSlotRange = do
+  a <- genExtended genSlot
+  b <- Gen.filter (/= a) $ genExtended genSlot
   let l = min a b
   let r = max a b
   cl <- Gen.bool
@@ -65,11 +65,6 @@ genExtended gen =
     , pure PosInf
     , Finite <$> gen
     ]
-
-genPOSIXTime :: SlotConfig -> Gen POSIXTime
-genPOSIXTime SlotConfig {scSlotLength, scSlotZeroTime} = do
-  n <- Gen.int $ Range.linear 0 1_000_000
-  pure $ scSlotZeroTime + fromIntegral (n * fromIntegral scSlotLength)
 
 genSlotCfg :: Gen SlotConfig
 genSlotCfg = do

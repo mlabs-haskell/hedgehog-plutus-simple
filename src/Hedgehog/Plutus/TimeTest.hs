@@ -12,12 +12,14 @@ import Cardano.Simple.Ledger.TimeSlot (
 import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction))
 import PlutusLedgerApi.V1 (POSIXTimeRange)
 
+-- Only lawful if the POSIXTimeRange coresponds to a SlotRange exactly
 timeAdjunctionPosix :: SlotConfig -> Adjunction SlotRange POSIXTimeRange
 timeAdjunctionPosix slotCfg =
   Adjunction
     (posixTimeRangeToContainedSlotRange slotCfg)
     (slotRangeToPOSIXTimeRange slotCfg)
 
+-- Lawful
 timeAdjunctionSlot :: SlotConfig -> Adjunction POSIXTimeRange SlotRange
 timeAdjunctionSlot slotCfg =
   Adjunction
