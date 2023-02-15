@@ -178,19 +178,13 @@ lowerSc
                   Map.fromList
                     [ (sh, getValidator <$> val)
                     | (sh, val) <- Map.toList scripts
-                    , any
-                        ( \txin ->
-                            case getCred utxos txin of
-                              Plutus.ScriptCredential sh' -> sh == sh'
-                              _ -> False
-                        )
-                        inputs
+                    , sh `Set.member` usedScripts
                     ]
               , txMintScripts =
                   Set.fromList
                     [ MintingPolicy . getValidator <$> val
                     | (sh, val) <- Map.toList scripts
-                    , (Value.CurrencySymbol $ Plutus.getScriptHash sh)
+                    , Value.CurrencySymbol (Plutus.getScriptHash sh)
                         `elem` Value.symbols mint
                     ] -- TODO make sure scripts include these
                     -- if not we need to take a table for these
@@ -199,6 +193,14 @@ lowerSc
     where
       convertIn :: Plutus.TxInInfo -> TxIn
       convertIn = convertIn' m redeemers scripts dataTable
+
+      usedScripts :: Set Plutus.ScriptHash
+      usedScripts =
+        Set.fromList
+          [ sh
+          | txin <- Set.toList inputs
+          , Plutus.ScriptCredential sh <- pure $ getCred utxos txin
+          ]
 
       inputs :: Set TxIn
       inputs = Set.fromList $ convertIn <$> txInputs
@@ -227,7 +229,7 @@ convertIn'
     }
   redeemers
   scripts
-  datumHashes
+  datumTable
   Plutus.TxInInfo
     { Plutus.txInInfoOutRef = txInRef
     , Plutus.txInInfoResolved =
@@ -259,13 +261,16 @@ convertIn'
                   fromMaybe (error "utxo lookup failed") $
                     Map.lookup txInRef utxos
                in
-                case outDatum of
-                  Plutus.OutputDatum d -> d
-                  Plutus.OutputDatumHash dh ->
-                    fromMaybe (error "datum lookup failed") $
-                      PlutusTx.lookup dh datumHashes
-                  Plutus.NoOutputDatum -> error "No output datum"
+                getDatum datumTable outDatum
             )
+
+getDatum :: PlutusTx.Map Plutus.DatumHash Plutus.Datum -> Plutus.OutputDatum -> Plutus.Datum
+getDatum datumTable = \case
+  Plutus.OutputDatum d -> d
+  Plutus.OutputDatumHash dh ->
+    fromMaybe (error "datum lookup failed") $
+      PlutusTx.lookup dh datumTable
+  Plutus.NoOutputDatum -> error "No output datum"
 
 mkCollateral :: Model.Mock -> Set TxIn -> (Set TxIn, Plutus.Value, Plutus.TxOut)
 mkCollateral
