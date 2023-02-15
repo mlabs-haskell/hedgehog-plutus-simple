@@ -35,7 +35,10 @@ import PlutusTx.AssocMap qualified as PlutusTx
 import Cardano.Simple.Ledger.TimeSlot qualified as Time
 import Cardano.Simple.Ledger.Tx (Tx (..), TxIn (..), TxInType (..))
 import Hedgehog.Plutus.Adjunction (Adjunction (..), adjunctionTest)
-import Cardano.Simple.PlutusLedgerApi.V1.Scripts (getValidator)
+import Cardano.Simple.PlutusLedgerApi.V1.Scripts (
+  MintingPolicy (MintingPolicy),
+  getValidator,
+ )
 
 import Hedgehog.Plutus.ScriptContext (
   DatumOf,
@@ -51,7 +54,7 @@ import Hedgehog.Plutus.TestData (
   testDataAdjunction,
  )
 import qualified Hedgehog
-import PlutusLedgerApi.V1.Value (valueOf)
+import PlutusLedgerApi.V1.Value qualified as Value
 
 newtype TxTest st a
   = TxTest
@@ -139,14 +142,15 @@ lowerSc
     ScriptTx
       { scriptTxPurpose = contextPurpose
       , scriptTx =
-          Model.Tx
-            (error "TODO extra")
-            $ Tx
+          Model.toExtra
+          -- TODO I think it's fine to leave the extra emepty
+          $
+            Tx
               { txInputs = inputs
               , txReferenceInputs =
                   Set.fromList $ convertIn <$> referenceInputs
               , txOutputs = txOutputs
-              , txFee = toAda fee
+              , txFee = valueToAda fee
               , txMint = mint
               , txValidRange =
                   Time.posixTimeRangeToContainedSlotRange
@@ -169,29 +173,27 @@ lowerSc
               , txData = Map.fromList $ PlutusTx.toList dataTable
               , txCollateral = collateral
               , txCollateralReturn = Just ret
-              , txTotalCollateral = Just $ toAda totalValue
+              , txTotalCollateral = Just $ valueToAda totalValue
               , txScripts =
                   Map.fromList
                     [ (sh, getValidator <$> val)
                     | (sh, val) <- Map.toList scripts
                     , any
-                        ( \TxIn {txInRef} ->
-                            let Plutus.TxOut
-                                  { -- TODO this feels repeditive
-                                  -- I probably want getCred txin utxos -> Credential
-                                  Plutus.txOutAddress = Plutus.Address cred _
-                                  } =
-                                    fromMaybe (error "utxo lookup failed") $
-                                      Map.lookup txInRef utxos
-                             in case cred of
-                                  Plutus.ScriptCredential sh' -> sh == sh'
-                                  _ -> False
+                        ( \txin ->
+                            case getCred utxos txin of
+                              Plutus.ScriptCredential sh' -> sh == sh'
+                              _ -> False
                         )
                         inputs
                     ]
-              , txMintScripts = error "TODO"
-              -- TODO do we need a table to look these up
-              -- from currencySybmols
+              , txMintScripts =
+                  Set.fromList
+                    [ MintingPolicy . getValidator <$> val
+                    | (sh, val) <- Map.toList scripts
+                    , (Value.CurrencySymbol $ Plutus.getScriptHash sh)
+                        `elem` Value.symbols mint
+                    ] -- TODO make sure scripts include these
+                    -- if not we need to take a table for these
               }
       }
     where
@@ -202,6 +204,15 @@ lowerSc
       inputs = Set.fromList $ convertIn <$> txInputs
 
       (collateral, totalValue, ret) = mkCollateral m inputs
+
+getCred :: Map Plutus.TxOutRef Plutus.TxOut -> TxIn -> Plutus.Credential
+getCred utxos TxIn {txInRef} = cred
+  where
+    Plutus.TxOut
+      { Plutus.txOutAddress = Plutus.Address cred _
+      } =
+        fromMaybe (error "utxo lookup failed") $
+          Map.lookup txInRef utxos
 
 convertIn' ::
   Model.Mock ->
@@ -269,18 +280,10 @@ mkCollateral
       collateral :: Set TxIn
       collateral =
         Set.filter
-          ( \TxIn {txInRef} ->
-              let
-                Plutus.TxOut
-                  { Plutus.txOutAddress =
-                    Plutus.Address cred _
-                  } =
-                    fromMaybe (error "utxo lookup failed") $
-                      Map.lookup txInRef utxos
-               in
-                case cred of
-                  Plutus.PubKeyCredential _ -> True
-                  _ -> False
+          ( \txin ->
+              case getCred utxos txin of
+                Plutus.PubKeyCredential _ -> True
+                _ -> False
           )
           inputs
 
@@ -360,9 +363,11 @@ raiseSc
             , Plutus.txInfoOutputs = txOutputs
             , Plutus.txInfoFee = adaToValue txFee
             , Plutus.txInfoMint = txMint
-            , Plutus.txInfoDCert = error "TODO"
-            , Plutus.txInfoWdrl = error "TODO"
-            , Plutus.txInfoValidRange =
+            , Plutus.txInfoDCert = []
+            , -- assume certifying nothing
+              Plutus.txInfoWdrl = PlutusTx.empty
+            , -- assume no staking withdrawls
+              Plutus.txInfoValidRange =
                 Time.slotRangeToPOSIXTimeRange slotCfg txValidRange
             , Plutus.txInfoSignatories = Map.keys txSignatures
             , Plutus.txInfoRedeemers =
@@ -370,7 +375,10 @@ raiseSc
                   first (error "TODO redeemer ptr stuff")
                     <$> Map.toList txRedeemers
             , Plutus.txInfoData = PlutusTx.fromList $ Map.toList txData
-            , Plutus.txInfoId = error "TODO"
+            , Plutus.txInfoId =
+                error "TODO"
+                -- Generate the txbody and hash it?
+                -- or can I just use a dummy id?
             }
       }
     where
@@ -378,7 +386,7 @@ raiseSc
       convertIn TxIn {txInRef} = Plutus.TxInInfo txInRef out
         where
           out =
-            fromMaybe (error "lookup failure") $
+            fromMaybe (error "utxo lookup failure") $
               Map.lookup txInRef utxos
 
       redeemerPtr :: Plutus.RedeemerPtr
@@ -393,8 +401,8 @@ raiseSc
             Map.lookup redeemerPtr txRedeemers
 
 -- Gets the ada portion of a value
-toAda :: Plutus.Value -> Model.Ada
-toAda v = Model.Lovelace $ valueOf v "" ""
+valueToAda :: Plutus.Value -> Model.Ada
+valueToAda v = Model.Lovelace $ Value.valueOf v "" ""
 
 adaToValue :: Model.Ada -> Plutus.Value
 adaToValue (Model.Lovelace n) = Plutus.singleton "" "" n
