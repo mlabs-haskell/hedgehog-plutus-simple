@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {-
 [Notes]
@@ -29,6 +30,7 @@ import PlutusTx qualified
 import Plutus.Model qualified as Model
 
 import Hedgehog.Plutus.Adjunction
+import Hedgehog.Plutus.Diff
 import Hedgehog.Plutus.ScriptContext
 import Hedgehog.Plutus.TestData
 import Hedgehog.Plutus.TxTest
@@ -45,7 +47,14 @@ data Auction = Auction
   , aCurrency :: !Plutus.CurrencySymbol
   , aToken :: !Plutus.TokenName
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, GHC.Generic)
+  deriving (Diff') via (Generically Auction)
+
+deriving via (Simple Plutus.PubKeyHash) instance Diff' Plutus.PubKeyHash
+deriving via (Simple Plutus.CurrencySymbol) instance Diff' Plutus.CurrencySymbol
+deriving via (Simple Plutus.TokenName) instance Diff' Plutus.TokenName
+deriving via (Simple Plutus.POSIXTime) instance Diff' Plutus.POSIXTime
+deriving via (Simple Plutus.Value) instance Diff' Plutus.Value
 
 PlutusTx.unstableMakeIsData ''Auction
 PlutusTx.makeLift ''Auction
@@ -54,7 +63,8 @@ data Bid = Bid
   { bBidder :: !Plutus.PubKeyHash
   , bBid :: !Integer
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, GHC.Generic)
+  deriving (Diff') via (Generically Bid)
 
 PlutusTx.unstableMakeIsData ''Bid
 PlutusTx.makeLift ''Bid
@@ -69,7 +79,8 @@ data AuctionDatum = AuctionDatum
   { adAuction :: !Auction
   , adHighestBid :: !(Maybe Bid)
   }
-  deriving stock (Show)
+  deriving stock (Eq, Show, GHC.Generic)
+  deriving (Diff') via (Generically AuctionDatum)
 
 PlutusTx.unstableMakeIsData ''AuctionDatum
 PlutusTx.makeLift ''AuctionDatum
@@ -325,16 +336,11 @@ data AuctionTestRedeemer q
   deriving (TestData) via (Generically' AuctionTestRedeemer)
 
 data SelfOutput q = SelfOutput
-  { datumIfDifferent :: Shouldn'tBePresent AuctionTestDatum q
+  { datumIfDifferent :: Shouldn'tBePresent (Only (Patch (Generically AuctionDatum))) q
   , valueIfDifferent :: Shouldn'tBePresent (Only Plutus.Value) q
   }
   deriving stock (GHC.Generic)
   deriving (TestData) via (Generically' SelfOutput)
-
-data AuctionTestDatum q = AuctionTestDatum
-  { auctionTestAuction :: !(Shouldn'tBePresent (Only Auction) q)
-  , auctionTestHiBid :: !(Shouldn'tBePresent (Only (Maybe Bid)) q)
-  }
 
 auctionTest :: TxTest ('Spend AuctionDatum) AuctionTest
 auctionTest = txTest $ \mock datum ->
@@ -396,17 +402,13 @@ raiseAuctionTest
       selfOutput :: Plutus.TxOut -> Bid -> SelfOutput 'IsGeneralised
       selfOutput o rBid =
         SelfOutput
-          ( if correctAuction && correctBid
-              then IsAbsent
-              else
-                IsPresent
-                  ( AuctionTestDatum
-                      { auctionTestAuction =
-                          expect inDatum.adAuction outDatum.adAuction
-                      , auctionTestHiBid =
-                          expect (Just rBid) outDatum.adHighestBid
-                      }
-                  )
+          ( expect
+              ( AuctionDatum
+                  { adAuction = inDatum.adAuction
+                  , adHighestBid = Just rBid
+                  }
+              )
+              outDatum
           )
           ( expect
               ( token
@@ -418,12 +420,6 @@ raiseAuctionTest
         where
           outDatum :: AuctionDatum
           outDatum = datum txi o
-
-          correctAuction :: Bool
-          correctAuction = outDatum.adAuction == inDatum.adAuction
-
-          correctBid :: Bool
-          correctBid = outDatum.adHighestBid == Just rBid
 
 lowerAuctionTest ::
   Model.Mock ->

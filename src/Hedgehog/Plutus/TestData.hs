@@ -17,7 +17,9 @@ import Generics.SOP qualified as SOP
 import Generics.SOP.GGP qualified as SOP
 
 import Generics.SOP.NS (sequence'_SOP)
+
 import Hedgehog.Plutus.Adjunction
+import Hedgehog.Plutus.Diff
 
 type Quality :: Type
 data Quality = IsGeneralised | IsGood
@@ -116,21 +118,25 @@ instance TestData ShouldBeNatural where
 
 type Shouldn'tBePresent :: (Quality -> Type) -> Quality -> Type
 data Shouldn'tBePresent bad q where
-  IsAbsent :: Shouldn'tBePresent bad q
-  IsPresent :: bad 'IsGeneralised -> Shouldn'tBePresent bad 'IsGeneralised
+  Correct :: Shouldn'tBePresent bad q
+  Incorrect :: bad 'IsGeneralised -> Shouldn'tBePresent bad 'IsGeneralised
 
 instance TestData (Shouldn'tBePresent bad) where
-  validate IsAbsent = Just IsAbsent
-  validate (IsPresent _) = Nothing
+  validate Correct = Just Correct
+  validate (Incorrect _) = Nothing
 
-  generalise IsAbsent = IsAbsent
+  generalise Correct = Correct
 
-expect :: (Eq a) => a -> a -> Generalised (Shouldn'tBePresent (Only a))
-expect exp act = if exp == act then IsAbsent else IsPresent (Only act)
+expect ::
+  (Diff a) =>
+  a ->
+  a ->
+  Generalised (Shouldn'tBePresent (Only (Patch a)))
+expect exp act = maybe Correct (Incorrect . Only) $ diff exp act
 
 type Generically' :: (Quality -> Type) -> Quality -> Type
 newtype Generically' f a where
-  Generically :: f a -> Generically' f a
+  Generically' :: f a -> Generically' f a
 
 class
   ( (forall q. GHC.Generic (a q))
@@ -190,9 +196,9 @@ instance
   ValidateGeneric a
 
 instance (ValidateGeneric a) => TestData (Generically' a) where
-  validate (Generically a) =
+  validate (Generically' a) =
     fmap
-      ( Generically
+      ( Generically'
           . SOP.gto
           . sopGetAp @'IsGood (Proxy @a)
       )
@@ -202,8 +208,8 @@ instance (ValidateGeneric a) => TestData (Generically' a) where
         (SOP.Comp . fmap Ap . validate . SOP.unI)
       $ SOP.gfrom a
 
-  generalise (Generically a) =
-    Generically
+  generalise (Generically' a) =
+    Generically'
       . SOP.gto
       . sopGetAp @'IsGeneralised (Proxy @a)
       . SOP.htrans (Proxy @Gen) (Ap . generalise . (.getAp))

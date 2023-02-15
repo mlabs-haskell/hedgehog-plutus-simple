@@ -94,6 +94,7 @@ library
   exposed-modules:
     Hedgehog.Plutus.Adjunction
     Hedgehog.Plutus.AuctionExample
+    Hedgehog.Plutus.Diff
     Hedgehog.Plutus.ScriptContext
     Hedgehog.Plutus.Simple
     Hedgehog.Plutus.TestData
