@@ -35,6 +35,7 @@ import PlutusTx.AssocMap qualified as PlutusTx
 import Cardano.Simple.Ledger.TimeSlot qualified as Time
 import Cardano.Simple.Ledger.Tx (Tx (..), TxIn (..), TxInType (..))
 import Hedgehog.Plutus.Adjunction (Adjunction (..), adjunctionTest)
+import Cardano.Simple.PlutusLedgerApi.V1.Scripts (getValidator)
 
 import Hedgehog.Plutus.ScriptContext (
   DatumOf,
@@ -87,7 +88,7 @@ txTest ::
 txTest f = TxTest $ \mock datum ->
   testDataAdjunction
     . f mock datum
-    . scriptContext mock datum
+    . scriptContext mock datum (error "TODO scripts table")
 
 -- Not lawful when
 -- the POSIXTimeRange doesn't coresponds to a SlotRange exactly
@@ -97,21 +98,28 @@ scriptContext ::
   Plutus.FromData r =>
   Model.Mock ->
   DatumOf st ->
+  Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Adjunction (ScriptTx st) (ScriptContext r st)
-scriptContext m d =
-  Adjunction {lower = lowerSc m d, raise = raiseSc m d}
+scriptContext m d scripts =
+  Adjunction {lower = lowerSc m d scripts, raise = raiseSc m d}
 
-lowerSc :: Model.Mock -> DatumOf st -> ScriptContext r st -> ScriptTx st
+lowerSc ::
+  Model.Mock ->
+  DatumOf st ->
+  Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
+  ScriptContext r st ->
+  ScriptTx st
 lowerSc
-  Model.Mock
-    { Model.mockUtxos = utxos
-    , Model.mockUsers = users
+  m@Model.Mock
+    { Model.mockUsers = users
+    , Model.mockUtxos = utxos
     , Model.mockConfig =
       Model.MockConfig
         { Model.mockConfigSlotConfig = slotCfg
         }
     }
   _
+  scripts
   ScriptContext
     { contextTxInfo =
       Plutus.TxInfo
@@ -160,65 +168,103 @@ lowerSc
                       <$> PlutusTx.toList redeemers
               , txData = Map.fromList $ PlutusTx.toList dataTable
               , txCollateral = collateral
-              , txCollateralReturn = Just collateralRet
-              , txTotalCollateral = Just $ toAda totalCollateralValue
-              , txScripts = error "TODO"
-              , -- TODO if we add the scripts argument this
-                -- can be a filter of that
-                txMintScripts = error "TODO"
-                -- TODO do we need a table to look these up
-                -- from currencySybmols
+              , txCollateralReturn = Just ret
+              , txTotalCollateral = Just $ toAda totalValue
+              , txScripts =
+                  Map.fromList
+                    [ (sh, getValidator <$> val)
+                    | (sh, val) <- Map.toList scripts
+                    , any
+                        ( \TxIn {txInRef} ->
+                            let Plutus.TxOut
+                                  { -- TODO this feels repeditive
+                                  -- I probably want getCred txin utxos -> Credential
+                                  Plutus.txOutAddress = Plutus.Address cred _
+                                  } =
+                                    fromMaybe (error "utxo lookup failed") $
+                                      Map.lookup txInRef utxos
+                             in case cred of
+                                  Plutus.ScriptCredential sh' -> sh == sh'
+                                  _ -> False
+                        )
+                        inputs
+                    ]
+              , txMintScripts = error "TODO"
+              -- TODO do we need a table to look these up
+              -- from currencySybmols
               }
       }
     where
-      scripts :: Map Plutus.ScriptHash (Model.Versioned Model.Validator)
-      scripts = error "TODO" -- probably take this map as an argument?
-
-      -- TODO maybe pull this out and just have it take a mock
       convertIn :: Plutus.TxInInfo -> TxIn
-      convertIn
-        Plutus.TxInInfo
-          { Plutus.txInInfoOutRef = txInRef
-          , Plutus.txInInfoResolved =
-            Plutus.TxOut
-              { Plutus.txOutAddress =
-                Plutus.Address
-                  { Plutus.addressCredential = cred
-                  }
-              }
-          } =
-          TxIn {txInRef, txInType}
-          where
-            txInType = Just $ case cred of
-              Plutus.PubKeyCredential _pkh ->
-                ConsumePublicKeyAddress
-              Plutus.ScriptCredential sh ->
-                ConsumeScriptAddress
-                  ( Just $
-                      fromMaybe (error "script not found") $
-                        Map.lookup sh scripts
-                  )
-                  ( fromMaybe (error "redeemer not found") $
-                      PlutusTx.lookup
-                        (error "TODO convert script purpouse")
-                        redeemers
-                  )
-                  ( let
-                      Plutus.TxOut {Plutus.txOutDatum = outDatum} =
-                        fromMaybe (error "utxo lookup failed") $
-                          Map.lookup txInRef utxos
-                     in
-                      case outDatum of
-                        Plutus.OutputDatum d -> d
-                        Plutus.OutputDatumHash dh ->
-                          fromMaybe (error "datum lookup failed") $
-                            PlutusTx.lookup dh dataTable
-                        Plutus.NoOutputDatum -> error "No output datum"
-                  )
+      convertIn = convertIn' m redeemers scripts dataTable
 
       inputs :: Set TxIn
       inputs = Set.fromList $ convertIn <$> txInputs
 
+      (collateral, totalValue, ret) = mkCollateral m inputs
+
+convertIn' ::
+  Model.Mock ->
+  PlutusTx.Map Plutus.ScriptPurpose Plutus.Redeemer ->
+  Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
+  PlutusTx.Map Plutus.DatumHash Plutus.Datum ->
+  Plutus.TxInInfo ->
+  TxIn
+convertIn'
+  Model.Mock
+    { Model.mockUtxos = utxos
+    }
+  redeemers
+  scripts
+  datumHashes
+  Plutus.TxInInfo
+    { Plutus.txInInfoOutRef = txInRef
+    , Plutus.txInInfoResolved =
+      Plutus.TxOut
+        { Plutus.txOutAddress =
+          Plutus.Address
+            { Plutus.addressCredential = cred
+            }
+        }
+    } =
+    TxIn {txInRef, txInType}
+    where
+      txInType = Just $ case cred of
+        Plutus.PubKeyCredential _pkh ->
+          ConsumePublicKeyAddress
+        Plutus.ScriptCredential sh ->
+          ConsumeScriptAddress
+            ( Just $
+                fromMaybe (error "script not found") $
+                  Map.lookup sh scripts
+            )
+            ( fromMaybe (error "redeemer not found") $
+                PlutusTx.lookup
+                  (error "TODO convert script purpouse")
+                  redeemers
+            )
+            ( let
+                Plutus.TxOut {Plutus.txOutDatum = outDatum} =
+                  fromMaybe (error "utxo lookup failed") $
+                    Map.lookup txInRef utxos
+               in
+                case outDatum of
+                  Plutus.OutputDatum d -> d
+                  Plutus.OutputDatumHash dh ->
+                    fromMaybe (error "datum lookup failed") $
+                      PlutusTx.lookup dh datumHashes
+                  Plutus.NoOutputDatum -> error "No output datum"
+            )
+
+mkCollateral :: Model.Mock -> Set TxIn -> (Set TxIn, Plutus.Value, Plutus.TxOut)
+mkCollateral
+  Model.Mock
+    { Model.mockUtxos = utxos
+    , Model.mockUsers = users
+    }
+  inputs =
+    (collateral, totalValue, ret)
+    where
       -- Use all pubkey inputs as collateral
       collateral :: Set TxIn
       collateral =
@@ -238,8 +284,8 @@ lowerSc
           )
           inputs
 
-      totalCollateralValue :: Plutus.Value
-      totalCollateralValue =
+      totalValue :: Plutus.Value
+      totalValue =
         mconcat
           [ val
           | TxIn {txInRef} <- Set.toList collateral
@@ -250,8 +296,8 @@ lowerSc
           ]
 
       -- Return everything to the first user in the mock users
-      collateralRet :: Plutus.TxOut
-      collateralRet =
+      ret :: Plutus.TxOut
+      ret =
         Plutus.TxOut
           { Plutus.txOutAddress =
               Plutus.Address
@@ -262,7 +308,7 @@ lowerSc
                     )
                 )
                 Nothing
-          , Plutus.txOutValue = totalCollateralValue
+          , Plutus.txOutValue = totalValue
           , Plutus.txOutDatum = Plutus.NoOutputDatum
           , Plutus.txOutReferenceScript = Nothing
           }
