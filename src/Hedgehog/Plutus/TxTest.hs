@@ -60,6 +60,7 @@ newtype TxTest st a
   = TxTest
       ( Model.Mock ->
         DatumOf st ->
+        Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
         Adjunction (ScriptTx st) (Either (Bad a) (Good a))
       )
 
@@ -88,10 +89,10 @@ txTest ::
     Adjunction (ScriptContext r st) a
   ) ->
   TxTest st a
-txTest f = TxTest $ \mock datum ->
+txTest f = TxTest $ \mock datum scripts ->
   testDataAdjunction
     . f mock datum
-    . scriptContext mock datum (error "TODO scripts table")
+    . scriptContext mock datum scripts
 
 -- Not lawful when
 -- the POSIXTimeRange doesn't coresponds to a SlotRange exactly
@@ -264,7 +265,10 @@ convertIn'
                 getDatum datumTable outDatum
             )
 
-getDatum :: PlutusTx.Map Plutus.DatumHash Plutus.Datum -> Plutus.OutputDatum -> Plutus.Datum
+getDatum ::
+  PlutusTx.Map Plutus.DatumHash Plutus.Datum ->
+  Plutus.OutputDatum ->
+  Plutus.Datum
 getDatum datumTable = \case
   Plutus.OutputDatum d -> d
   Plutus.OutputDatumHash dh ->
@@ -436,7 +440,7 @@ txTestBadAdjunction ::
   DatumOf st ->
   Bad a ->
   m ()
-txTestBadAdjunction (TxTest f) mock datum = adjunctionTest (f mock datum) . Left
+txTestBadAdjunction (TxTest f) mock datum = adjunctionTest (f mock datum _) . Left
 
 txTestGoodAdjunction ::
   ( Hedgehog.MonadTest m
@@ -452,7 +456,7 @@ txTestGoodAdjunction ::
   Good a ->
   m ()
 txTestGoodAdjunction (TxTest f) mock datum =
-  adjunctionTest (f mock datum) . Right
+  adjunctionTest (f mock datum _) . Right
 
 txTestBad ::
   (Hedgehog.MonadTest m) =>
@@ -462,7 +466,7 @@ txTestBad ::
   Bad a ->
   m ()
 txTestBad (TxTest f) mock datum bad =
-  Hedgehog.assert $ not (scriptTxValid ((f mock datum).lower (Left bad)) mock)
+  Hedgehog.assert $ not (scriptTxValid ((f mock datum _).lower (Left bad)) mock)
 
 txTestGood ::
   (Hedgehog.MonadTest m) =>
@@ -472,4 +476,4 @@ txTestGood ::
   Good a ->
   m ()
 txTestGood (TxTest f) mock datum good =
-  Hedgehog.assert $ scriptTxValid ((f mock datum).lower (Right good)) mock
+  Hedgehog.assert $ scriptTxValid ((f mock datum _).lower (Right good)) mock
