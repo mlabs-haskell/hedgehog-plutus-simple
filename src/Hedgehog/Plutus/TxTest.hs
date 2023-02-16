@@ -30,6 +30,8 @@ a 'TxTest.
 In the 'raise' direction, the supplied adjunction may omit the following
 details, which will be supplied for you:
 
+  * The 'txInfoOutput' being spent, if this is a spend script
+
   * 'txInfoSignatories' corresponding to 'PubKeyHash' inputs
 
   * 'txInfoRedeemers'
@@ -38,7 +40,7 @@ details, which will be supplied for you:
 
   * 'txInfoId'
 
-For the final three, you can use the 'omitted' function to signal this.
+Just pass empty lists/maps. For 'txInfoId', you can use the 'omitted' function.
 -}
 txTest ::
   (TestData a) =>
@@ -58,13 +60,7 @@ scriptContext ::
   Adjunction (ScriptTx st) (ScriptContext r st)
 scriptContext = _
 
-type Omittable :: Type -> Constraint
-class Omittable a
-instance Omittable (PlutusTx.AssocMap.Map Plutus.ScriptPurpose Plutus.Redeemer)
-instance Omittable (PlutusTx.AssocMap.Map Plutus.DatumHash Plutus.Datum)
-instance Omittable Plutus.TxId
-
-omitted :: (Omittable a) => a
+omitted :: Plutus.TxId
 omitted = undefined
 
 resolveOmitted :: Model.Mock -> datum -> Plutus.TxInfo -> Plutus.TxInfo

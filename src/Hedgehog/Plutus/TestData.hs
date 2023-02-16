@@ -9,7 +9,9 @@ import Data.Coerce (coerce)
 import Data.Kind (Constraint, Type)
 import GHC.Generics qualified as GHC
 
+import Control.Applicative (Const (Const))
 import Control.Monad (guard)
+import Data.Maybe (fromMaybe)
 import Data.Proxy (Proxy (Proxy))
 import Numeric.Natural (Natural)
 
@@ -50,8 +52,18 @@ testDataAdjunction =
 
 type ShouldEqual :: Type -> Quality -> Type
 data ShouldEqual val q where
-  IsEqual :: ShouldEqual val 'IsGood
-  MightNotBeEqual :: TypeOf val -> ShouldEqual val 'IsGeneralised
+  IsEqual :: Good (ShouldEqual val)
+  MightNotBeEqual :: TypeOf val -> Generalised (ShouldEqual val)
+
+shouldEqual ::
+  forall val.
+  (ShouldBeEqualTo val, Eq (TypeOf val)) =>
+  TypeOf val ->
+  Generalised (ShouldEqual val) ->
+  TypeOf val
+shouldEqual good (MightNotBeEqual gen)
+  | gen == val (Proxy @val) = good
+  | otherwise = gen
 
 type TypeOf :: Type -> Type
 type family TypeOf a
@@ -74,18 +86,28 @@ type instance TypeOf (Mempty a) = a
 
 instance (Monoid a) => ShouldBeEqualTo (Mempty a) where val _ = mempty
 
-type Only :: Type -> Quality -> Type
-newtype Only a q = Only a
-  deriving stock (GHC.Generic)
-
-instance TestData (Only a) where
+instance TestData (Const a) where
   validate = Just . coerce
   generalise = coerce
 
 type EitherOr :: (Quality -> Type) -> (Quality -> Type) -> Quality -> Type
 data EitherOr bad gen q where
-  Shouldn'tBe :: bad 'IsGeneralised -> EitherOr bad gen 'IsGeneralised
+  Shouldn'tBe :: Generalised bad -> Generalised (EitherOr bad gen)
   ShouldBe :: gen q -> EitherOr bad gen q
+
+eitherOr ::
+  (Generalised gen -> Generalised bad) ->
+  Generalised (EitherOr bad gen) ->
+  Generalised bad
+eitherOr _ (Shouldn'tBe bad) = bad
+eitherOr f (ShouldBe gen) = f gen
+
+shouldBeSingletonList ::
+  (a -> Generalised b) ->
+  [a] ->
+  Generalised (EitherOr (Const [a]) b)
+shouldBeSingletonList f [a] = ShouldBe (f a)
+shouldBeSingletonList _ as = Shouldn'tBe (Const as)
 
 instance (TestData gen) => TestData (EitherOr bad gen) where
   validate (Shouldn'tBe _) = Nothing
@@ -107,8 +129,8 @@ instance (IsPredicated pred) => TestData (Predicated pred) where
 
 type ShouldBeNatural :: Quality -> Type
 data ShouldBeNatural q where
-  MightBeNegative :: Integer -> ShouldBeNatural 'IsGeneralised
-  IsNatural :: Natural -> ShouldBeNatural 'IsGood
+  MightBeNegative :: Integer -> Generalised ShouldBeNatural
+  IsNatural :: Natural -> Good ShouldBeNatural
 
 instance TestData ShouldBeNatural where
   validate (MightBeNegative i) =
@@ -119,7 +141,17 @@ instance TestData ShouldBeNatural where
 type Shouldn'tBePresent :: (Quality -> Type) -> Quality -> Type
 data Shouldn'tBePresent bad q where
   Correct :: Shouldn'tBePresent bad q
-  Incorrect :: bad 'IsGeneralised -> Shouldn'tBePresent bad 'IsGeneralised
+  Incorrect :: Generalised bad -> Generalised (Shouldn'tBePresent bad)
+
+maybePresent :: Generalised (Shouldn'tBePresent bad) -> Maybe (Generalised bad)
+maybePresent Correct = Nothing
+maybePresent (Incorrect gen) = Just gen
+
+shouldn'tBePresent ::
+  Generalised bad ->
+  Generalised (Shouldn'tBePresent bad) ->
+  Generalised bad
+shouldn'tBePresent good = fromMaybe good . maybePresent
 
 instance TestData (Shouldn'tBePresent bad) where
   validate Correct = Just Correct
@@ -131,8 +163,8 @@ expect ::
   (Diff a) =>
   a ->
   a ->
-  Generalised (Shouldn'tBePresent (Only (Patch a)))
-expect exp act = maybe Correct (Incorrect . Only) $ diff exp act
+  Generalised (Shouldn'tBePresent (Const (Patch a)))
+expect exp act = maybe Correct (Incorrect . Const) $ diff exp act
 
 type Generically' :: (Quality -> Type) -> Quality -> Type
 newtype Generically' f a where
