@@ -9,6 +9,8 @@ import Data.Coerce (coerce)
 import Generics.SOP
 import Generics.SOP.GGP
 
+import Hedgehog.Plutus.Generics
+
 class Diff' a where
   type Patch a
 
@@ -26,8 +28,6 @@ diff a b
 
 patch :: (Diff' a) => Maybe (Patch a) -> a -> a
 patch mp c = maybe c (`patch'` c) mp
-
-newtype Simple a = Simple a
 
 instance Diff' (Simple a) where
   type Patch (Simple a) = a
@@ -69,8 +69,6 @@ instance (All2 Diff xss) => Diff' (NS (NP I) xss) where
   patch' ps _ = hmap (\(ConsPatch bs _) -> bs) ps
 
 data Pair f a = Pair (f a) (f a)
-
-newtype Generically a = Generically a
 
 newtype SOPPatch a = SOPPatch (NS ConsPatch (GCode a))
 

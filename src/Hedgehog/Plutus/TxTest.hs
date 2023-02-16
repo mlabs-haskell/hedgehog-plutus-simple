@@ -46,7 +46,7 @@ txTest ::
   (TestData a) =>
   ( Model.Mock ->
     DatumOf st ->
-    Adjunction (ScriptContext r st) (Generalised a)
+    Adjunction (ScriptContext r st) a
   ) ->
   TxTest st a
 txTest f = TxTest $ \mock datum ->

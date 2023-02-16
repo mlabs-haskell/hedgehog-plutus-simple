@@ -18,13 +18,13 @@ import GHC.Generics qualified as GHC
 
 import Prelude hiding ((.))
 
-import Control.Applicative (Const (Const, getConst))
 import Control.Category ((.))
 import Data.Maybe (fromJust)
 
 import Data.Map (Map)
 import Data.Map qualified as Map
 
+import PlutusLedgerApi.V1.Address qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusLedgerApi.V2.Contexts qualified as Plutus
 import PlutusTx qualified
@@ -33,10 +33,10 @@ import Plutus.Model qualified as Model
 
 import Hedgehog.Plutus.Adjunction
 import Hedgehog.Plutus.Diff
+import Hedgehog.Plutus.Generics
 import Hedgehog.Plutus.ScriptContext
 import Hedgehog.Plutus.TestData
 import Hedgehog.Plutus.TxTest
-import PlutusLedgerApi.V1.Address qualified as Plutus
 
 --- Copied from pioneer program
 
@@ -58,6 +58,9 @@ deriving via (Simple Plutus.CurrencySymbol) instance Diff' Plutus.CurrencySymbol
 deriving via (Simple Plutus.TokenName) instance Diff' Plutus.TokenName
 deriving via (Simple Plutus.POSIXTime) instance Diff' Plutus.POSIXTime
 deriving via (Simple Plutus.Value) instance Diff' Plutus.Value
+
+deriving via (Simple Plutus.TxOutRef) instance TestData Plutus.TxOutRef
+deriving via (Simple Plutus.PubKeyHash) instance TestData Plutus.PubKeyHash
 
 PlutusTx.unstableMakeIsData ''Auction
 PlutusTx.makeLift ''Auction
@@ -90,31 +93,31 @@ PlutusTx.makeLift ''AuctionDatum
 
 ---
 
-data AuctionTest q = AuctionTest
-  { stateRef :: !(Const Plutus.TxOutRef q)
-  , otherInputsWithDatum :: !(ShouldEqual (Mempty [Plutus.TxInInfo]) q)
-  , auctionRedeemer :: !(AuctionTestRedeemer q)
+data AuctionTest = AuctionTest
+  { stateRef :: !Plutus.TxOutRef
+  , otherInputsWithDatum ::
+      !(ShouldEqual (Mempty [Plutus.TxInInfo]) [Plutus.TxInInfo])
+  , auctionRedeemer :: !AuctionTestRedeemer
   }
   deriving stock (GHC.Generic)
-  deriving (TestData) via (Generically' AuctionTest)
+  deriving (TestData) via (Generically AuctionTest)
 
-type AuctionTestRedeemer :: Quality -> Type
-data AuctionTestRedeemer q
+type AuctionTestRedeemer :: Type
+data AuctionTestRedeemer
   = TestRedeemerBid
-      { testRedeemerBidder :: !(Const Plutus.PubKeyHash q)
-      , testRedeemerBidMagnitude :: !(ShouldBeNatural q)
+      { testRedeemerBidder :: !Plutus.PubKeyHash
+      , testRedeemerBidMagnitude :: !(ShouldBeNatural Integer)
       -- ^ Difference between bid and minBid
       , selfOutputs ::
-          !( EitherOr
-              (Const [Plutus.TxOut])
-              (Shouldn'tBePresent (Const (Patch SelfOutput)))
-              q
+          !( Either
+              [Plutus.TxOut]
+              (Maybe (Patch SelfOutput))
            )
-      , bidderOutputs :: !(EitherOr (Const [Plutus.TxOut]) BidderOutput q)
+      , bidderOutputs :: !(Either [Plutus.TxOut] BidderOutput)
       }
   | TestRedeemerClose
   deriving stock (GHC.Generic)
-  deriving (TestData) via (Generically' AuctionTestRedeemer)
+  deriving (TestData) via (Generically AuctionTestRedeemer)
 
 data SelfOutput = SelfOutput
   { selfDatum :: !AuctionDatum
@@ -123,9 +126,9 @@ data SelfOutput = SelfOutput
   deriving stock (Eq, GHC.Generic)
   deriving (Diff') via (Generically SelfOutput)
 
-data BidderOutput q
+data BidderOutput
   deriving stock (GHC.Generic)
-  deriving (TestData) via (Generically' BidderOutput)
+  deriving (TestData) via (Generically BidderOutput)
 
 auctionTest :: TxTest ('Spend AuctionDatum) AuctionTest
 auctionTest = txTest $ \mock datum ->
@@ -138,7 +141,7 @@ raiseAuctionTest ::
   Model.Mock ->
   AuctionDatum ->
   ScriptContext AuctionAction ('Spend AuctionDatum) ->
-  Generalised AuctionTest
+  AuctionTest
 raiseAuctionTest
   Model.Mock {}
   inDatum
@@ -148,9 +151,9 @@ raiseAuctionTest
     , contextPurpose = Spending ref
     } =
     AuctionTest
-      { stateRef = Const ref
+      { stateRef = ref
       , otherInputsWithDatum =
-          MightNotBeEqual
+          MightNotEqual
             ( filter
                 ( \Plutus.TxInInfo {Plutus.txInInfoResolved} ->
                     Plutus.txOutDatum txInInfoResolved
@@ -162,7 +165,7 @@ raiseAuctionTest
           case contextRedeemer of
             MkBid bid@Bid {bBidder, bBid} ->
               TestRedeemerBid
-                { testRedeemerBidder = Const bBidder
+                { testRedeemerBidder = bBidder
                 , testRedeemerBidMagnitude =
                     MightBeNegative
                       ( bBid
@@ -174,16 +177,19 @@ raiseAuctionTest
                             )
                       )
                 , selfOutputs =
-                    shouldBeSingletonList
-                      (selfOutput bid)
-                      (Plutus.getContinuingOutputs psc)
+                    selfOutput bid
+                      <$> shouldBeSingletonList
+                        (Plutus.getContinuingOutputs psc)
                 , bidderOutputs =
-                    shouldBeSingletonList
-                      _
-                      ( filter
-                          (\o -> o.txOutAddress == Plutus.pubKeyHashAddress bBidder)
-                          txInfoOutputs
-                      )
+                    _
+                      <$> shouldBeSingletonList
+                        ( filter
+                            ( \o ->
+                                o.txOutAddress
+                                  == Plutus.pubKeyHashAddress bBidder
+                            )
+                            txInfoOutputs
+                        )
                 }
             Close -> TestRedeemerClose
       }
@@ -194,9 +200,9 @@ raiseAuctionTest
       selfOutput ::
         Bid ->
         Plutus.TxOut ->
-        Generalised (Shouldn'tBePresent (Const (Patch SelfOutput)))
+        Maybe (Patch SelfOutput)
       selfOutput rBid o =
-        expect
+        diff
           ( SelfOutput
               { selfDatum =
                   AuctionDatum
@@ -217,12 +223,12 @@ raiseAuctionTest
 lowerAuctionTest ::
   Model.Mock ->
   AuctionDatum ->
-  Generalised AuctionTest ->
+  AuctionTest ->
   ScriptContext AuctionAction ('Spend AuctionDatum)
 lowerAuctionTest
   Model.Mock {mockUtxos}
   AuctionDatum {adAuction}
-  (AuctionTest (Const ref) (MightNotBeEqual otherIns) rdmr) =
+  (AuctionTest ref (MightNotEqual otherIns) rdmr) =
     ScriptContext
       { contextRedeemer = redeemer
       , contextPurpose = Spending ref
@@ -244,7 +250,7 @@ lowerAuctionTest
       }
     where
       redeemer = case rdmr of
-        TestRedeemerBid (Const bidder) (MightBeNegative mag) _ _ ->
+        TestRedeemerBid bidder (MightBeNegative mag) _ _ ->
           MkBid $
             Bid
               { bBidder = bidder
@@ -255,36 +261,34 @@ lowerAuctionTest
       continuingOutput :: [Plutus.TxOut]
       continuingOutput =
         case rdmr of
-          TestRedeemerBid (Const bidder) (MightBeNegative mag) selfOutputs _ ->
-            getConst $
-              eitherOr
-                ( \p ->
-                    Const
-                      [ selfOutput $
-                          patch
-                            (getConst <$> maybePresent p)
-                            SelfOutput
-                              { selfDatum =
-                                  AuctionDatum
-                                    { adAuction = adAuction
-                                    , adHighestBid =
-                                        Just $
-                                          Bid
-                                            { bBidder = bidder
-                                            , bBid = adAuction.aMinBid + mag
-                                            }
-                                    }
-                              , selfValue =
-                                  token adAuction
-                                    <> lovelaceValue
-                                      ( minLovelace
-                                          + adAuction.aMinBid
-                                          + mag
-                                      )
-                              }
-                      ]
-                )
-                selfOutputs
+          TestRedeemerBid bidder (MightBeNegative mag) selfOutputs _ ->
+            eitherOr
+              ( \p ->
+                  [ selfOutput $
+                      patch
+                        p
+                        SelfOutput
+                          { selfDatum =
+                              AuctionDatum
+                                { adAuction = adAuction
+                                , adHighestBid =
+                                    Just $
+                                      Bid
+                                        { bBidder = bidder
+                                        , bBid = adAuction.aMinBid + mag
+                                        }
+                                }
+                          , selfValue =
+                              token adAuction
+                                <> lovelaceValue
+                                  ( minLovelace
+                                      + adAuction.aMinBid
+                                      + mag
+                                  )
+                          }
+                  ]
+              )
+              selfOutputs
           TestRedeemerClose -> []
 
       selfOutput :: SelfOutput -> Plutus.TxOut
