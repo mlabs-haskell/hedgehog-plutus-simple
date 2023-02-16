@@ -36,9 +36,10 @@ import Cardano.Simple.Ledger.TimeSlot qualified as Time
 import Cardano.Simple.Ledger.Tx (Tx (..), TxIn (..), TxInType (..))
 import Hedgehog.Plutus.Adjunction (Adjunction (..), adjunctionTest)
 import Cardano.Simple.PlutusLedgerApi.V1.Scripts (
-  MintingPolicy (MintingPolicy),
+  MintingPolicy,
   getValidator,
  )
+import Cardano.Simple.TxExtra (Mint (Mint), extra'mints)
 
 import Hedgehog.Plutus.ScriptContext (
   DatumOf,
@@ -61,13 +62,14 @@ newtype TxTest st a
       ( Model.Mock ->
         DatumOf st ->
         Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
+        Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
         Adjunction (ScriptTx st) (Either (Bad a) (Good a))
       )
 
 {- | Given an adjunction from a 'Generalised' to a 'ScriptContext', generate
 a 'TxTest.
 
-In the 'raise' direction, the supplied adjunction may omit the following
+In the 'raise' direction, the supplied adjunction may omit thttps://github.com/mlabs-haskell/mlabs-tooling.nix/pull/25he following
 details, which will be supplied for you:
 
   * The 'txInfoInput' being spent, if this is a spend script
@@ -89,10 +91,10 @@ txTest ::
     Adjunction (ScriptContext r st) a
   ) ->
   TxTest st a
-txTest f = TxTest $ \mock datum scripts ->
+txTest f = TxTest $ \mock datum scripts mps ->
   testDataAdjunction
     . f mock datum
-    . scriptContext mock datum scripts
+    . scriptContext mock datum scripts mps
 
 -- Not lawful when
 -- the POSIXTimeRange doesn't coresponds to a SlotRange exactly
@@ -103,14 +105,16 @@ scriptContext ::
   Model.Mock ->
   DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
+  Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   Adjunction (ScriptTx st) (ScriptContext r st)
-scriptContext m d scripts =
-  Adjunction {lower = lowerSc m d scripts, raise = raiseSc m d}
+scriptContext m d scripts mps =
+  Adjunction {lower = lowerSc m d scripts mps, raise = raiseSc m d}
 
 lowerSc ::
   Model.Mock ->
   DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
+  Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   ScriptContext r st ->
   ScriptTx st
 lowerSc
@@ -124,6 +128,7 @@ lowerSc
     }
   _
   scripts
+  mps
   ScriptContext
     { contextTxInfo =
       Plutus.TxInfo
@@ -143,10 +148,25 @@ lowerSc
     ScriptTx
       { scriptTxPurpose = contextPurpose
       , scriptTx =
-          Model.toExtra
-          -- TODO I think it's fine to leave the extra emepty
-          $
-            Tx
+          Model.Tx
+            mempty
+              { extra'mints =
+                  [ Mint val red mp
+                  | (cs, m) <- PlutusTx.toList $ Value.getValue mint
+                  , let val =
+                          mconcat
+                            [ Value.singleton cs tn n
+                            | (tn, n) <- PlutusTx.toList m
+                            ]
+                  , let mp =
+                          fromMaybe (error "mp not found") $
+                            Map.lookup cs mps
+                  , let red =
+                          fromMaybe (error "redeemer not found") $
+                            PlutusTx.lookup (Plutus.Minting cs) redeemers
+                  ]
+              }
+            $ Tx
               { txInputs = inputs
               , txReferenceInputs =
                   Set.fromList $ convertIn <$> referenceInputs
@@ -183,12 +203,10 @@ lowerSc
                     ]
               , txMintScripts =
                   Set.fromList
-                    [ MintingPolicy . getValidator <$> val
-                    | (sh, val) <- Map.toList scripts
-                    , Value.CurrencySymbol (Plutus.getScriptHash sh)
-                        `elem` Value.symbols mint
-                    ] -- TODO make sure scripts include these
-                    -- if not we need to take a table for these
+                    [ mp
+                    | (cs, mp) <- Map.toList mps
+                    , cs `elem` Value.symbols mint
+                    ]
               }
       }
     where
@@ -207,6 +225,13 @@ lowerSc
       inputs = Set.fromList $ convertIn <$> txInputs
 
       (collateral, totalValue, ret) = mkCollateral m inputs
+
+getTxId :: Tx -> Plutus.TxId
+getTxId = error "TODO"
+
+-- where
+-- getTxBody @era
+-- txBodyHash ?
 
 getCred :: Map Plutus.TxOutRef Plutus.TxOut -> TxIn -> Plutus.Credential
 getCred utxos TxIn {txInRef} = cred
@@ -346,7 +371,7 @@ raiseSc
       Model.Tx
         { Model.tx'extra = _
         , Model.tx'plutus =
-          Tx
+          tx@Tx
             { txInputs
             , txReferenceInputs
             , txOutputs
@@ -384,10 +409,7 @@ raiseSc
                   first (error "TODO redeemer ptr stuff")
                     <$> Map.toList txRedeemers
             , Plutus.txInfoData = PlutusTx.fromList $ Map.toList txData
-            , Plutus.txInfoId =
-                error "TODO"
-                -- Generate the txbody and hash it?
-                -- or can I just use a dummy id?
+            , Plutus.txInfoId = getTxId tx
             }
       }
     where
