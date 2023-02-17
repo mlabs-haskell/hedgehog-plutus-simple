@@ -236,6 +236,9 @@ lowerSc
       redMap :: Map Plutus.RedeemerPtr Plutus.ScriptPurpose
       redMap = mkRedMap stakes dcerts mint inputs'
 
+      collateral :: Set TxIn
+      totalValue :: Plutus.Value
+      ret :: Plutus.TxOut
       (collateral, totalValue, ret) = mkCollateral m inputs
 
 revLookup ::
