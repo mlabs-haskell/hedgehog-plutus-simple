@@ -29,9 +29,10 @@
           ];
           toHaddock = [
             "plutarch"
+            "plutus-simple-model"
+            "cardano-simple"
             "plutus-ledger-api"
             "cardano-crypto"
-            "plutus-simple-model"
           ];
         })
       ];

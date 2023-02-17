@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- TODO can this be just for Prelude?
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
@@ -8,6 +9,7 @@ module Hedgehog.Plutus.TxTest (
   resolveOmitted,
 ) where
 
+import Control.Category (Category ((.)))
 import Prelude hiding ((.))
 
 import Control.Arrow (first)
@@ -18,8 +20,7 @@ import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 
-import Control.Category (Category ((.)))
-
+import PlutusLedgerApi.V1.Value qualified as Value
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusLedgerApi.V2.Tx qualified as Plutus
 import PlutusTx.AssocMap qualified
@@ -27,10 +28,21 @@ import PlutusTx.AssocMap qualified
 import Plutus.Model qualified as Model
 import PlutusTx.AssocMap qualified as PlutusTx
 
+import Cardano.Simple.Cardano.Class (IsCardanoTx (getTxBody, toCardanoTx))
 import Cardano.Simple.Ledger.TimeSlot qualified as Time
 import Cardano.Simple.Ledger.Tx (Tx (..), TxIn (..), TxInType (..))
 import Cardano.Simple.PlutusLedgerApi.V1.Scripts (getValidator)
-import Cardano.Simple.TxExtra (Mint (Mint), extra'mints)
+import Cardano.Simple.TxExtra (Extra, Mint (Mint), extra'mints)
+
+import Cardano.Ledger.Alonzo (AlonzoEra)
+import Cardano.Ledger.Babbage (BabbageEra)
+import Cardano.Ledger.Crypto (StandardCrypto)
+
+import Cardano.Ledger.Block qualified as Ledger
+import Cardano.Ledger.Core (EraTxBody)
+import Cardano.Ledger.Core qualified as Core
+import Cardano.Ledger.SafeHash qualified as SafeHash
+import Cardano.Ledger.TxIn qualified as Ledger
 
 import Hedgehog.Plutus.Adjunction (Adjunction (..))
 import Hedgehog.Plutus.ScriptContext (
@@ -45,7 +57,8 @@ import Hedgehog.Plutus.TestData (
   TestData,
   testDataAdjunction,
  )
-import PlutusLedgerApi.V1.Value qualified as Value
+import Plutus.Model qualified as Modele
+import Plutus.Model.Mock.ProtocolParameters (PParams (..))
 
 newtype TxTest st a
   = TxTest
@@ -96,7 +109,7 @@ scriptContext ::
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   Adjunction (ScriptTx st) (ScriptContext r st)
 scriptContext m d scripts mps =
-  Adjunction {lower = lowerSc m d scripts mps, raise = raiseSc m d}
+  Adjunction {lower = lowerSc m d scripts mps, raise = raiseSc m d scripts}
 
 lowerSc ::
   Model.Mock ->
@@ -214,12 +227,38 @@ lowerSc
 
       (collateral, totalValue, ret) = mkCollateral m inputs
 
-getTxId :: Tx -> Plutus.TxId
-getTxId = error "TODO"
-
--- where
--- getTxBody @era
--- txBodyHash ?
+getTxId ::
+  Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
+  Model.Mock ->
+  Tx ->
+  Extra ->
+  Plutus.TxId
+getTxId
+  scripts'
+  Modele.Mock
+    { Model.mockConfig =
+      Model.MockConfig
+        { Model.mockConfigNetworkId = network
+        , Model.mockConfigProtocol = params'
+        }
+    }
+  tx
+  extra =
+    Plutus.TxId . Plutus.toBuiltin . SafeHash.originalBytes . Ledger._unTxId $
+      case params' of
+        AlonzoParams params -> go @(AlonzoEra StandardCrypto) params
+        BabbageParams params -> go @(BabbageEra StandardCrypto) params
+    where
+      go ::
+        forall era.
+        (IsCardanoTx era, EraTxBody era) =>
+        Core.PParams era ->
+        Ledger.TxId (Core.Crypto era)
+      go params = Ledger.txid @era . getTxBody $
+        case toCardanoTx @era scripts network params extra tx of
+          Left err -> error $ "toCardanoTx failed with: " <> err
+          Right ctx -> ctx
+      scripts = Map.map (fmap getValidator) scripts'
 
 getCred :: Map Plutus.TxOutRef Plutus.TxOut -> TxIn -> Plutus.Credential
 getCred utxos TxIn {txInRef} = cred
@@ -342,10 +381,11 @@ raiseSc ::
   Plutus.FromData r =>
   Model.Mock ->
   DatumOf st ->
+  Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   ScriptTx st ->
   ScriptContext r st
 raiseSc
-  Model.Mock
+  mock@Model.Mock
     { Model.mockUtxos = utxos
     , Model.mockConfig =
       Model.MockConfig
@@ -353,11 +393,12 @@ raiseSc
         }
     }
   _
+  scripts
   ScriptTx
     { scriptTxPurpose
     , scriptTx =
       Model.Tx
-        { Model.tx'extra = _
+        { Model.tx'extra = extra
         , Model.tx'plutus =
           tx@Tx
             { txInputs
@@ -397,7 +438,7 @@ raiseSc
                   first (error "TODO redeemer ptr stuff")
                     <$> Map.toList txRedeemers
             , Plutus.txInfoData = PlutusTx.fromList $ Map.toList txData
-            , Plutus.txInfoId = getTxId tx
+            , Plutus.txInfoId = getTxId scripts mock tx extra
             }
       }
     where
