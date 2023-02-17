@@ -512,7 +512,7 @@ raiseSc
             , Plutus.txInfoRedeemers =
                 PlutusTx.fromList $
                   first
-                    ( (fromMaybe (error "redeemer ptr not found"))
+                    ( fromMaybe (error "redeemer ptr not found")
                         . (`Map.lookup` redMap)
                     )
                     <$> Map.toList txRedeemers
