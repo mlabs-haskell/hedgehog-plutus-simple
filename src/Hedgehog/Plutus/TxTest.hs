@@ -18,6 +18,8 @@ import Control.Category (Category ((.)))
 import Prelude hiding ((.))
 
 import Control.Arrow (first)
+import Data.Kind (Constraint, Type)
+import Data.List (find, sort)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe, listToMaybe)
@@ -53,6 +55,7 @@ import Cardano.Ledger.TxIn qualified as Ledger
 import Hedgehog.Plutus.ScriptContext (
   DatumOf,
   ScriptContext (..),
+  ScriptPurpose (..),
   ScriptTx (..),
   scriptTxValid,
  )
@@ -199,7 +202,7 @@ lowerSc
                     ]
               , txRedeemers =
                   Map.fromList $
-                    first (error "TODO redeemer ptr stuff")
+                    first getPtr
                       <$> PlutusTx.toList redeemers
               , txData = Map.fromList $ PlutusTx.toList dataTable
               , txCollateral = collateral
@@ -232,9 +235,31 @@ lowerSc
           ]
 
       inputs :: Set TxIn
-      inputs = Set.fromList $ convertIn <$> txInputs
+      inputs = Set.fromList inputs'
+
+      inputs' :: [TxIn]
+      inputs' = convertIn <$> txInputs
+
+      getPtr :: Plutus.ScriptPurpose -> Plutus.RedeemerPtr
+      getPtr sp =
+        fromMaybe (error "script purpose not found") $
+          revLookup sp redMap
+
+      redMap :: Map Plutus.RedeemerPtr Plutus.ScriptPurpose
+      redMap = mkRedMap mint inputs'
 
       (collateral, totalValue, ret) = mkCollateral m inputs
+
+revLookup ::
+  Plutus.ScriptPurpose ->
+  Map Plutus.RedeemerPtr Plutus.ScriptPurpose ->
+  Maybe Plutus.RedeemerPtr
+revLookup sp m = fst <$> find ((== sp) . snd) (Map.toList m)
+
+-- this O(n) lookup is not great
+-- There's no (Ord Plutus.ScriptPurpose)
+-- maybe a hashmap would help if this proves
+-- to be a problem
 
 getTxId ::
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
@@ -278,6 +303,28 @@ getCred utxos TxIn {txInRef} = cred
         fromMaybe (error "utxo lookup failed") $
           Map.lookup txInRef utxos
 
+mkRedMap :: Plutus.Value -> [TxIn] -> Map Plutus.RedeemerPtr Plutus.ScriptPurpose
+mkRedMap mint inputs = spends <> mints
+  where
+    -- TODO add certs and stakes
+    spends =
+      Map.fromList
+        [ ( Plutus.RedeemerPtr Plutus.Spend i
+          , Plutus.Spending ref
+          )
+        | (i, ref) <- sortAndLabel (txInRef <$> inputs)
+        ]
+    mints =
+      Map.fromList
+        [ ( Plutus.RedeemerPtr Plutus.Mint i
+          , Plutus.Minting cs
+          )
+        | (i, cs) <- sortAndLabel $ Value.symbols mint
+        ]
+
+sortAndLabel :: Ord a => [a] -> [(Integer, a)]
+sortAndLabel = zip [0 ..] . sort
+
 convertIn' ::
   Model.Mock ->
   PlutusTx.Map Plutus.ScriptPurpose Plutus.Redeemer ->
@@ -315,7 +362,7 @@ convertIn'
             )
             ( fromMaybe (error "redeemer not found") $
                 PlutusTx.lookup
-                  (error "TODO convert script purpouse")
+                  (Plutus.Spending txInRef)
                   redeemers
             )
             ( let
@@ -444,7 +491,10 @@ raiseSc
             , Plutus.txInfoSignatories = Map.keys txSignatures
             , Plutus.txInfoRedeemers =
                 PlutusTx.fromList $
-                  first (error "TODO redeemer ptr stuff")
+                  first
+                    ( (fromMaybe (error "redeemer ptr not found"))
+                        . (`Map.lookup` redMap)
+                    )
                     <$> Map.toList txRedeemers
             , Plutus.txInfoData = PlutusTx.fromList $ Map.toList txData
             , Plutus.txInfoId = getTxId scripts mock tx extra
@@ -458,10 +508,20 @@ raiseSc
             fromMaybe (error "utxo lookup failure") $
               Map.lookup txInRef utxos
 
+      redMap :: Map Plutus.RedeemerPtr Plutus.ScriptPurpose
+      redMap = mkRedMap txMint (Set.toList txInputs)
+
       redeemerPtr :: Plutus.RedeemerPtr
-      redeemerPtr = error "TODO"
-      -- TODO how can I get this?
-      -- is this all wrong and I can get the redeemer from Extra?
+      redeemerPtr =
+        fromMaybe (error "script purpose not found") $
+          revLookup sp redMap
+
+      sp :: Plutus.ScriptPurpose
+      sp = case scriptTxPurpose of
+        Spending ref -> Plutus.Spending ref
+        Minting cs -> Plutus.Minting cs
+        Rewarding sc -> Plutus.Rewarding sc
+        Certifying dc -> Plutus.Certifying dc
 
       redeemer :: Plutus.BuiltinData
       redeemer =
