@@ -3,10 +3,9 @@ module Hedgehog.Plutus.TestSingleScript (
 ) where
 
 import Data.Kind (Type)
-import GHC.Records (HasField (getField))
+import GHC.Records (HasField)
 
 import Data.Maybe (maybeToList)
-import Data.Proxy (Proxy (Proxy))
 
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -30,7 +29,6 @@ import Cardano.Ledger.Alonzo.Scripts qualified as Alonzo
 import Cardano.Ledger.Alonzo.Tx qualified as Ledger
 import Cardano.Ledger.Alonzo.TxInfo qualified as Alonzo
 import Cardano.Ledger.Alonzo.TxWitness qualified as Ledger
-import Cardano.Ledger.Babbage qualified as Babbage
 import Cardano.Ledger.Babbage.PParams (
   _costmdls,
   _minPoolCost,
@@ -40,10 +38,10 @@ import Cardano.Ledger.Babbage.PParams (
 import Cardano.Ledger.BaseTypes qualified as Ledger
 import Cardano.Ledger.Coin qualified as Ledger
 import Cardano.Ledger.Core qualified as Ledger
-import Cardano.Ledger.Crypto qualified as Crypto
 import Cardano.Ledger.Language qualified as Ledger
 import Cardano.Ledger.Shelley.UTxO qualified as Ledger
 import Cardano.Ledger.Slot qualified as Ledger
+import Cardano.Simple.Ledger.TimeSlot qualified as Simple
 import Cardano.Slotting.EpochInfo qualified as Cardano
 import Cardano.Slotting.Time qualified as Cardano
 import PlutusLedgerApi.Common qualified as Plutus
@@ -51,7 +49,6 @@ import PlutusLedgerApi.V2 qualified as Plutus hiding (evaluateScriptCounting)
 
 import Cardano.Simple.Cardano.Class qualified as Simple
 import Cardano.Simple.Cardano.Common qualified as Simple
-import Cardano.Simple.Ledger.TimeSlot qualified as Simple
 import Cardano.Simple.Ledger.Tx qualified as Simple
 import Plutus.Model qualified as Model
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
@@ -78,9 +75,9 @@ txRunScript
   (Model.Tx extra tx)
   sp = case mockConfigProtocol of
     Model.AlonzoParams params ->
-      go (Proxy @(Alonzo.AlonzoEra Crypto.StandardCrypto)) params
+      go params
     Model.BabbageParams params ->
-      go (Proxy @(Babbage.BabbageEra Crypto.StandardCrypto)) params
+      go params
     where
       go ::
         forall (era :: Type).
@@ -96,10 +93,9 @@ txRunScript
             Alonzo.CostModels
         , Simple.IsCardanoTx era
         ) =>
-        Proxy era ->
         Ledger.PParams era ->
         Maybe Plutus.EvaluationError
-      go _ params =
+      go params =
         txRunScript'
           params
           ( Cardano.fixedEpochInfo
@@ -144,8 +140,8 @@ txRunScript
                   ( unsafeFromEither $
                       Simple.toDCert
                         mockConfigNetworkId
-                        (getField @"_poolDeposit" params)
-                        (getField @"_minPoolCost" params)
+                        params._poolDeposit
+                        params._minPoolCost
                         cert
                   )
           )
@@ -186,7 +182,7 @@ txRunScript' pparams ei sysS utxo tx sp = do
   evalScript
     lang
     pparams
-    (Alonzo.unCostModels (getField @"_costmdls" pparams) Map.! lang)
+    (Alonzo.unCostModels pparams._costmdls Map.! lang)
     scr'
     =<< txGetData pparams ei sysS tx utxo lang sp rptr
 
@@ -243,7 +239,7 @@ evalScript lang pparams cm script args =
   either Just (const Nothing) . snd $
     Plutus.evaluateScriptCounting
       (toPlutusLang lang)
-      (Alonzo.transProtocolVersion $ getField @"_protocolVersion" pparams)
+      (Alonzo.transProtocolVersion pparams._protocolVersion)
       Plutus.Verbose
       (Alonzo.getEvaluationContext cm)
       script

@@ -3,17 +3,11 @@
 -- TODO can this be just for Prelude?
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
 
-module Hedgehog.Plutus.TxTest (
-  txTest,
-  omitted,
-  resolveOmitted,
-) where
+module Hedgehog.Plutus.TxTest where
 
-import Control.Category (Category ((.)))
 import Prelude hiding ((.))
 
 import Control.Arrow (first)
-import Data.Kind (Constraint, Type)
 import Data.List (find, sort)
 import Data.Map (Map)
 import Data.Map qualified as Map
@@ -24,7 +18,8 @@ import Data.Set qualified as Set
 import PlutusLedgerApi.V1.Value qualified as Value
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusLedgerApi.V2.Tx qualified as Plutus
-import PlutusTx.AssocMap qualified
+
+import Control.Category (Category ((.)))
 
 import Plutus.Model qualified as Model
 import PlutusTx.AssocMap qualified as PlutusTx
@@ -54,7 +49,6 @@ import Hedgehog.Plutus.ScriptContext (
  )
 import Hedgehog.Plutus.TestData (
   Bad,
-  Generalised,
   Good,
   TestData,
   testDataAdjunction,
@@ -77,6 +71,8 @@ a 'TxTest.
 In the 'raise' direction, the supplied adjunction may omit thttps://github.com/mlabs-haskell/mlabs-tooling.nix/pull/25he following
 details, which will be supplied for you:
 
+  * The 'txInfoOutput' being spent, if this is a spend script
+
   * 'txInfoSignatories' corresponding to 'PubKeyHash' inputs
 
   * 'txInfoRedeemers'
@@ -85,13 +81,13 @@ details, which will be supplied for you:
 
   * 'txInfoId'
 
-For the final three, you can use the 'omitted' function to signal this.
+Just pass empty lists/maps. For 'txInfoId', you can use the 'omitted' function.
 -}
 txTest ::
   (TestData a, Plutus.FromData r) =>
   ( Model.Mock ->
     DatumOf st ->
-    Adjunction (ScriptContext r st) (Generalised a)
+    Adjunction (ScriptContext r st) a
   ) ->
   TxTest st a
 txTest f = TxTest $ \mock datum scripts mps ->
@@ -546,13 +542,7 @@ valueToAda v = Model.Lovelace $ Value.valueOf v "" ""
 adaToValue :: Model.Ada -> Plutus.Value
 adaToValue (Model.Lovelace n) = Plutus.singleton "" "" n
 
-type Omittable :: Type -> Constraint
-class Omittable a
-instance Omittable (PlutusTx.AssocMap.Map Plutus.ScriptPurpose Plutus.Redeemer)
-instance Omittable (PlutusTx.AssocMap.Map Plutus.DatumHash Plutus.Datum)
-instance Omittable Plutus.TxId
-
-omitted :: (Omittable a) => a
+omitted :: Plutus.TxId
 omitted = error "ommited value read"
 
 resolveOmitted :: Model.Mock -> datum -> Plutus.TxInfo -> Plutus.TxInfo
