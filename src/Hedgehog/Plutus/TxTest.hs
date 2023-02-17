@@ -144,6 +144,8 @@ lowerSc
         , Plutus.txInfoSignatories = sigs
         , Plutus.txInfoRedeemers = redeemers
         , Plutus.txInfoData = dataTable
+        , Plutus.txInfoDCert = dcerts
+        , Plutus.txInfoWdrl = stakes
         }
     , contextPurpose
     , contextRedeemer = _
@@ -236,7 +238,7 @@ lowerSc
           revLookup sp redMap
 
       redMap :: Map Plutus.RedeemerPtr Plutus.ScriptPurpose
-      redMap = mkRedMap mint inputs'
+      redMap = mkRedMap stakes dcerts mint inputs'
 
       (collateral, totalValue, ret) = mkCollateral m inputs
 
@@ -293,10 +295,14 @@ getCred utxos TxIn {txInRef} = cred
         fromMaybe (error "utxo lookup failed") $
           Map.lookup txInRef utxos
 
-mkRedMap :: Plutus.Value -> [TxIn] -> Map Plutus.RedeemerPtr Plutus.ScriptPurpose
-mkRedMap mint inputs = spends <> mints
+mkRedMap ::
+  PlutusTx.Map Plutus.StakingCredential Integer ->
+  [Plutus.DCert] ->
+  Plutus.Value ->
+  [TxIn] ->
+  Map Plutus.RedeemerPtr Plutus.ScriptPurpose
+mkRedMap stake cert mint inputs = mconcat [spends, mints, certs, stakes]
   where
-    -- TODO add certs and stakes
     spends =
       Map.fromList
         [ ( Plutus.RedeemerPtr Plutus.Spend i
@@ -310,6 +316,20 @@ mkRedMap mint inputs = spends <> mints
           , Plutus.Minting cs
           )
         | (i, cs) <- sortAndLabel $ Value.symbols mint
+        ]
+    certs =
+      Map.fromList
+        [ ( Plutus.RedeemerPtr Plutus.Cert i
+          , Plutus.Certifying dcert
+          )
+        | (i, dcert) <- sortAndLabel cert
+        ]
+    stakes =
+      Map.fromList
+        [ ( Plutus.RedeemerPtr Plutus.Reward i
+          , Plutus.Rewarding sc
+          )
+        | (i, sc) <- sortAndLabel $ fst <$> PlutusTx.toList stake
         ]
 
 sortAndLabel :: Ord a => [a] -> [(Integer, a)]
@@ -499,7 +519,7 @@ raiseSc
               Map.lookup txInRef utxos
 
       redMap :: Map Plutus.RedeemerPtr Plutus.ScriptPurpose
-      redMap = mkRedMap txMint (Set.toList txInputs)
+      redMap = mkRedMap PlutusTx.empty [] txMint (Set.toList txInputs)
 
       redeemerPtr :: Plutus.RedeemerPtr
       redeemerPtr =
