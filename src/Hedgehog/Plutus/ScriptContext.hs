@@ -1,4 +1,5 @@
 {-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Hedgehog.Plutus.ScriptContext (
   DatumOf,
@@ -21,6 +22,8 @@ data ScriptTx st = ScriptTx
   , scriptTxPurpose :: ScriptPurpose st
   }
 
+deriving stock instance Show (ScriptPurpose st) => Show (ScriptTx st)
+
 data ScriptType = Spend Type | Mint | Reward | Certify
 
 type DatumOf :: ScriptType -> Type
@@ -34,6 +37,8 @@ data ScriptPurpose st where
   Minting :: Plutus.CurrencySymbol -> ScriptPurpose 'Mint
   Rewarding :: Plutus.StakingCredential -> ScriptPurpose 'Reward
   Certifying :: Plutus.DCert -> ScriptPurpose 'Certify
+
+deriving stock instance Show (ScriptPurpose st)
 
 type ScriptContext :: Type -> ScriptType -> Type
 data ScriptContext redeemer st = ScriptContext
