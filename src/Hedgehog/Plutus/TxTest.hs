@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 
+{- HLINT ignore "Redundant bracket" -}
 module Hedgehog.Plutus.TxTest (
   TxTest (TxTest),
   txTest,
@@ -10,11 +11,7 @@ module Hedgehog.Plutus.TxTest (
   txTestGood,
 ) where
 
-import Prelude hiding ((.))
-
 import PlutusLedgerApi.V2 qualified as Plutus
-
-import Control.Category (Category ((.)))
 
 import Plutus.Model qualified as Model
 
@@ -69,10 +66,11 @@ txTest ::
     Adjunction (ScriptContext r st) a
   ) ->
   TxTest st a
-txTest f = TxTest $ \mock datum ->
-  testDataAdjunction
-    . f mock datum
-    . scriptContext mock datum
+-- txTest f = TxTest $ \mock datum ->
+--   testDataAdjunction
+--     . f mock datum
+--     . scriptContext mock datum
+txTest f = TxTest $ \mock datum -> _
 
 scriptContext ::
   Model.Mock ->
