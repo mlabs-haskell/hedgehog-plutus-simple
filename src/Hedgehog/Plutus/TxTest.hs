@@ -2,10 +2,7 @@
 
 module Hedgehog.Plutus.TxTest where
 
-import Data.Kind (Constraint, Type)
-
 import PlutusLedgerApi.V2 qualified as Plutus
-import PlutusTx.AssocMap qualified
 
 import Plutus.Model qualified as Model
 
