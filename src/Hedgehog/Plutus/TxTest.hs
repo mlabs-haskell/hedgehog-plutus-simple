@@ -124,6 +124,7 @@ scriptContext m d scripts mps =
   Adjunction {lower = lowerSc m d scripts mps, raise = raiseSc m d scripts}
 
 lowerSc ::
+  forall st r.
   Model.Mock ->
   DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
@@ -131,129 +132,18 @@ lowerSc ::
   ScriptContext r st ->
   ScriptTx st
 lowerSc
-  m@Model.Mock
-    { Model.mockUsers = users
-    , Model.mockUtxos = utxos
-    , Model.mockConfig =
-      Model.MockConfig
-        { Model.mockConfigSlotConfig = slotCfg
-        }
-    }
-  _
+  m
+  d
   scripts
   mps
   ScriptContext
-    { contextTxInfo =
-      Plutus.TxInfo
-        { Plutus.txInfoInputs = txInputs
-        , Plutus.txInfoReferenceInputs = referenceInputs
-        , Plutus.txInfoOutputs = txOutputs
-        , Plutus.txInfoFee = fee
-        , Plutus.txInfoMint = mint
-        , Plutus.txInfoValidRange = posixRange
-        , Plutus.txInfoSignatories = sigs
-        , Plutus.txInfoRedeemers = redeemers
-        , Plutus.txInfoData = dataTable
-        , Plutus.txInfoDCert = dcerts
-        , Plutus.txInfoWdrl = stakes
-        }
+    { contextTxInfo
     , contextPurpose
-    , contextRedeemer = _
     } =
     ScriptTx
       { scriptTxPurpose = contextPurpose
-      , scriptTx =
-          Model.Tx
-            mempty
-              { extra'mints =
-                  [ Mint val red mp
-                  | (cs, m) <- PlutusTx.toList $ Value.getValue mint
-                  , let val =
-                          mconcat
-                            [ Value.singleton cs tn n
-                            | (tn, n) <- PlutusTx.toList m
-                            ]
-                  , let mp =
-                          fromMaybe (error "mp not found") $
-                            Map.lookup cs mps
-                  , let red =
-                          fromMaybe (error "redeemer not found") $
-                            PlutusTx.lookup (Plutus.Minting cs) redeemers
-                  ]
-              }
-            $ Tx
-              { txInputs = inputs
-              , txReferenceInputs =
-                  Set.fromList $ convertIn <$> referenceInputs
-              , txOutputs = txOutputs
-              , txFee = valueToAda fee
-              , txMint = mint
-              , txValidRange =
-                  Time.posixTimeRangeToContainedSlotRange
-                    slotCfg
-                    posixRange
-              , txSignatures =
-                  Map.fromList
-                    [ ( pkh
-                      , maybe
-                          (error "user not found")
-                          Model.userSignKey
-                          (Map.lookup pkh users)
-                      )
-                    | pkh <- sigs
-                    ]
-              , txRedeemers =
-                  Map.fromList $
-                    first getPtr
-                      <$> PlutusTx.toList redeemers
-              , txData = Map.fromList $ PlutusTx.toList dataTable
-              , txCollateral = collateral
-              , txCollateralReturn = Just ret
-              , txTotalCollateral = Just $ valueToAda totalValue
-              , txScripts =
-                  Map.fromList
-                    [ (sh, getValidator <$> val)
-                    | (sh, val) <- Map.toList scripts
-                    , sh `Set.member` usedScripts
-                    ]
-              , txMintScripts =
-                  Set.fromList
-                    [ mp
-                    | (cs, mp) <- Map.toList mps
-                    , cs `elem` Value.symbols mint
-                    ]
-              }
+      , scriptTx = lowerScCore @st m d scripts mps contextTxInfo
       }
-    where
-      convertIn :: Plutus.TxInInfo -> TxIn
-      convertIn = convertIn' m redeemers scripts dataTable
-
-      usedScripts :: Set Plutus.ScriptHash
-      usedScripts =
-        Set.fromList
-          [ sh
-          | txin <- Set.toList inputs
-          , Plutus.ScriptCredential sh <- pure $ getCred utxos txin
-          ]
-
-      inputs :: Set TxIn
-      inputs = Set.fromList inputs'
-
-      inputs' :: [TxIn]
-      inputs' = convertIn <$> txInputs
-
-      getPtr :: Plutus.ScriptPurpose -> Plutus.RedeemerPtr
-      getPtr sp =
-        fromMaybe (error "script purpose not found") $
-          revLookup sp redMap
-
-      redMap :: Map Plutus.RedeemerPtr Plutus.ScriptPurpose
-      redMap = mkRedMap stakes dcerts mint inputs'
-
-      collateral :: Set TxIn
-      totalValue :: Plutus.Value
-      ret :: Plutus.TxOut
-      (collateral, totalValue, ret) = mkCollateral m inputs
 
 revLookup ::
   Plutus.ScriptPurpose ->
@@ -552,6 +442,129 @@ raiseSc
           fromMaybe (error "redeemer ptr not found") $
             Map.lookup redeemerPtr txRedeemers
 
+lowerScCore ::
+  Model.Mock ->
+  DatumOf st ->
+  Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
+  Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
+  Plutus.TxInfo ->
+  Model.Tx
+lowerScCore
+  m@Model.Mock
+    { Model.mockUsers = users
+    , Model.mockUtxos = utxos
+    , Model.mockConfig =
+      Model.MockConfig
+        { Model.mockConfigSlotConfig = slotCfg
+        }
+    }
+  _
+  scripts
+  mps
+  Plutus.TxInfo
+    { Plutus.txInfoInputs = txInputs
+    , Plutus.txInfoReferenceInputs = referenceInputs
+    , Plutus.txInfoOutputs = txOutputs
+    , Plutus.txInfoFee = fee
+    , Plutus.txInfoMint = mint
+    , Plutus.txInfoValidRange = posixRange
+    , Plutus.txInfoSignatories = sigs
+    , Plutus.txInfoRedeemers = redeemers
+    , Plutus.txInfoData = dataTable
+    , Plutus.txInfoDCert = dcerts
+    , Plutus.txInfoWdrl = stakes
+    } =
+    Model.Tx
+      mempty
+        { extra'mints =
+            [ Mint val red mp
+            | (cs, m) <- PlutusTx.toList $ Value.getValue mint
+            , let val =
+                    mconcat
+                      [ Value.singleton cs tn n
+                      | (tn, n) <- PlutusTx.toList m
+                      ]
+            , let mp =
+                    fromMaybe (error "mp not found") $
+                      Map.lookup cs mps
+            , let red =
+                    fromMaybe (error "redeemer not found") $
+                      PlutusTx.lookup (Plutus.Minting cs) redeemers
+            ]
+        }
+      $ Tx
+        { txInputs = inputs
+        , txReferenceInputs =
+            Set.fromList $ convertIn <$> referenceInputs
+        , txOutputs = txOutputs
+        , txFee = valueToAda fee
+        , txMint = mint
+        , txValidRange =
+            Time.posixTimeRangeToContainedSlotRange
+              slotCfg
+              posixRange
+        , txSignatures =
+            Map.fromList
+              [ ( pkh
+                , maybe
+                    (error "user not found")
+                    Model.userSignKey
+                    (Map.lookup pkh users)
+                )
+              | pkh <- sigs
+              ]
+        , txRedeemers =
+            Map.fromList $
+              first getPtr
+                <$> PlutusTx.toList redeemers
+        , txData = Map.fromList $ PlutusTx.toList dataTable
+        , txCollateral = collateral
+        , txCollateralReturn = Just ret
+        , txTotalCollateral = Just $ valueToAda totalValue
+        , txScripts =
+            Map.fromList
+              [ (sh, getValidator <$> val)
+              | (sh, val) <- Map.toList scripts
+              , sh `Set.member` usedScripts
+              ]
+        , txMintScripts =
+            Set.fromList
+              [ mp
+              | (cs, mp) <- Map.toList mps
+              , cs `elem` Value.symbols mint
+              ]
+        }
+    where
+      convertIn :: Plutus.TxInInfo -> TxIn
+      convertIn = convertIn' m redeemers scripts dataTable
+
+      usedScripts :: Set Plutus.ScriptHash
+      usedScripts =
+        Set.fromList
+          [ sh
+          | txin <- Set.toList inputs
+          , Plutus.ScriptCredential sh <- pure $ getCred utxos txin
+          ]
+
+      inputs :: Set TxIn
+      inputs = Set.fromList inputs'
+
+      inputs' :: [TxIn]
+      inputs' = convertIn <$> txInputs
+
+      getPtr :: Plutus.ScriptPurpose -> Plutus.RedeemerPtr
+      getPtr sp =
+        fromMaybe (error "script purpose not found") $
+          revLookup sp redMap
+
+      redMap :: Map Plutus.RedeemerPtr Plutus.ScriptPurpose
+      redMap = mkRedMap stakes dcerts mint inputs'
+
+      collateral :: Set TxIn
+      totalValue :: Plutus.Value
+      ret :: Plutus.TxOut
+      (collateral, totalValue, ret) = mkCollateral m inputs
+
 -- Gets the ada portion of a value
 valueToAda :: Plutus.Value -> Model.Ada
 valueToAda v = Model.Lovelace $ Value.valueOf v "" ""
@@ -562,14 +575,18 @@ adaToValue (Model.Lovelace n) = Plutus.singleton "" "" n
 omitted :: Plutus.TxId
 omitted = error "You shouldn't read this"
 
-resolveOmitted :: Model.Mock -> datum -> Plutus.TxInfo -> Plutus.TxInfo
-resolveOmitted _mock _d txinfo =
-  txinfo
-    { Plutus.txInfoInputs = []
-    , Plutus.txInfoReferenceInputs = []
-    , Plutus.txInfoOutputs = []
-    , Plutus.txInfoData = error "TODO"
-    }
+resolveOmitted ::
+  forall st.
+  Model.Mock ->
+  Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
+  Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
+  DatumOf st ->
+  Plutus.TxInfo ->
+  Plutus.TxInfo
+resolveOmitted mock scripts mps d txinfo =
+  txinfo {Plutus.txInfoId = getTxId scripts mock tx extra}
+  where
+    Model.Tx extra tx = lowerScCore @st mock d scripts mps txinfo
 
 txTestBadAdjunction ::
   ( Hedgehog.MonadTest m
