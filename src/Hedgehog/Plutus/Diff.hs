@@ -1,15 +1,33 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module Hedgehog.Plutus.Diff where
+module Hedgehog.Plutus.Diff (
+  Diff' (diff', patch'),
+  Diff,
+  Patch,
+  diff,
+  patch,
+) where
 
 import GHC.Generics qualified as GHC
 
 import Data.Coerce (coerce)
 
-import Generics.SOP
-import Generics.SOP.GGP
+import Generics.SOP (
+  All,
+  All2,
+  I (I),
+  NP,
+  NS (S, Z),
+  Proxy (Proxy),
+  SOP (SOP),
+  hcliftA2,
+  hcmap,
+  hmap,
+  unSOP,
+ )
+import Generics.SOP.GGP (GCode, GFrom, GTo, gfrom, gto)
 
-import Hedgehog.Plutus.Generics
+import Hedgehog.Plutus.Generics (Generically (Generically), Simple (Simple))
 
 class Diff' a where
   type Patch a
