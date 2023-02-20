@@ -40,12 +40,16 @@
           ];
         })
         ({
-          flake.config.herculesCI.onPush.myCICheck =
-            {
-              outputs.cat = self.packages.x86_64-linux."hedgehog-plutus-simple:lib:cat-prelude";
+          flake.config.herculesCI = {
+            ciSystems = [ "x86_64-linux" ];
+            onPush = {
+              myCICheck.outputs = {
+                cat = self.packages.x86_64-linux."hedgehog-plutus-simple:lib:cat-prelude";
+              };
+              default.outputs =
+                with self; { inherit packages checks devShell devShells apps effects; };
             };
-          flake.config.herculesCI.onPush.default.outputs =
-            with self; { inherit packages checks devShell devShells apps effects; };
+          };
         })
       ];
     };
