@@ -4,12 +4,8 @@ module Hedgehog.Plutus.TxTest where
 
 import Data.Kind (Constraint, Type)
 
-import Prelude hiding ((.))
-
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusTx.AssocMap qualified
-
-import Control.Category (Category ((.)))
 
 import Plutus.Model qualified as Model
 
