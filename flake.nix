@@ -41,14 +41,14 @@
         })
         ({
           flake.config.herculesCI = {
-            ciSystems = [ "x86_64-linux" ];
             onPush = {
-              myCICheck.outputs = {
+              mainChecks.outputs = {
                 cat = self.packages.x86_64-linux."hedgehog-plutus-simple:lib:cat-prelude";
               };
-              default.outputs =
-                let system = "x86_64-linux"; in
-                builtins.mapAttrs (name: val: val.${system}) self.outputs;
+              devChecks.outputs =
+                builtins.mapAttrs
+                  (name: { x86_64-linux, ... }: x86_64-linux)
+                  self.outputs;
             };
           };
         })
