@@ -46,7 +46,17 @@
               myCICheck.outputs = {
                 cat = self.packages.x86_64-linux."hedgehog-plutus-simple:lib:cat-prelude";
               };
-              default.outputs = self.outputs;
+              default.outputs =
+                let system = "x86_64-linux"; in
+                {
+                  # todo mapAttrs or something?
+                  packages = self.packages.${system};
+                  checks = self.checks.${system};
+                  devShell = self.devShell.${system};
+                  devShells = self.devShells.${system};
+                  apps = self.apps.${system};
+                  effects = self.effects.${system};
+                };
             };
           };
         })
