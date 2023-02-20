@@ -40,10 +40,8 @@ newtype Patch' a = Patch' (Maybe (Patch a))
 instance (All Diff as) => Diff' (NP I as) where
   type Patch (NP I as) = NP Patch' as
 
-  diff' as bs =
-    hcliftA2 (Proxy @Diff) (\(I a) (I b) -> Patch' $ diff a b) as bs
-  patch' ps cs =
-    hcliftA2 (Proxy @Diff) (\(Patch' p) (I c) -> I $ patch p c) ps cs
+  diff' = hcliftA2 (Proxy @Diff) (\(I a) (I b) -> Patch' $ diff a b)
+  patch' = hcliftA2 (Proxy @Diff) (\(Patch' p) (I c) -> I $ patch p c)
 
 data ConsPatch xs = ConsPatch (NP I xs) (Maybe (Patch (NP I xs)))
 
