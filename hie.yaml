@@ -1,5 +1,8 @@
 cradle:
   cabal:
+    - path: "./cat-prelude"
+      component: "lib:hedgehog-plutus-simple:cat-prelude"
+
     - path: "./src"
       component: "lib:hedgehog-plutus-simple"
 

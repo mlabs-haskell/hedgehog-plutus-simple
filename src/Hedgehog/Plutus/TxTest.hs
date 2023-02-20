@@ -79,7 +79,7 @@ scriptContext ::
 scriptContext = _
 
 omitted :: Plutus.TxId
-omitted = undefined
+omitted = error "You shouldn't read this"
 
 resolveOmitted :: Model.Mock -> datum -> Plutus.TxInfo -> Plutus.TxInfo
 resolveOmitted = _
