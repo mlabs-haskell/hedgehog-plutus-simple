@@ -1,21 +1,41 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 
-module Hedgehog.Plutus.TxTest where
-
-import Data.Kind (Constraint, Type)
+module Hedgehog.Plutus.TxTest (
+  TxTest (TxTest),
+  txTest,
+  omitted,
+  txTestBadAdjunction,
+  txTestGoodAdjunction,
+  txTestBad,
+  txTestGood,
+) where
 
 import Prelude hiding ((.))
 
 import PlutusLedgerApi.V2 qualified as Plutus
-import PlutusTx.AssocMap qualified
 
 import Control.Category (Category ((.)))
 
 import Plutus.Model qualified as Model
 
-import Hedgehog.Plutus.Adjunction
-import Hedgehog.Plutus.ScriptContext
-import Hedgehog.Plutus.TestData
+import Hedgehog qualified
+
+import Hedgehog.Plutus.Adjunction (
+  Adjunction (lower),
+  adjunctionTest,
+ )
+import Hedgehog.Plutus.ScriptContext (
+  DatumOf,
+  ScriptContext,
+  ScriptTx,
+  scriptTxValid,
+ )
+import Hedgehog.Plutus.TestData (
+  Bad,
+  Good,
+  TestData,
+  testDataAdjunction,
+ )
 
 newtype TxTest st a
   = TxTest
@@ -66,35 +86,51 @@ omitted = undefined
 resolveOmitted :: Model.Mock -> datum -> Plutus.TxInfo -> Plutus.TxInfo
 resolveOmitted = _
 
--- txTestRight ::
---   forall (ingrs :: Type).
---   TxTest ingrs ->
---   Model.Tx ->
---   Either (Bad ingrs) ingrs
--- txTestRight (TxTest Adjunction {raise}) = raise
+txTestBadAdjunction ::
+  ( Hedgehog.MonadTest m
+  , Eq (Bad a)
+  , Eq (Good a)
+  , Show (Bad a)
+  , Show (Good a)
+  ) =>
+  TxTest st a ->
+  Model.Mock ->
+  DatumOf st ->
+  Bad a ->
+  m ()
+txTestBadAdjunction (TxTest f) mock datum = adjunctionTest (f mock datum) . Left
 
--- txTestTestBad ::
---   forall (m :: Type -> Type) (ingrs :: Type).
---   ( Hedgehog.MonadTest m
---   , Eq ingrs
---   , Show ingrs
---   , Eq (Bad ingrs)
---   , Show (Bad ingrs)
---   ) =>
---   TxTest ingrs ->
---   Bad ingrs ->
---   m ()
--- txTestTestBad tt bad = txTestRight tt (txTestBad tt bad) === Left bad
+txTestGoodAdjunction ::
+  ( Hedgehog.MonadTest m
+  , Eq (Bad a)
+  , Eq (Good a)
+  , Show (Bad a)
+  , Show (Good a)
+  ) =>
+  TxTest st a ->
+  Model.Mock ->
+  DatumOf st ->
+  Good a ->
+  m ()
+txTestGoodAdjunction (TxTest f) mock datum =
+  adjunctionTest (f mock datum) . Right
 
--- txTestTestGood ::
---   forall (m :: Type -> Type) (ingrs :: Type).
---   ( Hedgehog.MonadTest m
---   , Eq ingrs
---   , Show ingrs
---   , Eq (Bad ingrs)
---   , Show (Bad ingrs)
---   ) =>
---   TxTest ingrs ->
---   ingrs ->
---   m ()
--- txTestTestGood tt good = txTestRight tt (txTestGood tt good) === Right good
+txTestBad ::
+  (Hedgehog.MonadTest m) =>
+  TxTest st a ->
+  Model.Mock ->
+  DatumOf st ->
+  Bad a ->
+  m ()
+txTestBad (TxTest f) mock datum bad =
+  Hedgehog.assert $ not (scriptTxValid ((f mock datum).lower (Left bad)) mock)
+
+txTestGood ::
+  (Hedgehog.MonadTest m) =>
+  TxTest st a ->
+  Model.Mock ->
+  DatumOf st ->
+  Good a ->
+  m ()
+txTestGood (TxTest f) mock datum good =
+  Hedgehog.assert $ scriptTxValid ((f mock datum).lower (Right good)) mock

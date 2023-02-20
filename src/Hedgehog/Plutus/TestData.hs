@@ -4,20 +4,36 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 
-module Hedgehog.Plutus.TestData where
+module Hedgehog.Plutus.TestData (
+  Bad,
+  Good,
+  TestData (validate, generalise),
+  test,
+  testDataAdjunction,
+  EitherOr,
+  eitherOr,
+  shouldBeSingletonList,
+  Shouldn'tExist (MaybeExists, maybeExists),
+  shouldBe,
+  ShouldEqual (MightNotEqual),
+  ShouldBeEqualTo,
+  Mempty,
+  ShouldBeNatural (MightBeNegative),
+) where
 
 import Data.Coerce (coerce)
 import Data.Kind (Constraint, Type)
 import GHC.Generics qualified as GHC
 
+import Control.Monad (guard)
 import Data.Proxy (Proxy (Proxy))
 import Numeric.Natural (Natural)
 
 import Generics.SOP qualified as SOP
 import Generics.SOP.GGP qualified as SOP
 
-import Hedgehog.Plutus.Adjunction
-import Hedgehog.Plutus.Generics
+import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction, lower, raise))
+import Hedgehog.Plutus.Generics (Generically (Generically), Simple (Simple))
 
 type Bad :: Type -> Type
 newtype Bad a = Bad {getBad :: a}
@@ -30,6 +46,9 @@ class TestData a where
   validate :: a -> Maybe (Good a)
 
   generalise :: Good a -> a
+
+test :: (TestData a) => a -> Either (Bad a) (Good a)
+test a = maybe (Left (Bad a)) Right (validate a)
 
 testDataAdjunction ::
   (TestData a) =>
@@ -67,29 +86,41 @@ data Mempty a
 
 instance (Monoid a) => ShouldBeEqualTo (Mempty a) a where val _ = mempty
 
-instance (TestData good) => TestData (Either bad good) where
-  type Good (Either bad good) = Good good
+{- | A 'TestData' instance representing either a fixed 'bad' value or a
+ sub-'TestData' instance for 'good'.
+-}
+newtype EitherOr bad good = EitherOr (Either bad good)
+  deriving newtype (Functor, Applicative, Monad)
 
-  validate (Left _) = Nothing
-  validate (Right good) = validate good
+instance (TestData good) => TestData (EitherOr bad good) where
+  type Good (EitherOr bad good) = Good good
 
-  generalise = Right . generalise
+  validate (EitherOr (Left _)) = Nothing
+  validate (EitherOr (Right good)) = validate good
 
-eitherOr :: (b -> a) -> Either a b -> a
-eitherOr _ (Left a) = a
-eitherOr f (Right b) = f b
+  generalise = EitherOr . Right . generalise
 
-shouldBeSingletonList :: [a] -> Either [a] a
-shouldBeSingletonList [a] = Right a
-shouldBeSingletonList as = Left as
+eitherOr :: (b -> a) -> EitherOr a b -> a
+eitherOr _ (EitherOr (Left a)) = a
+eitherOr f (EitherOr (Right b)) = f b
 
-instance TestData (Maybe a) where
-  type Good (Maybe a) = ()
+shouldBeSingletonList :: [a] -> EitherOr [a] a
+shouldBeSingletonList [a] = EitherOr $ Right a
+shouldBeSingletonList as = EitherOr $ Left as
 
-  validate Nothing = Just ()
-  validate (Just _) = Nothing
+newtype Shouldn'tExist a = MaybeExists {maybeExists :: Maybe a}
+  deriving newtype (Functor, Applicative, Monad)
 
-  generalise () = Nothing
+instance TestData (Shouldn'tExist a) where
+  type Good (Shouldn'tExist a) = ()
+
+  validate (MaybeExists Nothing) = Just ()
+  validate (MaybeExists (Just _)) = Nothing
+
+  generalise () = MaybeExists Nothing
+
+shouldBe :: (Eq a) => a -> a -> Shouldn'tExist a
+shouldBe exp act = MaybeExists (guard (exp == act) >> Just act)
 
 newtype ShouldBeNatural i = MightBeNegative i
 

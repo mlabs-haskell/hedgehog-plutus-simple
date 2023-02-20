@@ -99,6 +99,7 @@ library
     Hedgehog.Plutus.ScriptContext
     Hedgehog.Plutus.Simple
     Hedgehog.Plutus.TestData
+    Hedgehog.Plutus.TestData.Plutus
     Hedgehog.Plutus.TestSingleScript
     Hedgehog.Plutus.TxTest
 

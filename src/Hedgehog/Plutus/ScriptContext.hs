@@ -36,3 +36,6 @@ data ScriptContext redeemer st = ScriptContext
 
 plutusScriptContext :: ScriptContext d st -> Plutus.ScriptContext
 plutusScriptContext = _
+
+scriptTxValid :: ScriptTx st -> Model.Mock -> Bool
+scriptTxValid = _
