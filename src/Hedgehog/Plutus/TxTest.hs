@@ -5,8 +5,6 @@
 
 module Hedgehog.Plutus.TxTest where
 
-import Prelude hiding ((.))
-
 import Control.Arrow (first)
 import Data.List (find, sort)
 import Data.Map (Map)
@@ -16,10 +14,9 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 
 import PlutusLedgerApi.V1.Value qualified as Value
+
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusLedgerApi.V2.Tx qualified as Plutus
-
-import Control.Category (Category ((.)))
 
 import Plutus.Model qualified as Model
 import PlutusTx.AssocMap qualified as PlutusTx

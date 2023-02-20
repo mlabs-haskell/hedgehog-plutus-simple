@@ -8,11 +8,7 @@ module Hedgehog.Plutus.Adjunction (
   adjunctionTest,
 ) where
 
-import Prelude hiding (id, (.))
-
 import Data.Kind (Type)
-
-import Control.Category (Category (id, (.)))
 
 import Hedgehog (annotateShow, (===))
 import Hedgehog qualified

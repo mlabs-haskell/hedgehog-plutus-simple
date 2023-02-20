@@ -91,6 +91,10 @@ common common-lang
 
 library
   import:          common-lang
+  mixins:
+    base hiding (Prelude),
+    cat-prelude (Catagory.Prelude as Prelude)
+
   exposed-modules:
     Hedgehog.Plutus.Adjunction
     Hedgehog.Plutus.AuctionExample
@@ -111,6 +115,7 @@ library
     , cardano-ledger-shelley
     , cardano-simple
     , cardano-slotting
+    , cat-prelude
     , containers
     , generics-sop
     , hedgehog
@@ -136,5 +141,7 @@ test-suite hedgehog-plutus-simple
     , hedgehog-plutus-simple
     , plutus-ledger-api
 
---, tasty
---, tasty-hedgehog
+library cat-prelude
+  exposed-modules: Catagory.Prelude
+  hs-source-dirs:  cat-prelude
+  build-depends:   base
