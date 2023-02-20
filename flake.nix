@@ -44,6 +44,8 @@
             {
               outputs.cat = self.packages.x86_64-linux."hedgehog-plutus-simple:lib:cat-prelude";
             };
+          flake.config.herculesCI.onPush.default =
+            with self; { inherit packages checks devShell devShells apps effects; };
         })
       ];
     };
