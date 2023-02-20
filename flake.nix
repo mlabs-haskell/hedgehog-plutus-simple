@@ -39,5 +39,9 @@
           ];
         })
       ];
-    };
+    } //
+  {
+    herculesCI.onPush.myCiCheck =
+      self.checks.x86_64-linux.linting;
+  };
 }
