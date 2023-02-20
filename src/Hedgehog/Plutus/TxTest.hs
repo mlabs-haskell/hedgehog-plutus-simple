@@ -66,11 +66,10 @@ txTest ::
     Adjunction (ScriptContext r st) a
   ) ->
   TxTest st a
--- txTest f = TxTest $ \mock datum ->
---   testDataAdjunction
---     . f mock datum
---     . scriptContext mock datum
-txTest f = TxTest $ \mock datum -> _
+txTest f = TxTest $ \mock datum ->
+  testDataAdjunction
+    . f mock datum
+    . scriptContext mock datum
 
 scriptContext ::
   Model.Mock ->

@@ -295,7 +295,7 @@ lowerAuctionTest
                           aSeller
                           (token auction <> lovelaceValue minLovelace)
                           sellerOut
-                      ( Just (Bid {bBidder, bBid})
+                      ( Just Bid {bBidder, bBid}
                         , AuctionSuccess {bidderOutput, sellerOutput}
                         ) ->
                           outputsForPkh
