@@ -16,7 +16,8 @@
     # plutarch has a parse error on the newest commit right now
   };
 
-  outputs = inputs@{ self, tooling, plutus-simple-model, plutarch, ... }: tooling.lib.mkFlake { inherit self; }
+  outputs = inputs@{ self, tooling, plutus-simple-model, plutarch, ... }: tooling.lib.mkFlake
+    { inherit self; }
     {
       imports = [
         (tooling.lib.mkHaskellFlakeModule1 {
@@ -38,10 +39,12 @@
             "plutus-simple-model"
           ];
         })
+        ({
+          flake.config.herculesCI.onPush.myCICheck =
+            {
+              outputs.cat = self.packages.x86_64-linux."hedgehog-plutus-simple:lib:cat-prelude";
+            };
+        })
       ];
-    } //
-  {
-    herculesCI.onPush.myCiCheck =
-      self.checks.x86_64-linux.linting;
-  };
+    };
 }
