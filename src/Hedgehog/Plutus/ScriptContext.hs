@@ -1,6 +1,14 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 
-module Hedgehog.Plutus.ScriptContext where
+module Hedgehog.Plutus.ScriptContext (
+  ScriptTx (ScriptTx, scriptTx, scriptTxPurpose),
+  ScriptType (Spend, Mint, Reward, Certify),
+  DatumOf,
+  ScriptPurpose (Spending, Minting, Rewarding, Certifying),
+  ScriptContext (ScriptContext, contextRedeemer, contextPurpose, contextTxInfo),
+  plutusScriptContext,
+  scriptTxValid,
+) where
 
 import Data.Kind (Type)
 
@@ -36,3 +44,6 @@ data ScriptContext redeemer st = ScriptContext
 
 plutusScriptContext :: ScriptContext d st -> Plutus.ScriptContext
 plutusScriptContext = _
+
+scriptTxValid :: ScriptTx st -> Model.Mock -> Bool
+scriptTxValid = _
