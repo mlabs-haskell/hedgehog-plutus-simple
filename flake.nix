@@ -47,7 +47,7 @@
               };
               devChecks.outputs =
                 builtins.mapAttrs
-                  (name: { x86_64-linux, ... }: x86_64-linux)
+                  (name: { x86_64-linux ? { }, ... }: x86_64-linux)
                   self.outputs;
             };
           };
