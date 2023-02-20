@@ -2,8 +2,6 @@
 
 module Hedgehog.Plutus.TxTest where
 
-import Data.Kind (Constraint, Type)
-
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusTx.AssocMap qualified
 
@@ -57,7 +55,7 @@ scriptContext ::
 scriptContext = _
 
 omitted :: Plutus.TxId
-omitted = undefined
+omitted = error "You shouldn't read this"
 
 resolveOmitted :: Model.Mock -> datum -> Plutus.TxInfo -> Plutus.TxInfo
 resolveOmitted = _
