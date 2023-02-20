@@ -48,15 +48,7 @@
               };
               default.outputs =
                 let system = "x86_64-linux"; in
-                {
-                  # todo mapAttrs or something?
-                  packages = self.packages.${system};
-                  checks = self.checks.${system};
-                  devShell = self.devShell.${system};
-                  devShells = self.devShells.${system};
-                  apps = self.apps.${system};
-                  effects = self.effects.${system};
-                };
+                builtins.mapAttrs (name: val: val.${system}) self.outputs;
             };
           };
         })
