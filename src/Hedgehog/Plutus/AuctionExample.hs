@@ -2,8 +2,6 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
--- Supress warning for Prelude
-{-# OPTIONS_GHC -Wno-missing-import-lists #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 {-
@@ -19,9 +17,6 @@ module Hedgehog.Plutus.AuctionExample (auctionTest) where
 import Data.Kind (Type)
 import GHC.Generics qualified as GHC
 
-import Prelude hiding ((.))
-
-import Control.Category ((.))
 import Data.Maybe (fromJust, fromMaybe)
 
 import Data.Map qualified as Map

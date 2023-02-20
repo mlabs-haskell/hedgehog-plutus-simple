@@ -1,7 +1,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Hedgehog.Plutus.TestData.Plutus where
+module Hedgehog.Plutus.TestData.Plutus () where
 
 import PlutusLedgerApi.V2 qualified as Plutus
 
