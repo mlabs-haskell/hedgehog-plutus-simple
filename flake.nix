@@ -46,8 +46,7 @@
               myCICheck.outputs = {
                 cat = self.packages.x86_64-linux."hedgehog-plutus-simple:lib:cat-prelude";
               };
-              default.outputs =
-                with self; { inherit packages checks devShell devShells apps effects; };
+              default.outputs = self.outputs;
             };
           };
         })
