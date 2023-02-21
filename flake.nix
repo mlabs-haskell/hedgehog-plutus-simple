@@ -46,7 +46,7 @@
                 self.packages.x86_64-linux."hedgehog-plutus-simple:lib:hedgehog-plutus-simple".overrideAttrs
                   (final: prev:
                     {
-                      ghcOptions = [ "--bad-options" ];
+                      flags = [ "-dev" ];
                     }
                   );
               # TODO overrideAttrs?
