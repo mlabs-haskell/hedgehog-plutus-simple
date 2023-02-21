@@ -1,4 +1,4 @@
-import Hedgehog qualified
+import Hedgehog.Main (defaultMain)
 
 main :: IO ()
-main = Hedgehog.defaultMain []
+main = defaultMain []
