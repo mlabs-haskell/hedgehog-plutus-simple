@@ -143,8 +143,10 @@ lowerSc
     } =
     ScriptTx
       { scriptTxPurpose = contextPurpose
-      , scriptTx = lowerScCore @st m d scripts mps contextTxInfo
+      , scriptTx = lowerScCore @st m d scripts mps sp contextTxInfo
       }
+    where
+      sp = toPlutusSp contextPurpose
 
 revLookup ::
   Plutus.ScriptPurpose ->
@@ -431,11 +433,7 @@ raiseSc
           revLookup sp redMap
 
       sp :: Plutus.ScriptPurpose
-      sp = case scriptTxPurpose of
-        Spending ref -> Plutus.Spending ref
-        Minting cs -> Plutus.Minting cs
-        Rewarding sc -> Plutus.Rewarding sc
-        Certifying dc -> Plutus.Certifying dc
+      sp = toPlutusSp scriptTxPurpose
 
       redeemer :: Plutus.BuiltinData
       redeemer =
@@ -443,12 +441,20 @@ raiseSc
           fromMaybe (error "redeemer ptr not found") $
             Map.lookup redeemerPtr txRedeemers
 
+toPlutusSp :: ScriptPurpose st -> Plutus.ScriptPurpose
+toPlutusSp = \case
+  Spending ref -> Plutus.Spending ref
+  Minting cs -> Plutus.Minting cs
+  Rewarding sc -> Plutus.Rewarding sc
+  Certifying dc -> Plutus.Certifying dc
+
 lowerScCore ::
   forall st.
   Model.Mock ->
   DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
+  Plutus.ScriptPurpose ->
   Plutus.TxInfo ->
   Model.Tx
 lowerScCore
@@ -463,7 +469,8 @@ lowerScCore
   d
   scripts
   mps
-  ( resolveOmitted @st m scripts mps d ->
+  sp
+  ( resolveOmitted @st m scripts mps d sp ->
       Plutus.TxInfo
         { Plutus.txInfoInputs = txInputs
         , Plutus.txInfoReferenceInputs = referenceInputs
@@ -607,7 +614,7 @@ resolveOmitted
           , Plutus.txInfoRedeemers = redeemers
           , Plutus.txInfoData = datums
           }
-      Model.Tx extra tx = lowerScCore @st mock d scripts mps resolved
+      Model.Tx extra tx = lowerScCore @st mock d scripts mps sp resolved
       -- This should always halt because
       -- extra and tx are only used in the txInfoId
       -- an lowerScCore doesn't look at that feild
