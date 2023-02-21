@@ -19,10 +19,10 @@ source-repository head
   type:     git
   location: https://github.com/mlabs-haskell/hedgehog-plutus-simple.git
 
--- Common sections
-
 flag dev
-  default: False
+  default: True
+
+-- Common sections
 
 common common-lang
   ghc-options:

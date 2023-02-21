@@ -47,10 +47,9 @@
                   (final: prev:
                     {
                       cabalProjectLocal =
-                        #prev.cabalProjectLocal ++
                         ''
                           package hedgehog-plutus-simple
-                            flags: +dev
+                            flags: -dev
                         '';
                     }
                   );

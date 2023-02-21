@@ -1,6 +1,3 @@
 packages: ./.
 
-package hedgehog-plutus-simple
-  flags: +dev
-
 tests: true
