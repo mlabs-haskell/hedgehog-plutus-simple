@@ -43,13 +43,8 @@
           flake.config.herculesCI = {
             onPush = {
               mainChecks.outputs.mainCheck =
-                self.packages.x86_64-linux."hedgehog-plutus-simple:lib:hedgehog-plutus-simple".overrideAttrs
-                  (final: prev:
-                    {
-                      flags = [ "-dev" ];
-                    }
-                  );
-              # TODO overrideAttrs?
+                self.packages.x86_64-linux."hedgehog-plutus-simple:lib:hedgehog-plutus-simple".override
+                  { flags = [ "-dev" ]; };
               devChecks.outputs =
                 builtins.mapAttrs
                   (name: { x86_64-linux ? { }, ... }: x86_64-linux)
