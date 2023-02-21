@@ -3,7 +3,17 @@
 -- TODO can this be just for Prelude?
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
 
-module Hedgehog.Plutus.TxTest where
+module Hedgehog.Plutus.TxTest (
+  TxTest (TxTest),
+  ChainState (..),
+  txTest,
+  omitted,
+  txTestBadAdjunction,
+  txTestGoodAdjunction,
+  txTestBad,
+  txTestGood,
+  resolveOmitted,
+) where
 
 import Control.Arrow (first)
 import Data.List (find, sort)
@@ -37,12 +47,13 @@ import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.SafeHash qualified as SafeHash
 import Cardano.Ledger.TxIn qualified as Ledger
 
-import Hedgehog.Plutus.Adjunction (Adjunction (..))
+import Hedgehog.Plutus.Adjunction (Adjunction (..), adjunctionTest)
 import Hedgehog.Plutus.ScriptContext (
   DatumOf,
   ScriptContext (..),
   ScriptPurpose (..),
   ScriptTx (..),
+  scriptTxValid,
  )
 import Hedgehog.Plutus.TestData (
   Bad,
@@ -53,14 +64,20 @@ import Hedgehog.Plutus.TestData (
 import Plutus.Model qualified as Modele
 import Plutus.Model.Mock.ProtocolParameters (PParams (..))
 
+import Hedgehog qualified
+
 newtype TxTest st a
   = TxTest
-      ( Model.Mock ->
+      ( ChainState ->
         DatumOf st ->
-        Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
-        Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
         Adjunction (ScriptTx st) (Either (Bad a) (Good a))
       )
+
+data ChainState = ChainState
+  { csMock :: Model.Mock
+  , csScripts :: Map Plutus.ScriptHash (Model.Versioned Model.Validator)
+  , csMps :: Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy)
+  }
 
 {- | Given an adjunction from a 'Generalised' to a 'ScriptContext', generate
 a 'TxTest.
@@ -82,15 +99,15 @@ Just pass empty lists/maps. For 'txInfoId', you can use the 'omitted' function.
 -}
 txTest ::
   (TestData a, Plutus.FromData r) =>
-  ( Model.Mock ->
+  ( ChainState ->
     DatumOf st ->
     Adjunction (ScriptContext r st) a
   ) ->
   TxTest st a
-txTest f = TxTest $ \mock datum scripts mps ->
+txTest f = TxTest $ \cs datum ->
   testDataAdjunction
-    . f mock datum
-    . scriptContext mock datum scripts mps
+    . f cs datum
+    . scriptContext cs datum
 
 -- Not lawful when
 -- the POSIXTimeRange doesn't coresponds to a SlotRange exactly
@@ -98,13 +115,17 @@ txTest f = TxTest $ \mock datum scripts mps ->
 scriptContext ::
   forall st r.
   Plutus.FromData r =>
-  Model.Mock ->
+  ChainState ->
   DatumOf st ->
-  Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
-  Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   Adjunction (ScriptTx st) (ScriptContext r st)
-scriptContext m d scripts mps =
-  Adjunction {lower = lowerSc m d scripts mps, raise = raiseSc m d scripts}
+scriptContext
+  ChainState
+    { csMock = m
+    , csScripts = scripts
+    , csMps = mps
+    }
+  d =
+    Adjunction {lower = lowerSc m d scripts mps, raise = raiseSc m d scripts}
 
 lowerSc ::
   forall st r.
@@ -556,7 +577,7 @@ adaToValue :: Model.Ada -> Plutus.Value
 adaToValue (Model.Lovelace n) = Plutus.singleton "" "" n
 
 omitted :: Plutus.TxId
-omitted = error "ommited value read"
+omitted = error "You shouldn't read this"
 
 resolveOmitted ::
   forall st.
@@ -587,35 +608,57 @@ resolveOmitted mock@Model.Mock {Model.mockUtxos = utxos} scripts mps d txinfo =
     datums = error "TODO"
     redeemers = error "TODO"
 
--- txTestRight ::
---   forall (ingrs :: Type).
---   TxTest ingrs ->
---   Model.Tx ->
---   Either (Bad ingrs) ingrs
--- txTestRight (TxTest Adjunction {raise}) = raise
+txTestBadAdjunction ::
+  ( Hedgehog.MonadTest m
+  , Eq (Bad a)
+  , Eq (Good a)
+  , Show (Bad a)
+  , Show (Good a)
+  ) =>
+  TxTest st a ->
+  ChainState ->
+  DatumOf st ->
+  Bad a ->
+  m ()
+txTestBadAdjunction (TxTest f) cs datum =
+  adjunctionTest (f cs datum) . Left
 
--- txTestTestBad ::
---   forall (m :: Type -> Type) (ingrs :: Type).
---   ( Hedgehog.MonadTest m
---   , Eq ingrs
---   , Show ingrs
---   , Eq (Bad ingrs)
---   , Show (Bad ingrs)
---   ) =>
---   TxTest ingrs ->
---   Bad ingrs ->
---   m ()
--- txTestTestBad tt bad = txTestRight tt (txTestBad tt bad) === Left bad
+txTestGoodAdjunction ::
+  ( Hedgehog.MonadTest m
+  , Eq (Bad a)
+  , Eq (Good a)
+  , Show (Bad a)
+  , Show (Good a)
+  ) =>
+  TxTest st a ->
+  ChainState ->
+  DatumOf st ->
+  Good a ->
+  m ()
+txTestGoodAdjunction (TxTest f) cs datum =
+  adjunctionTest (f cs datum) . Right
 
--- txTestTestGood ::
---   forall (m :: Type -> Type) (ingrs :: Type).
---   ( Hedgehog.MonadTest m
---   , Eq ingrs
---   , Show ingrs
---   , Eq (Bad ingrs)
---   , Show (Bad ingrs)
---   ) =>
---   TxTest ingrs ->
---   ingrs ->
---   m ()
--- txTestTestGood tt good = txTestRight tt (txTestGood tt good) === Right good
+txTestBad ::
+  (Hedgehog.MonadTest m) =>
+  TxTest st a ->
+  ChainState ->
+  DatumOf st ->
+  Bad a ->
+  m ()
+txTestBad (TxTest f) cs datum bad =
+  Hedgehog.assert $
+    not
+      ( scriptTxValid
+          ((f cs datum).lower (Left bad))
+          (cs.csMock)
+      )
+
+txTestGood ::
+  (Hedgehog.MonadTest m) =>
+  TxTest st a ->
+  ChainState ->
+  DatumOf st ->
+  Good a ->
+  m ()
+txTestGood (TxTest f) cs datum good =
+  Hedgehog.assert $ scriptTxValid ((f cs datum).lower (Right good)) (cs.csMock)

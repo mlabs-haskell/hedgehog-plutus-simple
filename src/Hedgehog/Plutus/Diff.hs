@@ -1,15 +1,33 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module Hedgehog.Plutus.Diff where
+module Hedgehog.Plutus.Diff (
+  Diff' (diff', patch'),
+  Diff,
+  Patch,
+  diff,
+  patch,
+) where
 
 import GHC.Generics qualified as GHC
 
 import Data.Coerce (coerce)
 
-import Generics.SOP
-import Generics.SOP.GGP
+import Generics.SOP (
+  All,
+  All2,
+  I (I),
+  NP,
+  NS (S, Z),
+  Proxy (Proxy),
+  SOP (SOP),
+  hcliftA2,
+  hcmap,
+  hmap,
+  unSOP,
+ )
+import Generics.SOP.GGP (GCode, GFrom, GTo, gfrom, gto)
 
-import Hedgehog.Plutus.Generics
+import Hedgehog.Plutus.Generics (Generically (Generically), Simple (Simple))
 
 class Diff' a where
   type Patch a
@@ -40,10 +58,8 @@ newtype Patch' a = Patch' (Maybe (Patch a))
 instance (All Diff as) => Diff' (NP I as) where
   type Patch (NP I as) = NP Patch' as
 
-  diff' as bs =
-    hcliftA2 (Proxy @Diff) (\(I a) (I b) -> Patch' $ diff a b) as bs
-  patch' ps cs =
-    hcliftA2 (Proxy @Diff) (\(Patch' p) (I c) -> I $ patch p c) ps cs
+  diff' = hcliftA2 (Proxy @Diff) (\(I a) (I b) -> Patch' $ diff a b)
+  patch' = hcliftA2 (Proxy @Diff) (\(Patch' p) (I c) -> I $ patch p c)
 
 data ConsPatch xs = ConsPatch (NP I xs) (Maybe (Patch (NP I xs)))
 

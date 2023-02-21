@@ -1,12 +1,13 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 
 module Hedgehog.Plutus.ScriptContext (
-  ScriptTx (..),
-  ScriptType (..),
+  ScriptTx (ScriptTx, scriptTx, scriptTxPurpose),
+  ScriptType (Spend, Mint, Reward, Certify),
   DatumOf,
-  ScriptContext (..),
-  ScriptPurpose (..),
+  ScriptPurpose (Spending, Minting, Rewarding, Certifying),
+  ScriptContext (ScriptContext, contextRedeemer, contextPurpose, contextTxInfo),
   plutusScriptContext,
+  scriptTxValid,
 ) where
 
 import Data.Kind (Type)
@@ -19,6 +20,7 @@ data ScriptTx st = ScriptTx
   { scriptTx :: Model.Tx
   , scriptTxPurpose :: ScriptPurpose st
   }
+  deriving stock (Show)
 
 data ScriptType = Spend Type | Mint | Reward | Certify
 
@@ -33,6 +35,8 @@ data ScriptPurpose st where
   Minting :: Plutus.CurrencySymbol -> ScriptPurpose 'Mint
   Rewarding :: Plutus.StakingCredential -> ScriptPurpose 'Reward
   Certifying :: Plutus.DCert -> ScriptPurpose 'Certify
+
+deriving stock instance Show (ScriptPurpose st)
 
 type ScriptContext :: Type -> ScriptType -> Type
 data ScriptContext redeemer st = ScriptContext
@@ -52,3 +56,6 @@ plutusScriptContext
       Minting cs -> Plutus.Minting cs
       Rewarding sc -> Plutus.Rewarding sc
       Certifying cert -> Plutus.Certifying cert
+
+scriptTxValid :: ScriptTx st -> Model.Mock -> Bool
+scriptTxValid = _

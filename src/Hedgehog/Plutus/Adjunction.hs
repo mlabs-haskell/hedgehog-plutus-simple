@@ -1,7 +1,5 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE UndecidableInstances #-}
--- Needed for Prelude import
-{-# OPTIONS_GHC -Wwarn=missing-import-lists #-}
 
 module Hedgehog.Plutus.Adjunction (
   Adjunction (Adjunction, lower, raise),

@@ -19,15 +19,23 @@ source-repository head
   type:     git
   location: https://github.com/mlabs-haskell/hedgehog-plutus-simple.git
 
+flag dev
+  default: True
+
 -- Common sections
 
 common common-lang
   ghc-options:
     -Wall -Wcompat -Wincomplete-uni-patterns -Wno-unused-do-bind
-    -Wno-partial-type-signatures -Wmissing-export-lists
-    -Wincomplete-record-updates -Wmissing-deriving-strategies
-    -Wno-name-shadowing -Wunused-foralls -fprint-explicit-foralls
-    -fprint-explicit-kinds -fwarn-missing-import-lists
+    -Wno-partial-type-signatures -Wincomplete-record-updates
+    -Wmissing-deriving-strategies -Wno-name-shadowing -Wunused-foralls
+    -fprint-explicit-foralls -fprint-explicit-kinds -Werror
+
+  if flag(dev)
+    ghc-options: -fdefer-typed-holes -Wno-typed-holes
+
+  else
+    ghc-options: -fwarn-missing-import-lists -Wmissing-export-lists
 
   build-depends:      base >=4.14
   default-extensions:
@@ -103,6 +111,7 @@ library
     Hedgehog.Plutus.ScriptContext
     Hedgehog.Plutus.Simple
     Hedgehog.Plutus.TestData
+    Hedgehog.Plutus.TestData.Plutus
     Hedgehog.Plutus.TestSingleScript
     Hedgehog.Plutus.TimeTest
     Hedgehog.Plutus.TxTest
@@ -135,6 +144,7 @@ test-suite hedgehog-plutus-simple
   type:           exitcode-stdio-1.0
   main-is:        Spec.hs
   hs-source-dirs: ./test
+  other-modules:  Time
   build-depends:
     , cardano-simple
     , hedgehog

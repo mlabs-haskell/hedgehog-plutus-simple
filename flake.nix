@@ -16,7 +16,8 @@
     # plutarch has a parse error on the newest commit right now
   };
 
-  outputs = inputs@{ self, tooling, plutus-simple-model, plutarch, ... }: tooling.lib.mkFlake { inherit self; }
+  outputs = inputs@{ self, tooling, plutus-simple-model, plutarch, ... }: tooling.lib.mkFlake
+    { inherit self; }
     {
       imports = [
         (tooling.lib.mkHaskellFlakeModule1 {
@@ -38,6 +39,19 @@
             "cardano-ledger-shelley"
             "cardano-crypto"
           ];
+        })
+        ({
+          flake.config.herculesCI = {
+            onPush = {
+              mainChecks.outputs.mainCheck =
+                self.packages.x86_64-linux."hedgehog-plutus-simple:lib:hedgehog-plutus-simple".override
+                  { flags.dev = false; };
+              devChecks.outputs =
+                builtins.mapAttrs
+                  (name: { x86_64-linux ? { }, ... }: x86_64-linux)
+                  self.outputs;
+            };
+          };
         })
       ];
     };
