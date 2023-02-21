@@ -81,7 +81,6 @@ data ChainState = ChainState
   { csMock :: Model.Mock
   , csScripts :: Map Plutus.ScriptHash (Model.Versioned Model.Validator)
   , csMps :: Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy)
-  , csDataTable :: Map Plutus.DatumHash Plutus.Datum
   }
 
 {- | Given an adjunction from a 'Generalised' to a 'ScriptContext', generate
