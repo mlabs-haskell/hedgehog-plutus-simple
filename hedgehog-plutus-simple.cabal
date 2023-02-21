@@ -127,6 +127,7 @@ library
     , text
     , time
     , vector
+    , plutus-pioneer-program-week01
 
   hs-source-dirs:  src
 
