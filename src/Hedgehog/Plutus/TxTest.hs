@@ -82,7 +82,7 @@ newtype TxTest st a
 {- | Given an adjunction from a 'Generalised' to a 'ScriptContext', generate
 a 'TxTest.
 
-In the 'raise' direction, the supplied adjunction may omit thttps://github.com/mlabs-haskell/mlabs-tooling.nix/pull/25he following
+In the 'raise' direction, the supplied adjunction may omit the following
 details, which will be supplied for you:
 
   * The 'txInfoInput' being spent, if this is a spend script
@@ -583,10 +583,26 @@ resolveOmitted ::
   DatumOf st ->
   Plutus.TxInfo ->
   Plutus.TxInfo
-resolveOmitted mock scripts mps d txinfo =
-  txinfo {Plutus.txInfoId = getTxId scripts mock tx extra}
+resolveOmitted mock@Model.Mock {Model.mockUtxos = utxos} scripts mps d txinfo =
+  txinfo
+    { Plutus.txInfoId = getTxId scripts mock tx extra
+    , Plutus.txInfoOutputs = error "TODO"
+    , Plutus.txInfoSignatories =
+        Set.toList . Set.fromList $
+          [ pkh
+          | Plutus.PubKeyCredential pkh <-
+              getCred utxos
+                . convertIn' mock redeemers scripts datums
+                <$> Plutus.txInfoInputs txinfo
+          ]
+            ++ Plutus.txInfoSignatories txinfo
+    , Plutus.txInfoRedeemers = redeemers
+    , Plutus.txInfoData = datums
+    }
   where
     Model.Tx extra tx = lowerScCore @st mock d scripts mps txinfo
+    datums = error "TODO"
+    redeemers = error "TODO"
 
 txTestBadAdjunction ::
   ( Hedgehog.MonadTest m
