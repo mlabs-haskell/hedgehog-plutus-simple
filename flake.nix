@@ -43,7 +43,22 @@
           flake.config.herculesCI = {
             onPush = {
               mainChecks.outputs = {
-                cat = self.packages.x86_64-linux."hedgehog-plutus-simple:lib:cat-prelude";
+                mainCheck =
+                  let
+                    hps =
+                      self.packages.x86_64-linux."hedgehog-plutus-simple:lib:hedgehog-plutus-simple";
+                  in
+                  hps.overrideAttrs
+                    (prev: next:
+                      {
+                        cabalProjectLocal = prev.cabalProjectLocal ++
+                          ''
+                            package hedgehog-plutus-simple
+                              flags: +dev
+                          '';
+                      }
+                    );
+                # TODO overrideAttrs?
               };
               devChecks.outputs =
                 builtins.mapAttrs
