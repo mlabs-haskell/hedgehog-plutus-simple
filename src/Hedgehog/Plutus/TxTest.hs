@@ -1,7 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
--- TODO can this be just for Prelude?
-{-# OPTIONS_GHC -Wno-missing-import-lists #-}
 
 module Hedgehog.Plutus.TxTest (
   TxTest (TxTest),
@@ -85,9 +83,9 @@ a 'TxTest.
 In the 'raise' direction, the supplied adjunction may omit the following
 details, which will be supplied for you:
 
-  * The 'txInfoOutput' being spent, if this is a spend script
+  * any 'txInfoInputs` impiled by the script purpose
 
-  * 'txInfoSignatories' corresponding to 'PubKeyHash' inputs
+  * any 'txInfoSignatories' corresponding to 'PubKeyHash' inputs
 
   * 'txInfoRedeemers'
 
@@ -584,45 +582,66 @@ resolveOmitted ::
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   DatumOf st ->
+  Plutus.ScriptPurpose ->
   Plutus.TxInfo ->
   Plutus.TxInfo
-resolveOmitted mock@Model.Mock {Model.mockUtxos = utxos} scripts mps d txinfo =
-  resolved
-  where
-    resolved =
-      txinfo
-        { Plutus.txInfoId = getTxId scripts mock tx extra
-        , Plutus.txInfoOutputs = error "TODO where do I get this?"
-        , Plutus.txInfoSignatories =
-            Set.toList . Set.fromList $
-              [ pkh
-              | Plutus.PubKeyCredential pkh <-
-                  getCred utxos <$> inputs
-              ]
-                <> Plutus.txInfoSignatories txinfo
-        , Plutus.txInfoRedeemers = redeemers
-        , Plutus.txInfoData = datums
-        }
-    Model.Tx extra tx = lowerScCore @st mock d scripts mps resolved
-    -- This should always halt because
-    -- extra and tx are only used in the txInfoId
-    -- an lowerScCore doesn't look at that feild
-    inputs =
-      convertIn' mock redeemers scripts datums
-        <$> Plutus.txInfoInputs txinfo
-    datums =
-      PlutusTx.fromList
-        [ ( dh
-          , fromMaybe (error "datum hash not found") $
-              Map.lookup dh (Model.mockDatums mock)
-          )
-        | TxIn {txInRef} <- inputs
-        , let Plutus.TxOut {Plutus.txOutDatum = out} =
-                fromMaybe (error "utxo lookup failure") $
-                  Map.lookup txInRef utxos
-        , Plutus.OutputDatumHash dh <- pure out
-        ]
-    redeemers = error "TODO where do I get this?"
+resolveOmitted
+  mock@Model.Mock {Model.mockUtxos = utxos}
+  scripts
+  mps
+  d
+  sp
+  txinfo =
+    resolved
+    where
+      resolved =
+        txinfo
+          { Plutus.txInfoId = getTxId scripts mock tx extra
+          , Plutus.txInfoInputs = inputs'
+          , Plutus.txInfoSignatories =
+              Set.toList . Set.fromList $
+                [ pkh
+                | Plutus.PubKeyCredential pkh <-
+                    getCred utxos <$> inputs
+                ]
+                  <> Plutus.txInfoSignatories txinfo
+          , Plutus.txInfoRedeemers = redeemers
+          , Plutus.txInfoData = datums
+          }
+      Model.Tx extra tx = lowerScCore @st mock d scripts mps resolved
+      -- This should always halt because
+      -- extra and tx are only used in the txInfoId
+      -- an lowerScCore doesn't look at that feild
+      inputs :: [TxIn]
+      inputs =
+        convertIn' mock redeemers scripts datums
+          <$> inputs'
+      inputs' :: [Plutus.TxInInfo]
+      inputs' = Plutus.txInfoInputs txinfo <> extraInputs
+      extraInputs =
+        case sp of
+          Plutus.Spending ref ->
+            pure
+              Plutus.TxInInfo
+                { Plutus.txInInfoOutRef = ref
+                , Plutus.txInInfoResolved =
+                    fromMaybe (error "utxo lookup failed") $
+                      Map.lookup ref utxos
+                }
+          _ -> []
+      datums =
+        PlutusTx.fromList
+          [ ( dh
+            , fromMaybe (error "datum hash not found") $
+                Map.lookup dh (Model.mockDatums mock)
+            )
+          | TxIn {txInRef} <- inputs
+          , let Plutus.TxOut {Plutus.txOutDatum = out} =
+                  fromMaybe (error "utxo lookup failure") $
+                    Map.lookup txInRef utxos
+          , Plutus.OutputDatumHash dh <- pure out
+          ]
+      redeemers = error "TODO where do I get this?"
 
 txTestBadAdjunction ::
   ( Hedgehog.MonadTest m
