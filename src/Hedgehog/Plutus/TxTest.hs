@@ -599,7 +599,7 @@ resolveOmitted mock@Model.Mock {Model.mockUtxos = utxos} scripts mps d txinfo =
                 . convertIn' mock redeemers scripts datums
                 <$> Plutus.txInfoInputs txinfo
           ]
-            ++ Plutus.txInfoSignatories txinfo
+            <> Plutus.txInfoSignatories txinfo
     , Plutus.txInfoRedeemers = redeemers
     , Plutus.txInfoData = datums
     }
