@@ -138,6 +138,15 @@ library
 
   hs-source-dirs:  src
 
+test-suite hedgehog-plutus-simple
+  import:         common-lang
+  type:           exitcode-stdio-1.0
+  main-is:        Spec.hs
+  hs-source-dirs: ./test
+  build-depends:
+    , hedgehog
+    , hedgehog-plutus-simple
+
 library cat-prelude
   exposed-modules: Catagory.Prelude
   hs-source-dirs:  cat-prelude
