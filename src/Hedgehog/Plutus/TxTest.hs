@@ -5,6 +5,7 @@
 
 module Hedgehog.Plutus.TxTest (
   TxTest,
+  ChainState(..),
   txTest,
   omitted,
   resolveOmitted,
@@ -14,8 +15,6 @@ module Hedgehog.Plutus.TxTest (
   txTestGood,
 ) where
 
-import Control.Category (Category ((.)))
-import Prelude hiding ((.))
 
 import Control.Arrow (first)
 import Data.Kind (Constraint, Type)
@@ -25,8 +24,6 @@ import Data.Map qualified as Map
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
-
-import Prelude hiding ((.))
 
 import PlutusLedgerApi.V1.Value qualified as Value
 import PlutusLedgerApi.V2 qualified as Plutus
@@ -61,7 +58,6 @@ import Hedgehog.Plutus.ScriptContext (
  )
 import Hedgehog.Plutus.TestData (
   Bad,
-  --Generalised,
   Good,
   TestData,
   testDataAdjunction,
@@ -69,6 +65,9 @@ import Hedgehog.Plutus.TestData (
 import qualified Hedgehog
 import Plutus.Model qualified as Modele
 import Plutus.Model.Mock.ProtocolParameters (PParams (..))
+
+import Cardano.Ledger.Alonzo.TxInfo (txInfoId)
+import Hedgehog qualified
 
 newtype TxTest st a
   = TxTest
@@ -78,6 +77,13 @@ newtype TxTest st a
         Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
         Adjunction (ScriptTx st) (Either (Bad a) (Good a))
       )
+
+data ChainState = ChainState
+  { csMock :: Model.Mock
+  , csScripts :: Map Plutus.ScriptHash (Model.Versioned Model.Validator)
+  , csMps :: Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy)
+  , csDataTable :: Map Plutus.DatumHash Plutus.Datum
+  }
 
 {- | Given an adjunction from a 'Generalised' to a 'ScriptContext', generate
 a 'TxTest.
@@ -443,6 +449,7 @@ raiseSc
             Map.lookup redeemerPtr txRedeemers
 
 lowerScCore ::
+  forall st.
   Model.Mock ->
   DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
@@ -458,22 +465,24 @@ lowerScCore
         { Model.mockConfigSlotConfig = slotCfg
         }
     }
-  _
+  d
   scripts
   mps
-  Plutus.TxInfo
-    { Plutus.txInfoInputs = txInputs
-    , Plutus.txInfoReferenceInputs = referenceInputs
-    , Plutus.txInfoOutputs = txOutputs
-    , Plutus.txInfoFee = fee
-    , Plutus.txInfoMint = mint
-    , Plutus.txInfoValidRange = posixRange
-    , Plutus.txInfoSignatories = sigs
-    , Plutus.txInfoRedeemers = redeemers
-    , Plutus.txInfoData = dataTable
-    , Plutus.txInfoDCert = dcerts
-    , Plutus.txInfoWdrl = stakes
-    } =
+  ( resolveOmitted @st m scripts mps d ->
+      Plutus.TxInfo
+        { Plutus.txInfoInputs = txInputs
+        , Plutus.txInfoReferenceInputs = referenceInputs
+        , Plutus.txInfoOutputs = txOutputs
+        , Plutus.txInfoFee = fee
+        , Plutus.txInfoMint = mint
+        , Plutus.txInfoValidRange = posixRange
+        , Plutus.txInfoSignatories = sigs
+        , Plutus.txInfoRedeemers = redeemers
+        , Plutus.txInfoData = dataTable
+        , Plutus.txInfoDCert = dcerts
+        , Plutus.txInfoWdrl = stakes
+        }
+    ) =
     Model.Tx
       mempty
         { extra'mints =
@@ -527,12 +536,8 @@ lowerScCore
               | (sh, val) <- Map.toList scripts
               , sh `Set.member` usedScripts
               ]
-        , txMintScripts =
-            Set.fromList
-              [ mp
-              | (cs, mp) <- Map.toList mps
-              , cs `elem` Value.symbols mint
-              ]
+        , txMintScripts = Set.empty
+        -- this will be computed from Extra later
         }
     where
       convertIn :: Plutus.TxInInfo -> TxIn
@@ -584,25 +589,42 @@ resolveOmitted ::
   Plutus.TxInfo ->
   Plutus.TxInfo
 resolveOmitted mock@Model.Mock {Model.mockUtxos = utxos} scripts mps d txinfo =
-  txinfo
-    { Plutus.txInfoId = getTxId scripts mock tx extra
-    , Plutus.txInfoOutputs = error "TODO"
-    , Plutus.txInfoSignatories =
-        Set.toList . Set.fromList $
-          [ pkh
-          | Plutus.PubKeyCredential pkh <-
-              getCred utxos
-                . convertIn' mock redeemers scripts datums
-                <$> Plutus.txInfoInputs txinfo
-          ]
-            <> Plutus.txInfoSignatories txinfo
-    , Plutus.txInfoRedeemers = redeemers
-    , Plutus.txInfoData = datums
-    }
+  resolved
   where
-    Model.Tx extra tx = lowerScCore @st mock d scripts mps txinfo
-    datums = error "TODO"
-    redeemers = error "TODO"
+    resolved =
+      txinfo
+        { Plutus.txInfoId = getTxId scripts mock tx extra
+        , Plutus.txInfoOutputs = error "TODO where do I get this?"
+        , Plutus.txInfoSignatories =
+            Set.toList . Set.fromList $
+              [ pkh
+              | Plutus.PubKeyCredential pkh <-
+                  getCred utxos <$> inputs
+              ]
+                <> Plutus.txInfoSignatories txinfo
+        , Plutus.txInfoRedeemers = redeemers
+        , Plutus.txInfoData = datums
+        }
+    Model.Tx extra tx = lowerScCore @st mock d scripts mps resolved
+    -- This should always halt because
+    -- extra and tx are only used in the txInfoId
+    -- an lowerScCore doesn't look at that feild
+    inputs =
+      convertIn' mock redeemers scripts datums
+        <$> Plutus.txInfoInputs txinfo
+    datums =
+      PlutusTx.fromList
+        [ ( dh
+          , fromMaybe (error "datum hash not found") $
+              Map.lookup dh (Model.mockDatums mock)
+          )
+        | TxIn {txInRef} <- inputs
+        , let Plutus.TxOut {Plutus.txOutDatum = out} =
+                fromMaybe (error "utxo lookup failure") $
+                  Map.lookup txInRef utxos
+        , Plutus.OutputDatumHash dh <- pure out
+        ]
+    redeemers = error "TODO where do I get this?"
 
 txTestBadAdjunction ::
   ( Hedgehog.MonadTest m
