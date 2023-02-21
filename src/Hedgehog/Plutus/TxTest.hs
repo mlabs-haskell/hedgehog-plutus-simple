@@ -64,7 +64,6 @@ import Hedgehog.Plutus.TestData (
 import Plutus.Model qualified as Modele
 import Plutus.Model.Mock.ProtocolParameters (PParams (..))
 
-import Cardano.Ledger.Alonzo.TxInfo (txInfoId)
 import Hedgehog qualified
 
 newtype TxTest st a
