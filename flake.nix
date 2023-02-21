@@ -46,11 +46,7 @@
                 self.packages.x86_64-linux."hedgehog-plutus-simple:lib:hedgehog-plutus-simple".overrideAttrs
                   (final: prev:
                     {
-                      cabalProjectLocal =
-                        ''
-                          package hedgehog-plutus-simple
-                            flags: -dev
-                        '';
+                      ghcOptions = [ "--bad-options" ];
                     }
                   );
               # TODO overrideAttrs?
