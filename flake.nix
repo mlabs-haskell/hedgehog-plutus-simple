@@ -44,7 +44,7 @@
             onPush = {
               mainChecks.outputs.mainCheck =
                 self.packages.x86_64-linux."hedgehog-plutus-simple:lib:hedgehog-plutus-simple".override
-                  { flags = [ "-dev" ]; };
+                  { flags.dev = false; };
               devChecks.outputs =
                 builtins.mapAttrs
                   (name: { x86_64-linux ? { }, ... }: x86_64-linux)
