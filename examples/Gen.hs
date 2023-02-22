@@ -73,7 +73,7 @@ genTime = do
   let start = Time.scSlotZeroTime slotCfg
   let len = Time.scSlotLength slotCfg
   i <- integral $ Range.linear 0 1_000_000
-  pure $ start + i * (fromIntegral len)
+  pure $ start + i * fromIntegral len
 
 -- TODO some of this is probably worth exposeing in hps
 
