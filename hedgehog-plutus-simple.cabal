@@ -139,14 +139,19 @@ test-suite examples
   main-is:        Spec.hs
   hs-source-dirs: ./examples
   build-depends:
+    , bytestring
+    , cardano-simple
     , containers
     , hedgehog
     , hedgehog-plutus-simple
+    , mtl
     , plutus-ledger-api
     , plutus-simple-model
     , plutus-tx
 
-  other-modules:  AuctionExample
+  other-modules:
+    AuctionExample
+    Gen
 
 library cat-prelude
   exposed-modules: Catagory.Prelude

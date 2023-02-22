@@ -4,6 +4,8 @@ import Hedgehog qualified
 import Hedgehog.Main qualified as Hedgehog
 
 import Plutus.Model qualified as Model
+import Gen (genAuctionDatum, runCtx)
+import Plutus.Model.Pretty qualified as Model
 
 import Hedgehog.Plutus.TxTest (txTestGoodAdjunction)
 
@@ -26,12 +28,12 @@ main =
           ]
     ]
 
--- goodAdjunction :: Hedgehog.Property
--- goodAdjunction = Hedgehog.property $ do
---   init <- Hedgehog.forAllWith Model.ppMock _
---   datum <- Hedgehog.forAll _
---   good <- Hedgehog.forAll _
---   txTestGoodAdjunction auctionTest init datum good
+goodAdjunction :: Hedgehog.Property
+goodAdjunction = Hedgehog.property $ do
+  initialState <- Hedgehog.forAllWith Model.ppMock _
+  datum <- Hedgehog.forAll $ runCtx initialState genAuctionDatum
+  good <- Hedgehog.forAll _
+  txTestGoodAdjunction auctionTest initialState datum good
 
 goodBidAdjunction :: Hedgehog.Property
 goodBidAdjunction = Hedgehog.property $ do
