@@ -18,7 +18,7 @@ import Plutus.Model qualified as Model
 import Hedgehog qualified
 
 import Hedgehog.Plutus.Adjunction (
-  Adjunction (Adjunction, lower, raise),
+  Adjunction (lower),
   adjunctionTest,
  )
 import Hedgehog.Plutus.ScriptContext (
@@ -75,11 +75,7 @@ scriptContext ::
   Model.Mock ->
   DatumOf st ->
   Adjunction (ScriptTx st) (ScriptContext r st)
-scriptContext Model.Mock {} d =
-  Adjunction
-    { lower = _
-    , raise = _
-    }
+scriptContext = _
 
 omitted :: Plutus.TxId
 omitted = error "You shouldn't read this"
