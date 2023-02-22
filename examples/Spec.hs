@@ -15,7 +15,8 @@ import AuctionExample (auctionTest)
 main :: IO ()
 main =
   Hedgehog.defaultMain $
-    take 0 $ -- TODO remove this when tests are complete
+    drop
+      1 -- TODO remove this when tests are complete
       [ Hedgehog.checkParallel $
           Hedgehog.Group
             "Auction example tests"
