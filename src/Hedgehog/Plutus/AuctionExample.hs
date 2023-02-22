@@ -54,7 +54,12 @@ import Hedgehog.Plutus.TestData (
   shouldBeSingletonList,
  )
 import Hedgehog.Plutus.TestData.Plutus ()
-import Hedgehog.Plutus.TxTest (ChainState (ChainState, csMock), TxTest, omitted, txTest)
+import Hedgehog.Plutus.TxTest (
+  ChainState (ChainState, csMock),
+  TxTest,
+  omitted,
+  txTest,
+ )
 
 --- Copied from pioneer program
 
