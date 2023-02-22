@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Hedgehog.Plutus.TxTest (
   TxTest,
@@ -14,7 +15,6 @@ module Hedgehog.Plutus.TxTest (
 
 
 import Control.Arrow (first)
-import Data.Kind (Constraint, Type)
 import Data.List (find, sort)
 import Data.Map (Map)
 import Data.Map qualified as Map
@@ -62,15 +62,12 @@ import Hedgehog.Plutus.TestData (
 import qualified Hedgehog
 import Plutus.Model qualified as Modele
 import Plutus.Model.Mock.ProtocolParameters (PParams (..))
-
-import Hedgehog qualified
+import qualified Plutus.Model.V1 as Plutus
 
 newtype TxTest st a
   = TxTest
-      ( Model.Mock ->
+      ( ChainState ->
         DatumOf st ->
-        Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
-        Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
         Adjunction (ScriptTx st) (Either (Bad a) (Good a))
       )
 
@@ -99,42 +96,44 @@ details, which will be supplied for you:
 Just pass empty lists/maps. For 'txInfoId', you can use the 'omitted' function.
 -}
 txTest ::
-  (TestData a, Plutus.FromData r) =>
-  ( Model.Mock ->
+  forall r a st.
+  (TestData a, Plutus.IsData r) =>
+  ( ChainState ->
     DatumOf st ->
     Adjunction (ScriptContext r st) a
   ) ->
   TxTest st a
-txTest f = TxTest $ \mock datum scripts mps ->
+txTest f = TxTest $ \cs datum ->
   testDataAdjunction
-    . f mock datum
-    . scriptContext mock datum scripts mps
+    . f cs datum
+    . scriptContext @r cs
 
 -- Not lawful when
 -- the POSIXTimeRange doesn't coresponds to a SlotRange exactly
 -- the fee contains non-ada value
 scriptContext ::
-  forall st r.
-  Plutus.FromData r =>
-  Model.Mock ->
-  DatumOf st ->
-  Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
-  Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
+  forall r st.
+  (Plutus.FromData r, Plutus.ToData r) =>
+  ChainState ->
   Adjunction (ScriptTx st) (ScriptContext r st)
-scriptContext m d scripts mps =
-  Adjunction {lower = lowerSc m d scripts mps, raise = raiseSc m d scripts}
+scriptContext
+  ChainState
+    { csMock = m
+    , csScripts = scripts
+    , csMps = mps
+    } =
+    Adjunction {lower = lowerSc m scripts mps, raise = raiseSc m scripts}
 
 lowerSc ::
   forall st r.
+  Plutus.ToData r =>
   Model.Mock ->
-  DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   ScriptContext r st ->
   ScriptTx st
 lowerSc
   m
-  d
   scripts
   mps
   ScriptContext
@@ -143,7 +142,7 @@ lowerSc
     } =
     ScriptTx
       { scriptTxPurpose = contextPurpose
-      , scriptTx = lowerScCore @st m d scripts mps sp contextTxInfo
+      , scriptTx = lowerScCore @r m scripts mps sp contextTxInfo
       }
     where
       sp = toPlutusSp contextPurpose
@@ -352,7 +351,6 @@ mkCollateral
 raiseSc ::
   Plutus.FromData r =>
   Model.Mock ->
-  DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   ScriptTx st ->
   ScriptContext r st
@@ -364,7 +362,6 @@ raiseSc
         { Model.mockConfigSlotConfig = slotCfg
         }
     }
-  _
   scripts
   ScriptTx
     { scriptTxPurpose
@@ -449,9 +446,9 @@ toPlutusSp = \case
   Certifying dc -> Plutus.Certifying dc
 
 lowerScCore ::
-  forall st.
+  forall r.
+  Plutus.ToData r =>
   Model.Mock ->
-  DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   Plutus.ScriptPurpose ->
@@ -466,11 +463,10 @@ lowerScCore
         { Model.mockConfigSlotConfig = slotCfg
         }
     }
-  d
   scripts
   mps
   sp
-  ( resolveOmitted @st m scripts mps d sp ->
+  ( resolveOmitted @r m scripts mps sp ->
       Plutus.TxInfo
         { Plutus.txInfoInputs = txInputs
         , Plutus.txInfoReferenceInputs = referenceInputs
@@ -583,11 +579,11 @@ omitted :: Plutus.TxId
 omitted = error "You shouldn't read this"
 
 resolveOmitted ::
-  forall st.
+  forall r.
+  Plutus.ToData r =>
   Model.Mock ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
-  DatumOf st ->
   Plutus.ScriptPurpose ->
   Plutus.TxInfo ->
   Plutus.TxInfo
@@ -595,7 +591,6 @@ resolveOmitted
   mock@Model.Mock {Model.mockUtxos = utxos}
   scripts
   mps
-  d
   sp
   txinfo =
     resolved
@@ -614,7 +609,7 @@ resolveOmitted
           , Plutus.txInfoRedeemers = redeemers
           , Plutus.txInfoData = datums
           }
-      Model.Tx extra tx = lowerScCore @st mock d scripts mps sp resolved
+      Model.Tx extra tx = lowerScCore @r mock scripts mps sp resolved
       -- This should always halt because
       -- extra and tx are only used in the txInfoId
       -- an lowerScCore doesn't look at that feild
@@ -657,11 +652,11 @@ txTestBadAdjunction ::
   , Show (Good a), Show (ScriptTx st)
   ) =>
   TxTest st a ->
-  Model.Mock ->
+  ChainState ->
   DatumOf st ->
   Bad a ->
   m ()
-txTestBadAdjunction (TxTest f) mock datum = adjunctionTest (f mock datum _ _) . Left
+txTestBadAdjunction (TxTest f) cs datum = adjunctionTest (f cs datum) . Left
 
 txTestGoodAdjunction ::
   ( Hedgehog.MonadTest m
@@ -672,29 +667,29 @@ txTestGoodAdjunction ::
   , Show (ScriptTx st)
   ) =>
   TxTest st a ->
-  Model.Mock ->
+  ChainState ->
   DatumOf st ->
   Good a ->
   m ()
 txTestGoodAdjunction (TxTest f) mock datum =
-  adjunctionTest (f mock datum _ _) . Right
+  adjunctionTest (f mock datum) . Right
 
 txTestBad ::
   (Hedgehog.MonadTest m) =>
   TxTest st a ->
-  Model.Mock ->
+  ChainState ->
   DatumOf st ->
   Bad a ->
   m ()
-txTestBad (TxTest f) mock datum bad =
-  Hedgehog.assert $ not (scriptTxValid ((f mock datum _ _).lower (Left bad)) mock)
+txTestBad (TxTest f) cs datum bad =
+  Hedgehog.assert $ not (scriptTxValid ((f cs datum).lower (Left bad)) cs.csMock)
 
 txTestGood ::
   (Hedgehog.MonadTest m) =>
   TxTest st a ->
-  Model.Mock ->
+  ChainState ->
   DatumOf st ->
   Good a ->
   m ()
-txTestGood (TxTest f) mock datum good =
-  Hedgehog.assert $ scriptTxValid ((f mock datum _ _).lower (Right good)) mock
+txTestGood (TxTest f) cs datum good =
+  Hedgehog.assert $ scriptTxValid ((f cs datum).lower (Right good)) cs.csMock
