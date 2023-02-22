@@ -1111,17 +1111,16 @@
     "cardano-ledger": {
       "flake": false,
       "locked": {
-        "lastModified": 1634701482,
-        "narHash": "sha256-HTPOmVOXgBD/3uAxZip/HSttaKcJ+uImYDbuwANAw1c=",
+        "lastModified": 1677038343,
+        "narHash": "sha256-CmDlystoEp8HEB8ntI56M0vYz+HjJdHGDKyCmd2TEdg=",
         "owner": "input-output-hk",
         "repo": "cardano-ledger",
-        "rev": "bf008ce028751cae9fb0b53c3bef20f07c06e333",
+        "rev": "b9aa1ad1728c0ceeca62657ec94d6d099896c052",
         "type": "github"
       },
       "original": {
         "owner": "input-output-hk",
         "repo": "cardano-ledger",
-        "rev": "bf008ce028751cae9fb0b53c3bef20f07c06e333",
         "type": "github"
       }
     },
