@@ -105,7 +105,6 @@ library
 
   exposed-modules:
     Hedgehog.Plutus.Adjunction
-    Hedgehog.Plutus.AuctionExample
     Hedgehog.Plutus.Diff
     Hedgehog.Plutus.Generics
     Hedgehog.Plutus.ScriptContext
@@ -138,6 +137,20 @@ library
     , vector
 
   hs-source-dirs:  src
+
+test-suite examples
+  import:         common-lang
+  type:           exitcode-stdio-1.0
+  main-is:        Spec.hs
+  hs-source-dirs: ./examples
+  other-modules:  AuctionExample
+  build-depends:
+    , cardano-simple
+    , hedgehog
+    , hedgehog-plutus-simple
+    , plutus-ledger-api
+    , plutus-simple-model
+    , plutus-tx
 
 test-suite hedgehog-plutus-simple
   import:         common-lang

@@ -37,6 +37,7 @@ import Hedgehog.Plutus.Generics (Generically (Generically), Simple (Simple))
 
 type Bad :: Type -> Type
 newtype Bad a = Bad {getBad :: a}
+  deriving stock (Eq, Show)
 
 type TestData :: Type -> Constraint
 class TestData a where
@@ -67,6 +68,7 @@ instance TestData (Simple a) where
 
 type ShouldEqual :: Type -> Type -> Type
 newtype ShouldEqual val a = MightNotEqual a
+  deriving stock (Eq, Show)
 
 instance (Eq a, ShouldBeEqualTo val a) => TestData (ShouldEqual val a) where
   type Good (ShouldEqual val a) = ()
@@ -90,6 +92,7 @@ instance (Monoid a) => ShouldBeEqualTo (Mempty a) a where val _ = mempty
  sub-'TestData' instance for 'good'.
 -}
 newtype EitherOr bad good = EitherOr (Either bad good)
+  deriving stock (Eq, Show)
   deriving newtype (Functor, Applicative, Monad)
 
 instance (TestData good) => TestData (EitherOr bad good) where
@@ -109,6 +112,7 @@ shouldBeSingletonList [a] = EitherOr $ Right a
 shouldBeSingletonList as = EitherOr $ Left as
 
 newtype Shouldn'tExist a = MaybeExists {maybeExists :: Maybe a}
+  deriving stock (Eq, Show)
   deriving newtype (Functor, Applicative, Monad)
 
 instance TestData (Shouldn'tExist a) where
@@ -123,6 +127,7 @@ shouldBe :: (Eq a) => a -> a -> Shouldn'tExist a
 shouldBe exp act = MaybeExists (guard (exp == act) >> Just act)
 
 newtype ShouldBeNatural i = MightBeNegative i
+  deriving stock (Eq, Show)
 
 instance (Integral i) => TestData (ShouldBeNatural i) where
   type Good (ShouldBeNatural i) = Natural
@@ -134,6 +139,9 @@ instance (Integral i) => TestData (ShouldBeNatural i) where
   generalise = MightBeNegative . fromIntegral
 
 newtype Good' a = Good {unGood' :: Good a}
+
+deriving stock instance (Eq (Good a)) => Eq (Good' a)
+deriving stock instance (Show (Good a)) => Show (Good' a)
 
 instance
   ( GHC.Generic a

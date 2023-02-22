@@ -15,6 +15,7 @@ import Data.Coerce (coerce)
 import Generics.SOP (
   All,
   All2,
+  Compose,
   I (I),
   NP,
   NS (S, Z),
@@ -55,6 +56,9 @@ instance Diff' (Simple a) where
 
 newtype Patch' a = Patch' (Maybe (Patch a))
 
+deriving stock instance (Eq (Patch a)) => Eq (Patch' a)
+deriving stock instance (Show (Patch a)) => Show (Patch' a)
+
 instance (All Diff as) => Diff' (NP I as) where
   type Patch (NP I as) = NP Patch' as
 
@@ -62,6 +66,17 @@ instance (All Diff as) => Diff' (NP I as) where
   patch' = hcliftA2 (Proxy @Diff) (\(Patch' p) (I c) -> I $ patch p c)
 
 data ConsPatch xs = ConsPatch (NP I xs) (Maybe (Patch (NP I xs)))
+
+deriving stock instance
+  ( All (Compose Eq I) xs
+  , All (Compose Eq Patch') xs
+  ) =>
+  Eq (ConsPatch xs)
+deriving stock instance
+  ( All (Compose Show I) xs
+  , All (Compose Show Patch') xs
+  ) =>
+  Show (ConsPatch xs)
 
 instance (All2 Diff xss) => Diff' (NS (NP I) xss) where
   type Patch (NS (NP I) xss) = NS ConsPatch xss
@@ -87,6 +102,14 @@ instance (All2 Diff xss) => Diff' (NS (NP I) xss) where
 data Pair f a = Pair (f a) (f a)
 
 newtype SOPPatch a = SOPPatch (NS ConsPatch (GCode a))
+
+deriving stock instance
+  (All (Compose Eq ConsPatch) (GCode a)) =>
+  Eq (SOPPatch a)
+
+deriving stock instance
+  (All (Compose Show ConsPatch) (GCode a)) =>
+  Show (SOPPatch a)
 
 instance
   (GHC.Generic a, GFrom a, GTo a, All2 Diff (GCode a)) =>
