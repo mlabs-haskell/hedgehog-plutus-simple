@@ -105,7 +105,7 @@ txTest ::
 txTest f = TxTest $ \cs datum ->
   testDataAdjunction
     . f cs datum
-    . scriptContext cs datum
+    . scriptContext cs
 
 -- Not lawful when
 -- the POSIXTimeRange doesn't coresponds to a SlotRange exactly
@@ -114,29 +114,25 @@ scriptContext ::
   forall st r.
   (Plutus.FromData r, Plutus.ToData r) =>
   ChainState ->
-  DatumOf st ->
   Adjunction (ScriptTx st) (ScriptContext r st)
 scriptContext
   ChainState
     { csMock = m
     , csScripts = scripts
     , csMps = mps
-    }
-  d =
-    Adjunction {lower = lowerSc m d scripts mps, raise = raiseSc m d scripts}
+    } =
+    Adjunction {lower = lowerSc m scripts mps, raise = raiseSc m scripts}
 
 lowerSc ::
   forall st r.
   Plutus.ToData r =>
   Model.Mock ->
-  DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   ScriptContext r st ->
   ScriptTx st
 lowerSc
   m
-  d
   scripts
   mps
   ScriptContext
@@ -146,7 +142,7 @@ lowerSc
     } =
     ScriptTx
       { scriptTxPurpose = contextPurpose
-      , scriptTx = lowerScCore @st m d scripts mps sp contextRedeemer contextTxInfo
+      , scriptTx = lowerScCore m scripts mps sp contextRedeemer contextTxInfo
       }
     where
       sp = toPlutusSp contextPurpose
@@ -355,7 +351,6 @@ mkCollateral
 raiseSc ::
   Plutus.FromData r =>
   Model.Mock ->
-  DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   ScriptTx st ->
   ScriptContext r st
@@ -367,7 +362,6 @@ raiseSc
         { Model.mockConfigSlotConfig = slotCfg
         }
     }
-  _
   scripts
   ScriptTx
     { scriptTxPurpose
@@ -452,10 +446,9 @@ toPlutusSp = \case
   Certifying dc -> Plutus.Certifying dc
 
 lowerScCore ::
-  forall st r.
+  forall r.
   Plutus.ToData r =>
   Model.Mock ->
-  DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   Plutus.ScriptPurpose ->
@@ -471,12 +464,11 @@ lowerScCore
         { Model.mockConfigSlotConfig = slotCfg
         }
     }
-  d
   scripts
   mps
   sp
   r
-  ( resolveOmitted @st m scripts mps d sp r ->
+  ( resolveOmitted m scripts mps sp r ->
       Plutus.TxInfo
         { Plutus.txInfoInputs = txInputs
         , Plutus.txInfoReferenceInputs = referenceInputs
@@ -589,12 +581,11 @@ omitted :: Plutus.TxId
 omitted = error "You shouldn't read this"
 
 resolveOmitted ::
-  forall st r.
+  forall r.
   Plutus.ToData r =>
   Model.Mock ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
-  DatumOf st ->
   Plutus.ScriptPurpose ->
   r ->
   Plutus.TxInfo ->
@@ -603,7 +594,6 @@ resolveOmitted
   mock@Model.Mock {Model.mockUtxos = utxos}
   scripts
   mps
-  d
   sp
   r
   txinfo =
@@ -623,7 +613,7 @@ resolveOmitted
           , Plutus.txInfoRedeemers = redeemers'
           , Plutus.txInfoData = datums
           }
-      Model.Tx extra tx = lowerScCore @st mock d scripts mps sp r resolved
+      Model.Tx extra tx = lowerScCore mock scripts mps sp r resolved
       -- This should always halt because
       -- extra and tx are only used in the txInfoId
       -- an lowerScCore doesn't look at that feild
