@@ -18,7 +18,7 @@ import Plutus.Model qualified as Model
 import Hedgehog qualified
 
 import Hedgehog.Plutus.Adjunction (
-  Adjunction (lower),
+  Adjunction (Adjunction, lower, raise),
   adjunctionTest,
  )
 import Hedgehog.Plutus.ScriptContext (
@@ -47,11 +47,11 @@ a 'TxTest.
 In the 'raise' direction, the supplied adjunction may omit the following
 details, which will be supplied for you:
 
-  * The 'txInfoOutput' being spent, if this is a spend script
+  * The 'txInfoInput' being spent, if this is a spend script
 
   * 'txInfoSignatories' corresponding to 'PubKeyHash' inputs
 
-  * 'txInfoRedeemers'
+  * The 'txInfoRedeemer' for the current script
 
   * 'txInfoData'
 
@@ -75,7 +75,11 @@ scriptContext ::
   Model.Mock ->
   DatumOf st ->
   Adjunction (ScriptTx st) (ScriptContext r st)
-scriptContext = _
+scriptContext Model.Mock {} d =
+  Adjunction
+    { lower = _
+    , raise = _
+    }
 
 omitted :: Plutus.TxId
 omitted = error "You shouldn't read this"
