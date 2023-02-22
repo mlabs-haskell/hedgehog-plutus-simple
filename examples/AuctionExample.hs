@@ -12,7 +12,7 @@
 
 -}
 
-module Hedgehog.Plutus.AuctionExample (auctionTest) where
+module AuctionExample (auctionTest) where
 
 import Data.Kind (Type)
 import GHC.Generics qualified as GHC
@@ -114,7 +114,7 @@ data AuctionTest = AuctionTest
       !(ShouldEqual (Mempty [Plutus.TxInInfo]) [Plutus.TxInInfo])
   , auctionRedeemer :: !AuctionTestRedeemer
   }
-  deriving stock (GHC.Generic)
+  deriving stock (Eq, Show, GHC.Generic)
   deriving (TestData) via (Generically AuctionTest)
 
 type AuctionTestRedeemer :: Type
@@ -128,14 +128,14 @@ data AuctionTestRedeemer
           !(EitherOr [Plutus.TxOut] (Shouldn'tExist Plutus.Value))
       }
   | TestRedeemerClose CloseTest
-  deriving stock (GHC.Generic)
+  deriving stock (Eq, Show, GHC.Generic)
   deriving (TestData) via (Generically AuctionTestRedeemer)
 
 data SelfOutput = SelfOutput
   { selfDatum :: !(Shouldn'tExist (Patch AuctionDatum))
   , selfValue :: !(Shouldn'tExist (Patch Plutus.Value))
   }
-  deriving stock (GHC.Generic)
+  deriving stock (Eq, Show, GHC.Generic)
   deriving (TestData) via (Generically SelfOutput)
 
 {- | Invariant: If @datum.adHighestBid == Nothing@, then 'AuctionFailure', else
@@ -149,7 +149,7 @@ data CloseTest
       , sellerOutput ::
           !(EitherOr [Plutus.TxOut] (Shouldn'tExist Plutus.Address))
       }
-  deriving stock (GHC.Generic)
+  deriving stock (Eq, Show, GHC.Generic)
   deriving (TestData) via (Generically CloseTest)
 
 auctionTest :: TxTest ('Spend AuctionDatum) AuctionTest
