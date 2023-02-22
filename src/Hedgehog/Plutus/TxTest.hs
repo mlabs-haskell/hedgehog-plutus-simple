@@ -552,7 +552,7 @@ lowerScCore
       inputs = Set.fromList inputs'
 
       inputs' :: [TxIn]
-      inputs' = convertIn <$> txInputs
+      inputs' = convertInInfo <$> txInputs
 
       getPtr :: Plutus.ScriptPurpose -> Plutus.RedeemerPtr
       getPtr sp =
