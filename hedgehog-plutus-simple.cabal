@@ -132,6 +132,7 @@ library
     , plutus-ledger-api
     , plutus-simple-model
     , plutus-tx
+    , prettyprinter
     , text
     , time
     , vector
@@ -146,6 +147,7 @@ test-suite examples
   other-modules:  AuctionExample
   build-depends:
     , cardano-simple
+    , containers
     , hedgehog
     , hedgehog-plutus-simple
     , plutus-ledger-api

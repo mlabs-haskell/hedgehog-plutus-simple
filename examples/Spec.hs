@@ -1,9 +1,8 @@
 import Hedgehog qualified
 import Hedgehog.Main qualified as Hedgehog
 
-import Plutus.Model.Pretty qualified as Model
-
 import Hedgehog.Plutus.TxTest (
+  ppChainState,
   txTestBad,
   txTestBadAdjunction,
   txTestGood,
@@ -15,7 +14,8 @@ import AuctionExample (auctionTest)
 main :: IO ()
 main =
   Hedgehog.defaultMain $
-    take 0 $ -- TODO remove this when tests are complete
+    take
+      0 -- TODO remove this when tests are complete
       [ Hedgehog.checkParallel $
           Hedgehog.Group
             "Auction example tests"
@@ -28,28 +28,28 @@ main =
 
 goodAdjunction :: Hedgehog.Property
 goodAdjunction = Hedgehog.property $ do
-  initialState <- Hedgehog.forAllWith Model.ppMock _
+  initialState <- Hedgehog.forAllWith ppChainState _
   datum <- Hedgehog.forAll _
   good <- Hedgehog.forAll _
   txTestGoodAdjunction auctionTest initialState datum good
 
 badAdjunction :: Hedgehog.Property
 badAdjunction = Hedgehog.property $ do
-  initialState <- Hedgehog.forAllWith Model.ppMock _
+  initialState <- Hedgehog.forAllWith ppChainState _
   datum <- Hedgehog.forAll _
   bad <- Hedgehog.forAll _
   txTestBadAdjunction auctionTest initialState datum bad
 
 goodScript :: Hedgehog.Property
 goodScript = Hedgehog.property $ do
-  initialState <- Hedgehog.forAllWith Model.ppMock _
+  initialState <- Hedgehog.forAllWith ppChainState _
   datum <- Hedgehog.forAll _
   good <- Hedgehog.forAll _
   txTestGood auctionTest initialState datum good
 
 badScript :: Hedgehog.Property
 badScript = Hedgehog.property $ do
-  initialState <- Hedgehog.forAllWith Model.ppMock _
+  initialState <- Hedgehog.forAllWith ppChainState _
   datum <- Hedgehog.forAll _
   bad <- Hedgehog.forAll _
   txTestBad auctionTest initialState datum bad
