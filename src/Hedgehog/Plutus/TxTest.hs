@@ -83,11 +83,11 @@ a 'TxTest.
 In the 'raise' direction, the supplied adjunction may omit the following
 details, which will be supplied for you:
 
-  * any 'txInfoInputs` impiled by the script purpose
+  * The 'txInfoInput' being spent, if this is a spend script
 
   * any 'txInfoSignatories' corresponding to 'PubKeyHash' inputs
 
-  * 'txInfoRedeemers'
+  * The 'txInfoRedeemer' for the current script
 
   * 'txInfoData'
 
@@ -96,7 +96,7 @@ details, which will be supplied for you:
 Just pass empty lists/maps. For 'txInfoId', you can use the 'omitted' function.
 -}
 txTest ::
-  (TestData a, Plutus.FromData r) =>
+  (TestData a, Plutus.FromData r, Plutus.ToData r) =>
   ( ChainState ->
     DatumOf st ->
     Adjunction (ScriptContext r st) a
@@ -112,7 +112,7 @@ txTest f = TxTest $ \cs datum ->
 -- the fee contains non-ada value
 scriptContext ::
   forall st r.
-  Plutus.FromData r =>
+  (Plutus.FromData r, Plutus.ToData r) =>
   ChainState ->
   DatumOf st ->
   Adjunction (ScriptTx st) (ScriptContext r st)
@@ -127,6 +127,7 @@ scriptContext
 
 lowerSc ::
   forall st r.
+  Plutus.ToData r =>
   Model.Mock ->
   DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
@@ -139,12 +140,13 @@ lowerSc
   scripts
   mps
   ScriptContext
-    { contextTxInfo
+    { contextRedeemer
+    , contextTxInfo
     , contextPurpose
     } =
     ScriptTx
       { scriptTxPurpose = contextPurpose
-      , scriptTx = lowerScCore @st m d scripts mps sp contextTxInfo
+      , scriptTx = lowerScCore @st m d scripts mps sp contextRedeemer contextTxInfo
       }
     where
       sp = toPlutusSp contextPurpose
@@ -450,12 +452,14 @@ toPlutusSp = \case
   Certifying dc -> Plutus.Certifying dc
 
 lowerScCore ::
-  forall st.
+  forall st r.
+  Plutus.ToData r =>
   Model.Mock ->
   DatumOf st ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   Plutus.ScriptPurpose ->
+  r ->
   Plutus.TxInfo ->
   Model.Tx
 lowerScCore
@@ -471,7 +475,8 @@ lowerScCore
   scripts
   mps
   sp
-  ( resolveOmitted @st m scripts mps d sp ->
+  r
+  ( resolveOmitted @st m scripts mps d sp r ->
       Plutus.TxInfo
         { Plutus.txInfoInputs = txInputs
         , Plutus.txInfoReferenceInputs = referenceInputs
@@ -584,12 +589,14 @@ omitted :: Plutus.TxId
 omitted = error "You shouldn't read this"
 
 resolveOmitted ::
-  forall st.
+  forall st r.
+  Plutus.ToData r =>
   Model.Mock ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   DatumOf st ->
   Plutus.ScriptPurpose ->
+  r ->
   Plutus.TxInfo ->
   Plutus.TxInfo
 resolveOmitted
@@ -598,6 +605,7 @@ resolveOmitted
   mps
   d
   sp
+  r
   txinfo =
     resolved
     where
@@ -612,16 +620,16 @@ resolveOmitted
                     getCred utxos <$> inputs
                 ]
                   <> Plutus.txInfoSignatories txinfo
-          , Plutus.txInfoRedeemers = redeemers
+          , Plutus.txInfoRedeemers = redeemers'
           , Plutus.txInfoData = datums
           }
-      Model.Tx extra tx = lowerScCore @st mock d scripts mps sp resolved
+      Model.Tx extra tx = lowerScCore @st mock d scripts mps sp r resolved
       -- This should always halt because
       -- extra and tx are only used in the txInfoId
       -- an lowerScCore doesn't look at that feild
       inputs :: [TxIn]
       inputs =
-        convertIn' mock redeemers scripts datums
+        convertIn' mock redeemers' scripts datums
           <$> inputs'
       inputs' :: [Plutus.TxInInfo]
       inputs' = Plutus.txInfoInputs txinfo <> extraInputs
@@ -648,7 +656,9 @@ resolveOmitted
                     Map.lookup txInRef utxos
           , Plutus.OutputDatumHash dh <- pure out
           ]
-      redeemers = error "TODO where do I get this?"
+      redeemers' =
+        PlutusTx.insert sp (Plutus.Redeemer $ Plutus.toBuiltinData r) $
+          Plutus.txInfoRedeemers txinfo
 
 txTestBadAdjunction ::
   ( Hedgehog.MonadTest m
