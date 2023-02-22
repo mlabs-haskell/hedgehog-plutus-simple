@@ -23,6 +23,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 
 import PlutusLedgerApi.V1.Value qualified as Value
+
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusLedgerApi.V2.Tx qualified as Plutus
 
@@ -113,7 +114,7 @@ txTest f = TxTest $ \cs datum ->
 -- the fee contains non-ada value
 scriptContext ::
   forall r st.
-  (Plutus.FromData r, Plutus.ToData r) =>
+  Plutus.IsData r =>
   ChainState ->
   Adjunction (ScriptTx st) (ScriptContext r st)
 scriptContext
@@ -125,7 +126,7 @@ scriptContext
     Adjunction {lower = lowerSc m scripts mps, raise = raiseSc m scripts}
 
 lowerSc ::
-  forall st r.
+  forall r st.
   Plutus.ToData r =>
   Model.Mock ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
@@ -240,14 +241,14 @@ mkRedMap stake cert mint inputs = mconcat [spends, mints, certs, stakes]
 sortAndLabel :: Ord a => [a] -> [(Integer, a)]
 sortAndLabel = zip [0 ..] . sort
 
-convertIn' ::
+convertInInfo' ::
   Model.Mock ->
   PlutusTx.Map Plutus.ScriptPurpose Plutus.Redeemer ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   PlutusTx.Map Plutus.DatumHash Plutus.Datum ->
   Plutus.TxInInfo ->
   TxIn
-convertIn'
+convertInInfo'
   Model.Mock
     { Model.mockUtxos = utxos
     }
@@ -502,7 +503,7 @@ lowerScCore
       $ Tx
         { txInputs = inputs
         , txReferenceInputs =
-            Set.fromList $ convertIn <$> referenceInputs
+            Set.fromList $ convertInInfo <$> referenceInputs
         , txOutputs = txOutputs
         , txFee = valueToAda fee
         , txMint = mint
@@ -538,8 +539,8 @@ lowerScCore
         -- this will be computed from Extra later
         }
     where
-      convertIn :: Plutus.TxInInfo -> TxIn
-      convertIn = convertIn' m redeemers scripts dataTable
+      convertInInfo :: Plutus.TxInInfo -> TxIn
+      convertInInfo = convertInInfo' m redeemers scripts dataTable
 
       usedScripts :: Set Plutus.ScriptHash
       usedScripts =
@@ -553,7 +554,7 @@ lowerScCore
       inputs = Set.fromList inputs'
 
       inputs' :: [TxIn]
-      inputs' = convertIn <$> txInputs
+      inputs' = convertInInfo <$> txInputs
 
       getPtr :: Plutus.ScriptPurpose -> Plutus.RedeemerPtr
       getPtr sp =
@@ -612,10 +613,10 @@ resolveOmitted
       Model.Tx extra tx = lowerScCore @r mock scripts mps sp resolved
       -- This should always halt because
       -- extra and tx are only used in the txInfoId
-      -- an lowerScCore doesn't look at that feild
+      -- an lowerScCore doesn't look at that field
       inputs :: [TxIn]
       inputs =
-        convertIn' mock redeemers scripts datums
+        convertInInfo' mock redeemers scripts datums
           <$> inputs'
       inputs' :: [Plutus.TxInInfo]
       inputs' = Plutus.txInfoInputs txinfo <> extraInputs
