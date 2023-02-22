@@ -48,11 +48,11 @@ a 'TxTest.
 In the 'raise' direction, the supplied adjunction may omit the following
 details, which will be supplied for you:
 
-  * The 'txInfoOutput' being spent, if this is a spend script
+  * The 'txInfoInput' being spent, if this is a spend script
 
   * 'txInfoSignatories' corresponding to 'PubKeyHash' inputs
 
-  * 'txInfoRedeemers'
+  * The 'txInfoRedeemer' for the current script
 
   * 'txInfoData'
 
