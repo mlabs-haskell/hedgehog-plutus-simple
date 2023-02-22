@@ -1,4 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 
 module Hedgehog.Plutus.TxTest (
@@ -23,6 +22,7 @@ import Data.Set qualified as Set
 
 import PlutusLedgerApi.V1.Value qualified as Value
 
+import Plutus.Model.V2 qualified as Plutus (IsData)
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusLedgerApi.V2.Tx qualified as Plutus
 
@@ -96,7 +96,7 @@ details, which will be supplied for you:
 Just pass empty lists/maps. For 'txInfoId', you can use the 'omitted' function.
 -}
 txTest ::
-  (TestData a, Plutus.FromData r, Plutus.ToData r) =>
+  (TestData a, Plutus.IsData r) =>
   ( ChainState ->
     DatumOf st ->
     Adjunction (ScriptContext r st) a
@@ -111,8 +111,7 @@ txTest f = TxTest $ \cs datum ->
 -- the POSIXTimeRange doesn't coresponds to a SlotRange exactly
 -- the fee contains non-ada value
 scriptContext ::
-  forall st r.
-  (Plutus.FromData r, Plutus.ToData r) =>
+  Plutus.IsData r =>
   ChainState ->
   Adjunction (ScriptTx st) (ScriptContext r st)
 scriptContext
@@ -124,7 +123,6 @@ scriptContext
     Adjunction {lower = lowerSc m scripts mps, raise = raiseSc m scripts}
 
 lowerSc ::
-  forall st r.
   Plutus.ToData r =>
   Model.Mock ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
@@ -240,14 +238,14 @@ mkRedMap stake cert mint inputs = mconcat [spends, mints, certs, stakes]
 sortAndLabel :: Ord a => [a] -> [(Integer, a)]
 sortAndLabel = zip [0 ..] . sort
 
-convertIn' ::
+convertInInfo' ::
   Model.Mock ->
   PlutusTx.Map Plutus.ScriptPurpose Plutus.Redeemer ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   PlutusTx.Map Plutus.DatumHash Plutus.Datum ->
   Plutus.TxInInfo ->
   TxIn
-convertIn'
+convertInInfo'
   Model.Mock
     { Model.mockUtxos = utxos
     }
@@ -446,7 +444,6 @@ toPlutusSp = \case
   Certifying dc -> Plutus.Certifying dc
 
 lowerScCore ::
-  forall r.
   Plutus.ToData r =>
   Model.Mock ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
@@ -504,7 +501,7 @@ lowerScCore
       $ Tx
         { txInputs = inputs
         , txReferenceInputs =
-            Set.fromList $ convertIn <$> referenceInputs
+            Set.fromList $ convertInInfo <$> referenceInputs
         , txOutputs = txOutputs
         , txFee = valueToAda fee
         , txMint = mint
@@ -540,8 +537,8 @@ lowerScCore
         -- this will be computed from Extra later
         }
     where
-      convertIn :: Plutus.TxInInfo -> TxIn
-      convertIn = convertIn' m redeemers scripts dataTable
+      convertInInfo :: Plutus.TxInInfo -> TxIn
+      convertInInfo = convertInInfo' m redeemers scripts dataTable
 
       usedScripts :: Set Plutus.ScriptHash
       usedScripts =
@@ -581,7 +578,6 @@ omitted :: Plutus.TxId
 omitted = error "You shouldn't read this"
 
 resolveOmitted ::
-  forall r.
   Plutus.ToData r =>
   Model.Mock ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
@@ -616,10 +612,10 @@ resolveOmitted
       Model.Tx extra tx = lowerScCore mock scripts mps sp r resolved
       -- This should always halt because
       -- extra and tx are only used in the txInfoId
-      -- an lowerScCore doesn't look at that feild
+      -- an lowerScCore doesn't look at that field
       inputs :: [TxIn]
       inputs =
-        convertIn' mock redeemers' scripts datums
+        convertInInfo' mock redeemers' scripts datums
           <$> inputs'
       inputs' :: [Plutus.TxInInfo]
       inputs' = Plutus.txInfoInputs txinfo <> extraInputs
