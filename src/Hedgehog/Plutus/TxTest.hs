@@ -2,8 +2,8 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Hedgehog.Plutus.TxTest (
-  TxTest,
-  ChainState(..),
+  TxTest (TxTest),
+  ChainState (ChainState, csMock, csScripts, csMps),
   txTest,
   omitted,
   resolveOmitted,
@@ -11,10 +11,11 @@ module Hedgehog.Plutus.TxTest (
   txTestGoodAdjunction,
   txTestBad,
   txTestGood,
+  ppChainState,
 ) where
 
 
-import Control.Arrow (first)
+import Control.Arrow (Arrow (second),first)
 import Data.List (find, sort)
 import Data.Map (Map)
 import Data.Map qualified as Map
@@ -47,6 +48,8 @@ import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.SafeHash qualified as SafeHash
 import Cardano.Ledger.TxIn qualified as Ledger
 
+import Prettyprinter (Pretty, pretty, vcat)
+
 import Hedgehog.Plutus.ScriptContext (
   DatumOf,
   ScriptContext (..),
@@ -77,6 +80,17 @@ data ChainState = ChainState
   , csScripts :: Map Plutus.ScriptHash (Model.Versioned Model.Validator)
   , csMps :: Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy)
   }
+
+ppChainState :: ChainState -> String
+ppChainState = show . pretty
+
+instance Pretty ChainState where
+  pretty (ChainState mock scripts mps) =
+    vcat
+      [ "mock    : " <> pretty mock
+      , "scripts : " <> pretty (second show <$> Map.toList scripts)
+      , "steps   : " <> pretty (second show <$> Map.toList mps)
+      ]
 
 {- | Given an adjunction from a 'Generalised' to a 'ScriptContext', generate
 a 'TxTest.

@@ -128,6 +128,7 @@ library
     , plutus-ledger-api
     , plutus-simple-model
     , plutus-tx
+    , prettyprinter
     , text
     , time
     , vector
@@ -139,6 +140,8 @@ test-suite examples
   main-is:        Spec.hs
   hs-source-dirs: ./examples
   build-depends:
+    , containers
+    , cardano-simple
     , containers
     , hedgehog
     , hedgehog-plutus-simple
