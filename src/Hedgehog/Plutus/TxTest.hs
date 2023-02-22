@@ -18,7 +18,7 @@ import Control.Arrow (first)
 import Data.List (find, sort)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Maybe (fromMaybe, listToMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 
@@ -300,55 +300,6 @@ getDatum datumTable = \case
       PlutusTx.lookup dh datumTable
   Plutus.NoOutputDatum -> error "No output datum"
 
-mkCollateral :: Model.Mock -> Set TxIn -> (Set TxIn, Plutus.Value, Plutus.TxOut)
-mkCollateral
-  Model.Mock
-    { Model.mockUtxos = utxos
-    , Model.mockUsers = users
-    }
-  inputs =
-    (collateral, totalValue, ret)
-    where
-      -- Use all pubkey inputs as collateral
-      collateral :: Set TxIn
-      collateral =
-        Set.filter
-          ( \txin ->
-              case getCred utxos txin of
-                Plutus.PubKeyCredential _ -> True
-                _ -> False
-          )
-          inputs
-
-      totalValue :: Plutus.Value
-      totalValue =
-        mconcat
-          [ val
-          | TxIn {txInRef} <- Set.toList collateral
-          , let
-              Plutus.TxOut {Plutus.txOutValue = val} =
-                fromMaybe (error "utxo lookup failed") $
-                  Map.lookup txInRef utxos
-          ]
-
-      -- Return everything to the first user in the mock users
-      ret :: Plutus.TxOut
-      ret =
-        Plutus.TxOut
-          { Plutus.txOutAddress =
-              Plutus.Address
-                ( Plutus.PubKeyCredential
-                    ( fromMaybe (error "no users") $
-                        listToMaybe $
-                          Map.keys users
-                    )
-                )
-                Nothing
-          , Plutus.txOutValue = totalValue
-          , Plutus.txOutDatum = Plutus.NoOutputDatum
-          , Plutus.txOutReferenceScript = Nothing
-          }
-
 raiseSc ::
   Plutus.FromData r =>
   Model.Mock ->
@@ -526,9 +477,9 @@ lowerScCore
               first getPtr
                 <$> PlutusTx.toList redeemers
         , txData = Map.fromList $ PlutusTx.toList dataTable
-        , txCollateral = collateral
-        , txCollateralReturn = Just ret
-        , txTotalCollateral = Just $ valueToAda totalValue
+        , txCollateral = Set.empty
+        , txCollateralReturn = Nothing
+        , txTotalCollateral = Nothing
         , txScripts =
             Map.fromList
               [ (sh, getValidator <$> val)
@@ -563,11 +514,6 @@ lowerScCore
 
       redMap :: Map Plutus.RedeemerPtr Plutus.ScriptPurpose
       redMap = mkRedMap stakes dcerts mint inputs'
-
-      collateral :: Set TxIn
-      totalValue :: Plutus.Value
-      ret :: Plutus.TxOut
-      (collateral, totalValue, ret) = mkCollateral m inputs
 
 -- Gets the ada portion of a value
 valueToAda :: Plutus.Value -> Model.Ada

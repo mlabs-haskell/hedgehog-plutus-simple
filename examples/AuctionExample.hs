@@ -57,7 +57,9 @@ import Hedgehog.Plutus.TestData.Plutus ()
 import Hedgehog.Plutus.TxTest
   (TxTest
   ,ChainState(..)
-  , omitted, txTest)
+  , omitted
+  , txTest
+  )
 
 --- Copied from pioneer program
 
