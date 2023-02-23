@@ -42,9 +42,7 @@
         ({
           flake.config.herculesCI = {
             onPush = {
-              mainChecks.outputs.mainCheck =
-                self.packages.x86_64-linux."hedgehog-plutus-simple:lib:hedgehog-plutus-simple".override
-                  { flags.dev = false; };
+              mainChecks.outputs.mainCheck = self.packages.hps-main;
               devChecks.outputs =
                 builtins.mapAttrs
                   (name: { x86_64-linux ? { }, ... }: x86_64-linux)
@@ -53,5 +51,10 @@
           };
         })
       ];
+      perSystem = { self', ... }: {
+        packages.hps-main =
+          self'.packages."hedgehog-plutus-simple:lib:hedgehog-plutus-simple".override
+            { flags.dev = false; };
+      };
     };
 }
