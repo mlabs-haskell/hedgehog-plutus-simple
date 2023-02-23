@@ -9,6 +9,8 @@ module Hedgehog.Plutus.TxTest (
   txTestGoodAdjunction,
   txTestBad,
   txTestGood,
+  scriptContext,
+  resolveOmitted,
 ) where
 
 import PlutusLedgerApi.V2 qualified as Plutus

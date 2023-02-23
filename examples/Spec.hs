@@ -4,7 +4,8 @@ import Hedgehog qualified
 import Hedgehog.Main qualified as Hedgehog
 
 import Plutus.Model qualified as Model
-import Gen (genAuctionDatum, genGoodAuctionTest, runCtx)
+import AuctionGen (genAuctionDatum, genGoodAuctionTest)
+import Hedgehog.Plutus.Gen (runCtx)
 import Plutus.Model.Mock (initMock)
 import Plutus.Model.Pretty qualified as Model
 

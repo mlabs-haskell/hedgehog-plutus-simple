@@ -151,7 +151,7 @@ test-suite examples
 
   other-modules:
     AuctionExample
-    Gen
+    AuctionGen
 
 library cat-prelude
   exposed-modules: Catagory.Prelude

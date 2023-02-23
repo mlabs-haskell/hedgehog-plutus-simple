@@ -1,14 +1,19 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Hedgehog.Plutus.Gen where
 
-import Data.Maybe (mapMaybe)
-
-import Control.Monad.State (MonadState (get), State, evalState, modify)
+import Data.Maybe (fromMaybe, isJust,mapMaybe)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Vector qualified as Vector
+import Data.String (IsString (fromString))
+
+import Control.Monad.State (MonadState (get), State, evalState, modify)
+import Control.Monad (replicateM, when)
+import Control.Monad.Reader (MonadReader, ReaderT (runReaderT))
+import Control.Monad.Reader.Class (asks)
 
 import Cardano.Binary qualified as CBOR
 import Cardano.Crypto.Hash qualified as Crypto
@@ -21,6 +26,36 @@ import Cardano.Simple.Cardano.Common qualified as Simple
 import Cardano.Simple.Ledger.Slot qualified as Simple
 import Plutus.Model qualified as Model
 import Plutus.Model.Stake qualified as Model
+
+import Hedgehog (
+  Gen,
+  MonadGen,
+ )
+import Hedgehog.Gen (
+  bytes,
+  choice,
+  element,
+  hexit,
+  integral,
+ )
+import Hedgehog.Gen qualified as Gen
+
+import Cardano.Simple.Ledger.TimeSlot qualified as Time
+import Plutus.Model (Mock)
+import PlutusLedgerApi.V1 (
+  CurrencySymbol,
+  POSIXTime,
+  PubKeyHash,
+  TokenName (TokenName),
+  TxOutRef,
+  toBuiltin,
+ )
+
+import GHC.Natural (Natural)
+import Hedgehog.Plutus.TestData (EitherOr, Good, ShouldBeNatural, TestData (generalise, validate))
+import Hedgehog.Range qualified as Range
+
+
 
 data User m = User
   { user :: !Model.User
@@ -138,3 +173,65 @@ initMockState users scripts cfg = (`evalState` 0) $ do
         , stake'stakes = Map.empty
         , stake'nextReward = 0
         }
+
+newtype GenContext a
+  = GenContext (ReaderT Mock Gen a)
+  deriving newtype (Functor, Applicative, Monad, MonadGen, MonadReader Mock)
+
+runCtx :: Mock -> GenContext a -> Gen a
+runCtx m (GenContext gen) = runReaderT gen m
+
+genGoodEither :: (TestData good, MonadGen m) => m good -> m (EitherOr bad good)
+genGoodEither g = generalise <$> genValid g
+
+genPositive :: GenContext (ShouldBeNatural Integer)
+genPositive =
+  generalise
+    <$> integral @GenContext @Natural (Range.linear 0 1_000_000)
+
+genTxOutRef :: GenContext TxOutRef
+genTxOutRef = do
+  utxos <- asks Model.mockUtxos
+  when (null utxos) $ error "genTxOutRef couldn't find any out refs"
+  element $ Map.keys utxos
+
+genValid ::
+  forall a m.
+  (MonadGen m, TestData a) =>
+  m a ->
+  m (Good a)
+genValid g = genFromMaybe $ validate @a <$> g
+
+genFromMaybe :: MonadGen m => m (Maybe a) -> m a
+genFromMaybe g =
+  fromMaybe (error "isJust Nothing was True")
+    <$> Gen.filterT isJust g
+
+genTime :: GenContext POSIXTime
+genTime = do
+  slotCfg <- asks (Model.mockConfigSlotConfig . Model.mockConfig)
+  let start = Time.scSlotZeroTime slotCfg
+  let len = Time.scSlotLength slotCfg
+  i <- integral $ Range.linear 0 1_000_000
+  pure $ start + i * fromIntegral len
+
+genValidUser :: GenContext PubKeyHash
+genValidUser = do
+  users <- asks Model.mockUsers
+  element (Map.keys users)
+
+genPubKey :: GenContext PubKeyHash
+genPubKey = do
+  choice
+    [ genValidUser
+    , fromHexString 28
+    ]
+
+genCS :: GenContext CurrencySymbol
+genCS = choice [pure "", fromHexString 28]
+
+genTN :: GenContext TokenName
+genTN = TokenName . toBuiltin <$> bytes (Range.linear 0 32)
+
+fromHexString :: (IsString b, MonadGen m) => Int -> m b
+fromHexString n = fromString <$> replicateM (2 * n) hexit
