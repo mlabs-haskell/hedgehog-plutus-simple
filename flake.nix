@@ -51,8 +51,11 @@
                   builtins.mapAttrs
                     (name: val:
                       if builtins.isAttrs val
-                      then appFlags val
-                      else val.override { inherit flags; }
+                      then
+                        if builtins.hasAttr "override" val
+                        then val.override { inherit flags; }
+                        else appFlags flags val
+                      else val
                     );
               in
               {
