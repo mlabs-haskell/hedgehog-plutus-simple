@@ -44,14 +44,17 @@
             onPush = {
               mainChecks.outputs.mainCheck = self.packages.hps-main;
               devChecks.outputs =
-                builtins.mapAttrs
-                  (name: { x86_64-linux ? { }, ... }:
+                let
+                  removeHpsMain =
                     builtins.mapAttrs
                       (name: val:
-                        if name == "hps-main" then { } else x86_64-linux
-                      )
-                      x86_64-linux
-                  )
+                        if name == "hps-main"
+                        then { }
+                        else if builtins.isAttrs val then removeHpsMain val else val
+                      );
+                in
+                builtins.mapAttrs
+                  (name: { x86_64-linux ? { }, ... }: removeHpsMain x86_64-linux)
                   self.outputs
               ;
             };
