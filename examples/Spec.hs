@@ -23,8 +23,8 @@ main =
     [ Hedgehog.checkParallel
         $ Hedgehog.Group
           "Auction example tests"
-        $ take
-          1
+        $ drop
+          4
           [ ("good data adjuncts", goodAdjunction)
           , ("bad data adjuncts", badAdjunction)
           , ("good data succeeds", goodScript)
