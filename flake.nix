@@ -56,7 +56,7 @@
                     );
               in
               {
-                mainChecks.outputs.mainCheck = appFlags { dev = false; } checks;
+                mainChecks.outputs = appFlags { dev = false; } checks;
                 devChecks.outputs = checks;
               };
           };
