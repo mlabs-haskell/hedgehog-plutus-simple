@@ -59,7 +59,7 @@ genGoodAuctionTest =
     AuctionTest
       <$> genTxOutRef
       <*> pure (generalise ())
-      <*> _
+      <*> genRed
 
 genRed :: GenContext AuctionTestRedeemer
 genRed =
