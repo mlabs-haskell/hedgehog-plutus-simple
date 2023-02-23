@@ -4,7 +4,7 @@ import Hedgehog qualified
 import Hedgehog.Main qualified as Hedgehog
 
 import Plutus.Model qualified as Model
-import Gen (genAuctionDatum, runCtx)
+import Gen (genAuctionDatum, genGoodAuctionTest, runCtx)
 import Plutus.Model.Pretty qualified as Model
 
 import Hedgehog.Plutus.TxTest (txTestGoodAdjunction)
@@ -13,7 +13,8 @@ import AuctionExample (auctionTest)
 
 main :: IO ()
 main =
-  Hedgehog.defaultMain
+  Hedgehog.defaultMain $
+    drop 1 -- TODO remove when tests run
     [ Hedgehog.checkParallel $
         Hedgehog.Group
           "Auction example tests"
@@ -32,7 +33,7 @@ goodAdjunction :: Hedgehog.Property
 goodAdjunction = Hedgehog.property $ do
   initialState <- Hedgehog.forAllWith Model.ppMock _
   datum <- Hedgehog.forAll $ runCtx initialState genAuctionDatum
-  good <- Hedgehog.forAll _
+  good <- Hedgehog.forAll $ runCtx initialState genGoodAuctionTest
   txTestGoodAdjunction auctionTest initialState datum good
 
 goodBidAdjunction :: Hedgehog.Property

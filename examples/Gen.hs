@@ -13,11 +13,15 @@ import Hedgehog.Gen (
   hexit,
   integral,
  )
+import Hedgehog.Gen qualified as Gen
 
 import AuctionExample (
   Auction (Auction),
   AuctionDatum (AuctionDatum),
+  AuctionTest (AuctionTest),
+  AuctionTestRedeemer (TestRedeemerBid),
   Bid (Bid),
+  SelfOutput (SelfOutput),
  )
 
 import Cardano.Simple.Ledger.TimeSlot qualified as Time
@@ -28,14 +32,18 @@ import PlutusLedgerApi.V1 (
   POSIXTime,
   PubKeyHash,
   TokenName (TokenName),
+  TxOutRef,
   toBuiltin,
  )
 
-import Control.Monad (replicateM)
+import Control.Monad (replicateM, when)
 import Control.Monad.Reader (MonadReader, ReaderT (runReaderT))
 import Control.Monad.Reader.Class (asks)
 import Data.Map qualified as Map
+import Data.Maybe (fromMaybe, isJust)
 import Data.String (IsString (fromString))
+import GHC.Natural (Natural)
+import Hedgehog.Plutus.TestData (EitherOr, Good, ShouldBeNatural, TestData (generalise, validate))
 import Hedgehog.Range qualified as Range
 
 newtype GenContext a
@@ -44,6 +52,46 @@ newtype GenContext a
 
 runCtx :: Mock -> GenContext a -> Gen a
 runCtx m (GenContext gen) = runReaderT gen m
+
+genGoodAuctionTest :: GenContext (Good AuctionTest)
+genGoodAuctionTest =
+  genValid @AuctionTest $
+    AuctionTest
+      <$> genTxOutRef
+      <*> pure (generalise ())
+      <*> _
+
+genRed :: GenContext AuctionTestRedeemer
+genRed =
+  TestRedeemerBid
+    <$> genPubKey
+    <*> genPositive
+    <*> genGoodEither (pure $ SelfOutput (generalise ()) (generalise ()))
+    <*> genGoodEither (pure $ generalise ())
+
+genGoodEither :: (TestData good, MonadGen m) => m good -> m (EitherOr bad good)
+genGoodEither g = generalise <$> genValid g
+
+genPositive :: GenContext (ShouldBeNatural Integer)
+genPositive = generalise <$> integral @GenContext @Natural (Range.linear 0 1_000_000)
+
+genTxOutRef :: GenContext TxOutRef
+genTxOutRef = do
+  utxos <- asks Model.mockUtxos
+  when (null utxos) $ error "genTxOutRef couldn't find any out refs"
+  element $ Map.keys utxos
+
+genValid ::
+  forall a m.
+  (MonadGen m, TestData a) =>
+  m a ->
+  m (Good a)
+genValid g = genFromMaybe $ validate @a <$> g
+
+genFromMaybe :: MonadGen m => m (Maybe a) -> m a
+genFromMaybe g =
+  fromMaybe (error "isJust Nothing was True")
+    <$> Gen.filterT isJust g
 
 genAuctionDatum :: GenContext AuctionDatum
 genAuctionDatum =
