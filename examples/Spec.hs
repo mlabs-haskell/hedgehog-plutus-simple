@@ -35,7 +35,10 @@ main =
 
 goodAdjunction :: Hedgehog.Property
 goodAdjunction = Hedgehog.property $ do
-  initialState <- Hedgehog.forAllWith Model.ppMock (pure $ initMock defaultBabbage (Value.singleton "" "" 1_000_000))
+  initialState <-
+    Hedgehog.forAllWith
+      Model.ppMock
+      (pure $ initMock defaultBabbage (Value.singleton "" "" 1_000_000))
   datum <- Hedgehog.forAll $ runCtx initialState genAuctionDatum
   good <- Hedgehog.forAll $ runCtx initialState genGoodAuctionTest
   txTestGoodAdjunction auctionTest initialState datum good
