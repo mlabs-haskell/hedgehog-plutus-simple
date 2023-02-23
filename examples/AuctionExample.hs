@@ -15,8 +15,11 @@
 module AuctionExample (
   auctionTest,
   AuctionDatum (..),
+  AuctionTest (..),
+  AuctionTestRedeemer (..),
   Auction (..),
   Bid (..),
+  SelfOutput (..),
 ) where
 
 import Data.Kind (Type)

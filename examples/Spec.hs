@@ -1,7 +1,7 @@
 import Hedgehog qualified
 import Hedgehog.Main qualified as Hedgehog
 
-import Gen (genAuctionDatum, runCtx)
+import Gen (genAuctionDatum, genGoodAuctionTest, runCtx)
 import Plutus.Model.Pretty qualified as Model
 
 import Hedgehog.Plutus.TxTest (
@@ -16,23 +16,23 @@ import AuctionExample (auctionTest)
 main :: IO ()
 main =
   Hedgehog.defaultMain $
-    drop
-      1 -- TODO remove this when tests are complete
-      [ Hedgehog.checkParallel $
-          Hedgehog.Group
-            "Auction example tests"
-            [ ("good data adjuncts", goodAdjunction)
-            , ("bad data adjuncts", badAdjunction)
-            , ("good data succeeds", goodScript)
-            , ("bad data fails", badScript)
-            ]
-      ]
+    [ Hedgehog.checkParallel
+        $ Hedgehog.Group
+          "Auction example tests"
+        $ take
+          1
+          [ ("good data adjuncts", goodAdjunction)
+          , ("bad data adjuncts", badAdjunction)
+          , ("good data succeeds", goodScript)
+          , ("bad data fails", badScript)
+          ]
+    ]
 
 goodAdjunction :: Hedgehog.Property
 goodAdjunction = Hedgehog.property $ do
   initialState <- Hedgehog.forAllWith Model.ppMock _
   datum <- Hedgehog.forAll $ runCtx initialState genAuctionDatum
-  good <- Hedgehog.forAll _
+  good <- Hedgehog.forAll $ runCtx initialState genGoodAuctionTest
   txTestGoodAdjunction auctionTest initialState datum good
 
 badAdjunction :: Hedgehog.Property
