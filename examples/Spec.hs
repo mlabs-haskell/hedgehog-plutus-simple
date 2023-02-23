@@ -17,10 +17,10 @@ import PlutusLedgerApi.V1.Value qualified as Value
 main :: IO ()
 main =
   Hedgehog.defaultMain $
-    drop 1 -- TODO remove when tests run
     [ Hedgehog.checkParallel $
         Hedgehog.Group
           "Auction example tests"
+          $ take 1 -- TODO remove when more tests run
           [ ("good data adjuncts for bid", goodBidAdjunction)
           , ("good data adjuncts for close", _)
           , ("bad data adjuncts for bid", _)
