@@ -62,7 +62,12 @@ import Hedgehog.Plutus.TestData (
   shouldBeSingletonList,
  )
 import Hedgehog.Plutus.TestData.Plutus ()
-import Hedgehog.Plutus.TxTest (TxTest, omitted, txTest)
+import Hedgehog.Plutus.TxTest (
+  ChainState (ChainState, csMock),
+  TxTest,
+  omitted,
+  txTest,
+ )
 
 --- Copied from pioneer program
 
@@ -161,10 +166,10 @@ data CloseTest
   deriving (TestData) via (Generically CloseTest)
 
 auctionTest :: TxTest ('Spend AuctionDatum) AuctionTest
-auctionTest = txTest $ \mock datum ->
+auctionTest = txTest $ \ChainState {csMock} datum ->
   Adjunction
-    { raise = raiseAuctionTest mock datum
-    , lower = lowerAuctionTest mock datum
+    { raise = raiseAuctionTest csMock datum
+    , lower = lowerAuctionTest csMock datum
     }
 
 raiseAuctionTest ::

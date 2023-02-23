@@ -20,6 +20,7 @@ data ScriptTx st = ScriptTx
   { scriptTx :: Model.Tx
   , scriptTxPurpose :: ScriptPurpose st
   }
+  deriving stock (Show)
 
 data ScriptType = Spend Type | Mint | Reward | Certify
 
@@ -35,6 +36,8 @@ data ScriptPurpose st where
   Rewarding :: Plutus.StakingCredential -> ScriptPurpose 'Reward
   Certifying :: Plutus.DCert -> ScriptPurpose 'Certify
 
+deriving stock instance Show (ScriptPurpose st)
+
 type ScriptContext :: Type -> ScriptType -> Type
 data ScriptContext redeemer st = ScriptContext
   { contextRedeemer :: !redeemer
@@ -43,7 +46,16 @@ data ScriptContext redeemer st = ScriptContext
   }
 
 plutusScriptContext :: ScriptContext d st -> Plutus.ScriptContext
-plutusScriptContext = _
+plutusScriptContext
+  ScriptContext
+    { contextTxInfo = txInfo
+    , contextPurpose = sp
+    } = Plutus.ScriptContext txInfo $
+    case sp of
+      Spending ref -> Plutus.Spending ref
+      Minting cs -> Plutus.Minting cs
+      Rewarding sc -> Plutus.Rewarding sc
+      Certifying cert -> Plutus.Certifying cert
 
 scriptTxValid :: ScriptTx st -> Model.Mock -> Bool
 scriptTxValid = _
