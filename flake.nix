@@ -45,8 +45,15 @@
               mainChecks.outputs.mainCheck = self.packages.hps-main;
               devChecks.outputs =
                 builtins.mapAttrs
-                  (name: { x86_64-linux ? { }, ... }: x86_64-linux)
-                  self.outputs;
+                  (name: { x86_64-linux ? { }, ... }:
+                    builtins.mapAttrs
+                      (name: val:
+                        if name == "hps-main" then { } else x86_64-linux
+                      )
+                      x86_64-linux
+                  )
+                  self.outputs
+              ;
             };
           };
         })
