@@ -64,13 +64,15 @@ genGoodAuctionTest =
 genRed :: GenContext AuctionTestRedeemer
 genRed =
   TestRedeemerBid
-    <$> genPubKey
+    <$> genValidUser
     <*> genPositive
     <*> genGoodEither (pure $ SelfOutput (generalise ()) (generalise ()))
     <*> genGoodEither (pure $ generalise ())
 
 genGoodEither :: (TestData good, MonadGen m) => m good -> m (EitherOr bad good)
-genGoodEither g = generalise <$> genValid g
+genGoodEither g = do
+  good <- genValid g
+  pure $ generalise good
 
 genPositive :: GenContext (ShouldBeNatural Integer)
 genPositive = generalise <$> integral @GenContext @Natural (Range.linear 0 1_000_000)
@@ -113,7 +115,7 @@ genAuction =
     <*> genTN
 
 bidAmt :: GenContext Integer
-bidAmt = integral $ Range.linear (negate 1_000_000) 1_000_000
+bidAmt = integral $ Range.linear 1 1_000_000
 
 genTime :: GenContext POSIXTime
 genTime = do
@@ -125,12 +127,15 @@ genTime = do
 
 -- TODO some of this is probably worth exposeing in hps
 
+genValidUser :: GenContext PubKeyHash
+genValidUser = do
+  users <- asks Model.mockUsers
+  element (Map.keys users)
+
 genPubKey :: GenContext PubKeyHash
 genPubKey = do
   choice
-    [ do
-        users <- asks Model.mockUsers
-        element (Map.keys users)
+    [ genValidUser
     , fromHexString 28 -- TODO check this is the right length
     ]
 
