@@ -41,30 +41,31 @@
         })
         ({
           flake.config.herculesCI = {
-            onPush = {
-              mainChecks.outputs.mainCheck = self.packages.hps-main;
-              devChecks.outputs =
-                let
-                  removeMainOnly =
-                    builtins.mapAttrs
-                      (name: val:
-                        if name == "hps-production-flags"
-                        then { }
-                        else if builtins.isAttrs val then removeMainOnly val else val
-                      );
-                in
-                builtins.mapAttrs
-                  (name: { x86_64-linux ? { }, ... }: removeMainOnly x86_64-linux)
-                  self.outputs
-              ;
-            };
+            onPush =
+              let
+                checks =
+                  builtins.mapAttrs
+                    (name: { x86_64-linux ? { }, ... }: x86_64-linux)
+                    self.outputs;
+                appFlags = flags:
+                  builtins.mapAttrs
+                    (name: val:
+                      if builtins.isAttrs val
+                      then appFlags val
+                      else val.override { inherit flags; }
+                    );
+              in
+              {
+                mainChecks.outputs.mainCheck = appFlags { dev = false; } checks;
+                devChecks.outputs = checks;
+              };
           };
         })
       ];
-      perSystem = { self', ... }: {
-        packages.hps-production-flags =
-          self'.packages."hedgehog-plutus-simple:lib:hedgehog-plutus-simple".override
-            { flags.dev = false; };
-      };
+      #perSystem = { self', ... }: {
+      #  packages.hps-production-flags =
+      #    self'.packages."hedgehog-plutus-simple:lib:hedgehog-plutus-simple".override
+      #      { flags.dev = false; };
+      #};
     };
 }
