@@ -37,52 +37,58 @@ data Output = Output
 
 initMockState ::
   forall m.
+  (Monad m, Traversable m) =>
   Map String (Plutus.PubKeyHash -> m [(Plutus.TxOut, Maybe Plutus.Datum)]) ->
   Map Plutus.ScriptHash (String, m [(Plutus.TxOut, Maybe Plutus.Datum)]) ->
   Model.MockConfig ->
-  Model.Mock
+  m Model.Mock
 initMockState users scripts cfg = (`evalState` 0) $ do
   us <- users'
   ss <- scripts'
-  let os =
-        (concatMap snd . Map.elems $ ss)
-          ++ (concatMap (.userOutputs) . Map.elems $ us)
-  return $
-    Model.Mock
-      { mockUsers = fmap (.user) us
-      , mockUtxos =
-          Map.fromList
-            . fmap (\Output {outputRef, output} -> (outputRef, output))
-            $ os
-      , mockDatums =
-          Map.fromList
-            . fmap (\d -> (Model.datumHash d, d))
-            $ mapMaybe (.outputDatum) os
-      , mockAddresses =
-          Map.mapKeysMonotonic Plutus.pubKeyHashAddress
-            . fmap (Set.fromList . fmap (.outputRef) . (.userOutputs))
-            $ us
-      , mockStake = initStake
-      , mockTxs = mempty
-      , mockConfig = cfg
-      , mockCurrentSlot = Simple.Slot 1
-      , mockUserStep = fromIntegral $ Map.size users
-      , mockFails = mempty
-      , mockInfo = mempty
-      , mustFailLog = mempty
-      , mockNames =
-          Model.MockNames
-            { mockNameUsers = fmap (.userName) us
-            , mockNameAddresses =
-                Map.mapKeysMonotonic Plutus.scriptHashAddress $
-                  fmap fst ss
-            , mockNameAssetClasses = Map.empty
-            , mockNameCurrencySymbols = Map.empty
-            , mockNameTxns = Map.empty
-            }
-      }
+  let userOutputs = fmap concat . mapM (.userOutputs) . Map.elems $ us
+  let scriptOutputs = fmap concat . mapM snd . Map.elems $ ss
+  let outputs = fmap concat $ sequence [userOutputs, scriptOutputs]
+  return $ do
+    os <- outputs
+    addrs <-
+      fmap (Map.mapKeysMonotonic Plutus.pubKeyHashAddress)
+        . traverse (fmap (Set.fromList . fmap (.outputRef)) . (.userOutputs))
+        $ us
+    pure $
+      Model.Mock
+        { mockUsers = fmap (.user) us
+        , mockUtxos =
+            Map.fromList
+              . fmap (\Output {outputRef, output} -> (outputRef, output))
+              $ os
+        , mockDatums =
+            Map.fromList
+              . fmap (\d -> (Model.datumHash d, d))
+              $ mapMaybe (.outputDatum) os
+        , mockAddresses = addrs
+        , mockStake = initStake
+        , mockTxs = mempty
+        , mockConfig = cfg
+        , mockCurrentSlot = Simple.Slot 1
+        , mockUserStep = fromIntegral $ Map.size users
+        , mockFails = mempty
+        , mockInfo = mempty
+        , mustFailLog = mempty
+        , mockNames =
+            Model.MockNames
+              { mockNameUsers = fmap (.userName) us
+              , mockNameAddresses =
+                  Map.mapKeysMonotonic Plutus.scriptHashAddress $
+                    fmap fst ss
+              , mockNameAssetClasses = Map.empty
+              , mockNameCurrencySymbols = Map.empty
+              , mockNameTxns = Map.empty
+              }
+        }
   where
-    mkOutputs :: m [(Plutus.TxOut, Maybe Plutus.Datum)] -> State Integer (m [Output])
+    mkOutputs ::
+      m [(Plutus.TxOut, Maybe Plutus.Datum)] ->
+      State Integer (m [Output])
     mkOutputs = traverse . traverse $ \(o, d) -> do
       i <- get
       modify (+ 1)
@@ -115,7 +121,7 @@ initMockState users scripts cfg = (`evalState` 0) $ do
         . Map.toList
         $ users
 
-    scripts' :: State Integer (Map Plutus.ScriptHash (String, [Output]))
+    scripts' :: State Integer (Map Plutus.ScriptHash (String, m [Output]))
     scripts' = traverse (traverse mkOutputs) scripts
 
     genesisTxId :: Plutus.TxId
