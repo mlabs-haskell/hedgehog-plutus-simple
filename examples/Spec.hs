@@ -1,14 +1,11 @@
+import PlutusLedgerApi.V2 qualified as Plutus
+
 import Hedgehog qualified
 import Hedgehog.Main qualified as Hedgehog
 
-import Plutus.Model.Pretty qualified as Model
+import Plutus.Model qualified as Model
 
-import Hedgehog.Plutus.TxTest (
-  txTestBad,
-  txTestBadAdjunction,
-  txTestGood,
-  txTestGoodAdjunction,
- )
+import Hedgehog.Plutus.TxTest (txTestGoodAdjunction)
 
 import AuctionExample (auctionTest)
 
@@ -18,37 +15,46 @@ main =
     [ Hedgehog.checkParallel $
         Hedgehog.Group
           "Auction example tests"
-          [ ("good data adjuncts", goodAdjunction)
-          , ("bad data adjuncts", badAdjunction)
-          , ("good data succeeds", goodScript)
-          , ("bad data fails", badScript)
+          [ ("good data adjuncts for bid", goodBidAdjunction)
+          , ("good data adjuncts for close", _)
+          , ("bad data adjuncts for bid", _)
+          , ("bad data adjuncts for close", _)
+          , ("good data succeeds for bid", _)
+          , ("good data succeeds for close", _)
+          , ("bad data fails for bid", _)
+          , ("bad data fails for close", _)
           ]
     ]
 
-goodAdjunction :: Hedgehog.Property
-goodAdjunction = Hedgehog.property $ do
-  initialState <- Hedgehog.forAllWith Model.ppMock _
-  datum <- Hedgehog.forAll _
-  good <- Hedgehog.forAll _
-  txTestGoodAdjunction auctionTest initialState datum good
+-- goodAdjunction :: Hedgehog.Property
+-- goodAdjunction = Hedgehog.property $ do
+--   init <- Hedgehog.forAllWith Model.ppMock _
+--   datum <- Hedgehog.forAll _
+--   good <- Hedgehog.forAll _
+--   txTestGoodAdjunction auctionTest init datum good
 
-badAdjunction :: Hedgehog.Property
-badAdjunction = Hedgehog.property $ do
-  initialState <- Hedgehog.forAllWith Model.ppMock _
-  datum <- Hedgehog.forAll _
-  bad <- Hedgehog.forAll _
-  txTestBadAdjunction auctionTest initialState datum bad
+goodBidAdjunction :: Hedgehog.Property
+goodBidAdjunction = Hedgehog.property $ do
+  init <- Hedgehog.forAllWith Model.ppMock $ do
+    pure $
+      snd $
+        Model.runMock
+          ( do
+              seller <- Model.newUser (lovelaceValue 1 <> nft) -- seller
+              Model.newUser mempty -- old bidder
+              Model.newUser (lovelaceValue 100) -- new bidder
+              spend <- Model.spend seller (lovelaceValue 1 <> nft)
+              Model.submitTx
+                seller
+                ( Model.userSpend spend
+                    <> Model.payToScript _ _ (lovelaceValue 1 <> nft)
+                )
+          )
+          (Model.initMock Model.defaultAlonzo (lovelaceValue 101 <> nft))
+  txTestGoodAdjunction auctionTest init _ _
 
-goodScript :: Hedgehog.Property
-goodScript = Hedgehog.property $ do
-  initialState <- Hedgehog.forAllWith Model.ppMock _
-  datum <- Hedgehog.forAll _
-  good <- Hedgehog.forAll _
-  txTestGood auctionTest initialState datum good
+lovelaceValue :: Integer -> Plutus.Value
+lovelaceValue = Plutus.singleton Plutus.adaSymbol Plutus.adaToken
 
-badScript :: Hedgehog.Property
-badScript = Hedgehog.property $ do
-  initialState <- Hedgehog.forAllWith Model.ppMock _
-  datum <- Hedgehog.forAll _
-  bad <- Hedgehog.forAll _
-  txTestBad auctionTest initialState datum bad
+nft :: Plutus.Value
+nft = Plutus.singleton (Plutus.CurrencySymbol "NFT") "" 1
