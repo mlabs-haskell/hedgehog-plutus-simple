@@ -3,7 +3,6 @@
 module Hedgehog.Plutus.Gen where
 
 import Data.Maybe (mapMaybe)
-import Data.Traversable (for)
 
 import Control.Monad.State (MonadState (get), State, evalState, modify)
 import Data.Map (Map)
