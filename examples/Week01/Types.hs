@@ -14,6 +14,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE NoOverloadedRecordDot #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
@@ -22,6 +23,8 @@ module Week01.Types where
 
 import GHC.Generics (Generic)
 
+import Hedgehog.Plutus.Diff (Diff')
+import Hedgehog.Plutus.Generics (Generically (..), Simple (Simple))
 import PlutusLedgerApi.V2 (
   CurrencySymbol,
   POSIXTime,
@@ -41,7 +44,7 @@ data Auction = Auction
   , aCurrency :: !CurrencySymbol
   , aToken :: !TokenName
   }
-  deriving stock (P.Show, Generic)
+  deriving stock (P.Eq, P.Show, Generic)
 
 instance Eq Auction where
   {-# INLINEABLE (==) #-}
@@ -59,7 +62,7 @@ data Bid = Bid
   { bBidder :: !PubKeyHash
   , bBid :: !Integer
   }
-  deriving stock (P.Show)
+  deriving stock (P.Eq, P.Show, Generic)
 
 instance Eq Bid where
   {-# INLINEABLE (==) #-}
@@ -71,7 +74,7 @@ PlutusTx.unstableMakeIsData ''Bid
 PlutusTx.makeLift ''Bid
 
 data AuctionAction = MkBid Bid | Close
-  deriving stock (P.Show)
+  deriving stock (P.Show, Generic)
 
 PlutusTx.unstableMakeIsData ''AuctionAction
 PlutusTx.makeLift ''AuctionAction
@@ -80,7 +83,11 @@ data AuctionDatum = AuctionDatum
   { adAuction :: !Auction
   , adHighestBid :: !(Maybe Bid)
   }
-  deriving stock (P.Show)
+  deriving stock (P.Eq, P.Show, Generic)
+
+deriving via (Generically Bid) instance Diff' Bid
+deriving via (Generically Auction) instance Diff' Auction
+deriving via (Generically AuctionDatum) instance Diff' AuctionDatum
 
 PlutusTx.unstableMakeIsData ''AuctionDatum
 PlutusTx.makeLift ''AuctionDatum

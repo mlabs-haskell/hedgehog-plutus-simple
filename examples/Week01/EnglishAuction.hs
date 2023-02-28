@@ -22,11 +22,15 @@ module Week01.EnglishAuction (
   AuctionDatum (..),
   AuctionAction (..),
   Auction,
+  minLovelace,
+  mkAuctionValidator,
+  typedAuctionValidator,
 ) where
 
 import GHC.Generics (Generic)
 
 import Cardano.Simple.PlutusLedgerApi.V1.Scripts (ValidatorHash (..))
+import GHC.Base (build)
 import Plutus.Model.V1 (Validator, txOutDatumHash)
 import Plutus.Model.V2 (
   TypedValidator,
@@ -269,6 +273,8 @@ data CloseParams = CloseParams
   }
   deriving (Generic)
 
+-- The schema stuff doesn't seem to be needed an relies on stuff that won't build
+-- with our plutus-ledger-api
 {-
 type AuctionSchema =
         Endpoint "start" StartParams

@@ -57,6 +57,7 @@ import Week01.EnglishAuction (
   Auction,
   AuctionAction (Close, MkBid),
   AuctionDatum (AuctionDatum, adAuction, adHighestBid),
+  minLovelace,
  )
 import Week01.Types (Auction (Auction, aCurrency, aMinBid, aSeller, aToken), Bid (Bid, bBid, bBidder))
 
@@ -363,6 +364,3 @@ lovelaceValue =
 
 minValue :: Plutus.Value
 minValue = lovelaceValue minLovelace
-
-minLovelace :: Integer
-minLovelace = _
