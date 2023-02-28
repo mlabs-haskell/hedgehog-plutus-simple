@@ -41,7 +41,7 @@ data Auction = Auction
   , aCurrency :: !CurrencySymbol
   , aToken :: !TokenName
   }
-  deriving (P.Show, Generic)
+  deriving stock (P.Show, Generic)
 
 instance Eq Auction where
   {-# INLINEABLE (==) #-}
@@ -59,7 +59,7 @@ data Bid = Bid
   { bBidder :: !PubKeyHash
   , bBid :: !Integer
   }
-  deriving (P.Show)
+  deriving stock (P.Show)
 
 instance Eq Bid where
   {-# INLINEABLE (==) #-}
@@ -71,7 +71,7 @@ PlutusTx.unstableMakeIsData ''Bid
 PlutusTx.makeLift ''Bid
 
 data AuctionAction = MkBid Bid | Close
-  deriving (P.Show)
+  deriving stock (P.Show)
 
 PlutusTx.unstableMakeIsData ''AuctionAction
 PlutusTx.makeLift ''AuctionAction
@@ -80,7 +80,7 @@ data AuctionDatum = AuctionDatum
   { adAuction :: !Auction
   , adHighestBid :: !(Maybe Bid)
   }
-  deriving (P.Show)
+  deriving stock (P.Show)
 
 PlutusTx.unstableMakeIsData ''AuctionDatum
 PlutusTx.makeLift ''AuctionDatum

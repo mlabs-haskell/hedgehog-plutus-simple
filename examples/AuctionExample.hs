@@ -23,13 +23,12 @@ import Data.Map qualified as Map
 import PlutusLedgerApi.V1.Address qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusLedgerApi.V2.Contexts qualified as Plutus
-import PlutusTx qualified
 
 import Plutus.Model qualified as Model
 
 import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction, lower, raise))
 import Hedgehog.Plutus.Diff (Diff' (Patch), diff, patch)
-import Hedgehog.Plutus.Generics (Generically (Generically), Simple (Simple))
+import Hedgehog.Plutus.Generics (Generically (Generically))
 import Hedgehog.Plutus.ScriptContext (
   ScriptContext (
     ScriptContext,
@@ -54,7 +53,12 @@ import Hedgehog.Plutus.TestData (
  )
 import Hedgehog.Plutus.TestData.Plutus ()
 import Hedgehog.Plutus.TxTest (TxTest, omitted, txTest)
-import Week01.EnglishAuction
+import Week01.EnglishAuction (
+  Auction,
+  AuctionAction (Close, MkBid),
+  AuctionDatum (AuctionDatum, adAuction, adHighestBid),
+ )
+import Week01.Types (Auction (Auction, aCurrency, aMinBid, aSeller, aToken), Bid (Bid, bBid, bBidder))
 
 data AuctionTest = AuctionTest
   { stateRef :: !Plutus.TxOutRef
@@ -359,3 +363,6 @@ lovelaceValue =
 
 minValue :: Plutus.Value
 minValue = lovelaceValue minLovelace
+
+minLovelace :: Integer
+minLovelace = _

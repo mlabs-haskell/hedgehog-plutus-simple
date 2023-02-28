@@ -18,7 +18,11 @@
 {-# LANGUAGE NoOverloadedRecordDot #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
 
-module Week01.EnglishAuction where
+module Week01.EnglishAuction (
+  AuctionDatum (..),
+  AuctionAction (..),
+  Auction,
+) where
 
 import GHC.Generics (Generic)
 

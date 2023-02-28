@@ -144,6 +144,7 @@ test-suite examples
     , plutus-ledger-api
     , plutus-simple-model
     , plutus-tx
+    , plutus-tx-plugin
     , text
 
   other-modules:
