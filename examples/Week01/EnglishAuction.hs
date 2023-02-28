@@ -18,21 +18,7 @@
 {-# LANGUAGE NoOverloadedRecordDot #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
 
-module Week01.EnglishAuction (
-  Auction (..),
-  StartParams (..),
-  BidParams (..),
-  CloseParams (..),
-  -- , AuctionSchema
-  -- , start, bid, close
-  -- , endpoints
-  -- , schemas
-  -- , ensureKnownCurrencies
-  -- , printJson
-  -- , printSchemas
-  -- , registeredKnownCurrencies
-  -- , stage
-) where
+module Week01.EnglishAuction where
 
 -- import           Control.Monad        hiding (fmap)
 -- import           Data.Aeson           (ToJSON, FromJSON)
@@ -52,7 +38,8 @@ import GHC.Generics (Generic)
 -- import           Plutus.Contract
 import PlutusTx qualified
 import PlutusTx.Prelude hiding (unless)
-import Prelude qualified as P
+
+-- import Prelude qualified as P
 
 -- import           Schema               (ToSchema)
 -- import           Text.Printf          (printf)
@@ -83,7 +70,7 @@ import PlutusLedgerApi.V2 (
 import Plutus.Model.Validator (ValidatorHash)
 import Plutus.Model.Validator.V1 (mkTypedValidator)
 
-import Plutus.Model.V2 (TypedValidator, validatorHash)
+import Plutus.Model.V2 (TypedValidator, unTypedValidator, validatorHash)
 import PlutusLedgerApi.V2 (TxInfo (txInfoInputs, txInfoValidRange), TxOut (txOutAddress), to)
 import PlutusLedgerApi.V2.Contexts (ScriptContext (scriptContextTxInfo), TxInfo (txInfoOutputs), findDatum, getContinuingOutputs)
 import PlutusLedgerApi.V2.Tx (TxOut (txOutValue))
@@ -91,68 +78,23 @@ import PlutusLedgerApi.V2.Tx (TxOut (txOutValue))
 -- some stuff seems to need to be v1 but other stuff seems to need to be v2
 -- but they cause type errors to mix of course
 
+import Cardano.Simple.PlutusLedgerApi.V1.Scripts (ValidatorHash (..))
+import Plutus.Model.V2 (Versioned (..))
+import PlutusLedgerApi.V1 (ScriptHash (..))
 import PlutusLedgerApi.V1.Address (pubKeyHashAddress, scriptHashAddress)
 import PlutusLedgerApi.V1.Interval (contains, from)
 
+import Week01.Types
+
 -- import Cardano.Api
 
-lovelaceValueOf = _
+lovelaceValueOf :: Integer -> Value
+lovelaceValueOf = Value.singleton "" ""
 
--- TODO can't build plutus-ledger to import this
+-- can't build plutus-ledger to import this
 
 minLovelace :: Integer
 minLovelace = 2000000
-
-data Auction = Auction
-  { aSeller :: !PubKeyHash
-  , aDeadline :: !POSIXTime
-  , aMinBid :: !Integer
-  , aCurrency :: !CurrencySymbol
-  , aToken :: !TokenName
-  }
-  deriving (P.Show, Generic)
-
-instance Eq Auction where
-  {-# INLINEABLE (==) #-}
-  a == b =
-    (aSeller a == aSeller b)
-      && (aDeadline a == aDeadline b)
-      && (aMinBid a == aMinBid b)
-      && (aCurrency a == aCurrency b)
-      && (aToken a == aToken b)
-
-PlutusTx.unstableMakeIsData ''Auction
-PlutusTx.makeLift ''Auction
-
-data Bid = Bid
-  { bBidder :: !PubKeyHash
-  , bBid :: !Integer
-  }
-  deriving (P.Show)
-
-instance Eq Bid where
-  {-# INLINEABLE (==) #-}
-  b == c =
-    (bBidder b == bBidder c)
-      && (bBid b == bBid c)
-
-PlutusTx.unstableMakeIsData ''Bid
-PlutusTx.makeLift ''Bid
-
-data AuctionAction = MkBid Bid | Close
-  deriving (P.Show)
-
-PlutusTx.unstableMakeIsData ''AuctionAction
-PlutusTx.makeLift ''AuctionAction
-
-data AuctionDatum = AuctionDatum
-  { adAuction :: !Auction
-  , adHighestBid :: !(Maybe Bid)
-  }
-  deriving (P.Show)
-
-PlutusTx.unstableMakeIsData ''AuctionDatum
-PlutusTx.makeLift ''AuctionDatum
 
 -- data Auctioning where
 -- instance ValidatorTypes Auctioning where
@@ -220,13 +162,13 @@ mkAuctionValidator ad redeemer ctx =
 
     ownOutput :: TxOut
     outputDatum :: AuctionDatum
-    (ownOutput, outputDatum) = case getContinuingOutputs $ error "TODO fix" ctx of
-      [o] -> case txOutDatumHash $ error "TODO fix" o of
+    (ownOutput, outputDatum) = case getContinuingOutputs ctx of
+      [o] -> case txOutDatumHash o of
         Nothing -> traceError "wrong output type"
         Just h -> case findDatum h info of
           Nothing -> traceError "datum not found"
           Just (Datum d) -> case PlutusTx.fromBuiltinData d of
-            Just ad' -> (error "TODO fix" o, ad')
+            Just ad' -> (o, ad')
             Nothing -> traceError "error decoding data"
       _ -> traceError "expected exactly one continuing output"
 
@@ -247,7 +189,7 @@ mkAuctionValidator ad redeemer ctx =
           os =
             [ o
             | o <- txInfoOutputs info
-            , txOutAddress o == pubKeyHashAddress bBidder Nothing
+            , txOutAddress o == pubKeyHashAddress bBidder -- Nothing
             ]
          in
           case os of
@@ -269,26 +211,41 @@ mkAuctionValidator ad redeemer ctx =
           , txOutValue o' == v
           ]
        in
-        txOutAddress o == pubKeyHashAddress h Nothing
+        txOutAddress o == pubKeyHashAddress h -- Nothing
 
 typedAuctionValidator :: TypedValidator AuctionDatum AuctionAction
 typedAuctionValidator =
   mkTypedValidator
     $$(PlutusTx.compile [||wrap mkAuctionValidator||])
   where
-    wrap = _
+    wrap ::
+      forall d1 d2 d3 a.
+      (PlutusTx.FromData d1, PlutusTx.FromData d2, PlutusTx.FromData d3) =>
+      (d1 -> d2 -> d3 -> a) ->
+      BuiltinData ->
+      BuiltinData ->
+      BuiltinData ->
+      ()
+    wrap v d1 d2 d3 =
+      const () $
+        v
+          (fromMaybe (error ()) $ PlutusTx.fromBuiltinData d1)
+          (fromMaybe (error ()) $ PlutusTx.fromBuiltinData d2)
+          (fromMaybe (error ()) $ PlutusTx.fromBuiltinData d3)
 
 -- wrapValidator @AuctionDatum @AuctionAction
 -- out of scope
 
 auctionValidator :: Validator
-auctionValidator = validatorScript typedAuctionValidator
+auctionValidator = (\(Versioned _ x) -> x) $ unTypedValidator typedAuctionValidator
+
+-- TODO is there a named feild for this
 
 auctionHash :: ValidatorHash
 auctionHash = validatorHash typedAuctionValidator
 
 auctionAddress :: Address
-auctionAddress = scriptHashAddress auctionHash
+auctionAddress = scriptHashAddress $ ScriptHash $ (\(ValidatorHash v) -> v) $ auctionHash
 
 data StartParams = StartParams
   { spDeadline :: !POSIXTime

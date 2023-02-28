@@ -137,6 +137,7 @@ test-suite examples
   hs-source-dirs: ./examples
   build-depends:
     , aeson
+    , cardano-simple
     , containers
     , hedgehog
     , hedgehog-plutus-simple
@@ -145,13 +146,10 @@ test-suite examples
     , plutus-tx
     , text
 
-  -- pioneer imports
-  --, plutus-ledger -- conflicts on plutus-ledger-api version
-  --, cardano-api -- hashable error
-
   other-modules:
     AuctionExample
     Week01.EnglishAuction
+    Week01.Types
 
 library cat-prelude
   exposed-modules: Catagory.Prelude
