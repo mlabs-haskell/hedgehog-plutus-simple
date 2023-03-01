@@ -106,6 +106,7 @@ library
   exposed-modules:
     Hedgehog.Plutus.Adjunction
     Hedgehog.Plutus.Diff
+    Hedgehog.Plutus.Gen
     Hedgehog.Plutus.Generics
     Hedgehog.Plutus.ScriptContext
     Hedgehog.Plutus.Simple
@@ -116,6 +117,8 @@ library
 
   build-depends:
     , array
+    , cardano-binary
+    , cardano-crypto-class
     , cardano-ledger-alonzo
     , cardano-ledger-babbage
     , cardano-ledger-core
@@ -127,6 +130,7 @@ library
     , generics-sop
     , hedgehog
     , microlens
+    , mtl
     , plutus-core
     , plutus-ledger-api
     , plutus-simple-model
