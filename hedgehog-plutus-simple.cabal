@@ -27,7 +27,7 @@ common common-lang
     -Wno-partial-type-signatures -Wmissing-export-lists
     -Wincomplete-record-updates -Wmissing-deriving-strategies
     -Wno-name-shadowing -Wunused-foralls -fprint-explicit-foralls
-    -fprint-explicit-kinds -fwarn-missing-import-lists
+    -fprint-explicit-kinds -fwarn-missing-import-lists -Werror
 
   build-depends:      base >=4.14
   default-extensions:
@@ -132,6 +132,7 @@ library
     , text
     , time
     , vector
+
   hs-source-dirs:  src
 
 test-suite examples
@@ -140,7 +141,6 @@ test-suite examples
   main-is:        Spec.hs
   hs-source-dirs: ./examples
   build-depends:
-    , containers
     , cardano-simple
     , containers
     , hedgehog
@@ -166,4 +166,3 @@ library cat-prelude
   exposed-modules: Catagory.Prelude
   hs-source-dirs:  cat-prelude
   build-depends:   base
-

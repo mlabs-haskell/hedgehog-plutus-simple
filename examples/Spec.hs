@@ -52,7 +52,8 @@ goodBidAdjunction = Hedgehog.property $ do
           )
           (Model.initMock Model.defaultAlonzo (lovelaceValue 101 <> nft))
   txTestGoodAdjunction auctionTest (_ init) _ _
-    -- TODO generate initial chainstate
+
+-- TODO generate initial chainstate
 
 lovelaceValue :: Integer -> Plutus.Value
 lovelaceValue = Plutus.singleton Plutus.adaSymbol Plutus.adaToken

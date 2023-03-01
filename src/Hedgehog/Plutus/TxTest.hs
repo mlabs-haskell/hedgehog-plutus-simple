@@ -1,5 +1,5 @@
-{-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
 
 module Hedgehog.Plutus.TxTest (
   TxTest (TxTest),
@@ -14,33 +14,32 @@ module Hedgehog.Plutus.TxTest (
   ppChainState,
 ) where
 
-
-import Control.Arrow (Arrow (second),first)
+import Control.Arrow (Arrow (second), first)
 import Data.List (find, sort)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
-
-import PlutusLedgerApi.V1.Value qualified as Value
-
-import PlutusLedgerApi.V2 qualified as Plutus
-import PlutusLedgerApi.V2.Tx qualified as Plutus
+import Prettyprinter (Pretty, pretty, vcat)
 
 import Plutus.Model qualified as Model
+import Plutus.Model qualified as Modele
+import Plutus.Model.Mock.ProtocolParameters (PParams (..))
+import Plutus.Model.V1 qualified as Plutus
+import PlutusLedgerApi.V1.Value qualified as Value
+import PlutusLedgerApi.V2 qualified as Plutus
+import PlutusLedgerApi.V2.Tx qualified as Plutus
 import PlutusTx.AssocMap qualified as PlutusTx
 
 import Cardano.Simple.Cardano.Class (IsCardanoTx (getTxBody, toCardanoTx))
 import Cardano.Simple.Ledger.TimeSlot qualified as Time
 import Cardano.Simple.Ledger.Tx (Tx (..), TxIn (..), TxInType (..))
-import Hedgehog.Plutus.Adjunction (Adjunction (..), adjunctionTest)
 import Cardano.Simple.PlutusLedgerApi.V1.Scripts (getValidator)
 import Cardano.Simple.TxExtra (Extra, Mint (Mint), extra'mints)
 
 import Cardano.Ledger.Alonzo (AlonzoEra)
 import Cardano.Ledger.Babbage (BabbageEra)
-import Cardano.Ledger.Crypto (StandardCrypto)
 
 import Cardano.Ledger.Block qualified as Ledger
 import Cardano.Ledger.Core (EraTxBody)
@@ -48,8 +47,8 @@ import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.SafeHash qualified as SafeHash
 import Cardano.Ledger.TxIn qualified as Ledger
 
-import Prettyprinter (Pretty, pretty, vcat)
-
+import Hedgehog qualified
+import Hedgehog.Plutus.Adjunction (Adjunction (..), adjunctionTest)
 import Hedgehog.Plutus.ScriptContext (
   DatumOf,
   ScriptContext (..),
@@ -63,10 +62,6 @@ import Hedgehog.Plutus.TestData (
   TestData,
   testDataAdjunction,
  )
-import qualified Hedgehog
-import Plutus.Model qualified as Modele
-import Plutus.Model.Mock.ProtocolParameters (PParams (..))
-import qualified Plutus.Model.V1 as Plutus
 
 newtype TxTest st a
   = TxTest
@@ -610,7 +605,8 @@ txTestBadAdjunction ::
   , Eq (Bad a)
   , Eq (Good a)
   , Show (Bad a)
-  , Show (Good a), Show (ScriptTx st)
+  , Show (Good a)
+  , Show (ScriptTx st)
   ) =>
   TxTest st a ->
   ChainState ->

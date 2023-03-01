@@ -46,8 +46,8 @@ initMockState users scripts cfg = (`evalState` 0) $ do
   ss <- scripts'
   let userOutputs = fmap concat . mapM (.userOutputs) . Map.elems $ us
   let scriptOutputs = fmap concat . mapM snd . Map.elems $ ss
-  let outputs = fmap concat $ sequence [userOutputs, scriptOutputs]
-  return $ do
+  let outputs = concat <$> sequence [userOutputs, scriptOutputs]
+  pure $ do
     os <- outputs
     addrs <-
       fmap (Map.mapKeysMonotonic Plutus.pubKeyHashAddress)

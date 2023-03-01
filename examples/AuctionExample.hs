@@ -3,7 +3,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 
 {-
 [Notes]
@@ -27,7 +26,6 @@ import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusLedgerApi.V2.Contexts qualified as Plutus
 import PlutusTx qualified
 
-import Plutus.Model qualified as Model
 import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction, lower, raise))
 import Hedgehog.Plutus.Diff (Diff' (Patch), diff, patch)
 import Hedgehog.Plutus.Generics (Generically (Generically), Simple (Simple))
@@ -54,12 +52,13 @@ import Hedgehog.Plutus.TestData (
   shouldBeSingletonList,
  )
 import Hedgehog.Plutus.TestData.Plutus ()
-import Hedgehog.Plutus.TxTest
-  (TxTest
-  ,ChainState(..)
-  , omitted
-  , txTest
-  )
+import Hedgehog.Plutus.TxTest (
+  ChainState (..),
+  TxTest,
+  omitted,
+  txTest,
+ )
+import Plutus.Model qualified as Model
 
 --- Copied from pioneer program
 
