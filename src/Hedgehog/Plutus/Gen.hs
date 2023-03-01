@@ -39,6 +39,7 @@ import Hedgehog.Gen (
   integral,
  )
 import Hedgehog.Gen qualified as Gen
+import Hedgehog.Range qualified as Range
 
 import Cardano.Simple.Ledger.TimeSlot qualified as Time
 import Plutus.Model (Mock)
@@ -52,8 +53,12 @@ import PlutusLedgerApi.V1 (
  )
 
 import GHC.Natural (Natural)
-import Hedgehog.Plutus.TestData (EitherOr, Good, ShouldBeNatural, TestData (generalise, validate))
-import Hedgehog.Range qualified as Range
+import Hedgehog.Plutus.TestData (
+  EitherOr,
+  Good,
+  ShouldBeNatural,
+  TestData (generalise, validate),
+ )
 
 data User m = User
   { user :: !Model.User

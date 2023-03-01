@@ -7,7 +7,6 @@ import AuctionGen (genAuctionDatum, genGoodAuctionTest)
 import Hedgehog.Plutus.Gen (runCtx)
 import Plutus.Model qualified as Model
 import Plutus.Model.Mock (initMock)
-import Plutus.Model.Pretty qualified as Model
 
 import Hedgehog.Plutus.TxTest (txTestGoodAdjunction)
 
