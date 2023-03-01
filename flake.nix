@@ -12,9 +12,7 @@
   inputs = {
     tooling.url = "github:mlabs-haskell/mlabs-tooling.nix";
     plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model/";
-    plutarch.url = "github:Plutonomicon/plutarch-plutus/?rev=f535a6894a25e6d46d16958273769bffa8880090";
-    # plutarch has a parse error on the newest commit right now
-    #plutus.url = "github:input-output-hk/plutus";
+    plutarch.url = "github:Plutonomicon/plutarch-plutus/";
   };
 
   outputs = inputs@{ self, tooling, plutus-simple-model, plutarch, ... }: tooling.lib.mkFlake { inherit self; }
@@ -27,10 +25,6 @@
             "${plutarch}"
             "${plutus-simple-model}/psm"
             "${plutus-simple-model}/cardano-simple"
-
-            #"${plutus}/plutus-tx-plugin"
-            #"${plutus}/plutus-core"
-            #"${plutus}/plutus-ir"
           ];
           toHaddock = [
             "plutarch"

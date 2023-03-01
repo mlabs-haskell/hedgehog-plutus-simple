@@ -141,9 +141,6 @@ deriving via (Simple POSIXTime) instance Diff' POSIXTime
 deriving via (Simple CurrencySymbol) instance Diff' CurrencySymbol
 deriving via (Simple TokenName) instance Diff' TokenName
 
--- deriving via (Simple Value) instance Diff' Value
--- TODO an instance that actually subtracts would be better
-
 instance Diff' Value where
   type Patch Value = Value
   diff' a b = a <> inv b

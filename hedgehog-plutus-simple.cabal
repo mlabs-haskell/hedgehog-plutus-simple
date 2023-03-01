@@ -27,8 +27,7 @@ common common-lang
     -Wno-partial-type-signatures -Wmissing-export-lists
     -Wincomplete-record-updates -Wmissing-deriving-strategies
     -Wno-name-shadowing -Wunused-foralls -fprint-explicit-foralls
-    -fprint-explicit-kinds -fwarn-missing-import-lists
-    -fdefer-typed-holes -Wno-typed-holes
+    -fprint-explicit-kinds -fwarn-missing-import-lists -Werror
 
   build-depends:      base >=4.14
   default-extensions:
