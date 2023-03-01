@@ -140,7 +140,14 @@ test-suite examples
   type:           exitcode-stdio-1.0
   main-is:        Spec.hs
   hs-source-dirs: ./examples
+  other-modules:
+    AuctionExample
+    AuctionGen
+    Week01.EnglishAuction
+    Week01.Types
+
   build-depends:
+    , aeson
     , bytestring
     , cardano-simple
     , containers
@@ -150,11 +157,9 @@ test-suite examples
     , plutus-ledger-api
     , plutus-simple-model
     , plutus-tx
+    , plutus-tx-plugin
     , prettyprinter
-
-  other-modules:
-    AuctionExample
-    AuctionGen
+    , text
 
 test-suite hedgehog-plutus-simple
   import:         common-lang
