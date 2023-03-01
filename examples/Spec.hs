@@ -8,6 +8,8 @@ import Hedgehog.Plutus.Gen (runCtx)
 import Plutus.Model qualified as Model
 import Plutus.Model.Mock (initMock)
 
+import Hedgehog.Gen (element)
+import Hedgehog.Plutus.Gen (initMockState)
 import Hedgehog.Plutus.TxTest (txTestGoodAdjunction)
 
 import AuctionExample (auctionTest)
@@ -33,19 +35,26 @@ main =
           ]
     ]
 
-goodAdjunction :: Hedgehog.Property
-goodAdjunction = Hedgehog.property $ do
-  initialState <-
-    Hedgehog.forAllWith
-      Model.ppMock
-      (pure $ initMock defaultBabbage (Value.singleton "" "" 1_000_000))
-  datum <- Hedgehog.forAll $ runCtx initialState genAuctionDatum
-  good <- Hedgehog.forAll $ runCtx initialState genGoodAuctionTest
-  txTestGoodAdjunction auctionTest initialState datum good
+-- goodAdjunction :: Hedgehog.Property
+-- goodAdjunction = Hedgehog.property $ do
+--  initialState <-
+--    Hedgehog.forAllWith
+--      Model.ppMock
+--      (pure $ initMock defaultBabbage (Value.singleton "" "" 1_000_000))
+--  datum <- Hedgehog.forAll $ runCtx initialState genAuctionDatum
+--  good <- Hedgehog.forAll $ runCtx initialState genGoodAuctionTest
+--  txTestGoodAdjunction auctionTest initialState datum good
 
 goodBidAdjunction :: Hedgehog.Property
 goodBidAdjunction = Hedgehog.property $ do
-  init <- Hedgehog.forAllWith Model.ppMock $ do
+  init <-
+    Hedgehog.forAllWith Model.ppMock $
+      element $
+        initMockState
+          mempty -- TODO generate users map
+          mempty -- TODO generate scripts map
+          Model.defaultAlonzo
+  mock2 <- Hedgehog.forAllWith Model.ppMock $ do
     pure $
       snd $
         Model.runMock
@@ -60,8 +69,9 @@ goodBidAdjunction = Hedgehog.property $ do
                     <> Model.payToScript _ _ (lovelaceValue 1 <> nft)
                 )
           )
-          (Model.initMock Model.defaultAlonzo (lovelaceValue 101 <> nft))
-  txTestGoodAdjunction auctionTest init _ _
+          init
+  -- (Model.initMock Model.defaultAlonzo (lovelaceValue 101 <> nft))
+  txTestGoodAdjunction auctionTest (_ mock2) _ _
 
 lovelaceValue :: Integer -> Plutus.Value
 lovelaceValue = Plutus.singleton Plutus.adaSymbol Plutus.adaToken

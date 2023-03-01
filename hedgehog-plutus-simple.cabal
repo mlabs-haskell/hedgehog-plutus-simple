@@ -105,6 +105,7 @@ library
     Hedgehog.Plutus.TestData
     Hedgehog.Plutus.TestData.Plutus
     Hedgehog.Plutus.TestSingleScript
+    Hedgehog.Plutus.TimeTest
     Hedgehog.Plutus.TxTest
 
   build-depends:
@@ -127,6 +128,7 @@ library
     , plutus-ledger-api
     , plutus-simple-model
     , plutus-tx
+    , prettyprinter
     , text
     , time
     , vector
@@ -148,10 +150,22 @@ test-suite examples
     , plutus-ledger-api
     , plutus-simple-model
     , plutus-tx
+    , prettyprinter
 
   other-modules:
     AuctionExample
     AuctionGen
+
+test-suite hedgehog-plutus-simple
+  import:         common-lang
+  type:           exitcode-stdio-1.0
+  main-is:        Spec.hs
+  hs-source-dirs: ./test
+  build-depends:
+    , cardano-simple
+    , hedgehog
+    , hedgehog-plutus-simple
+    , plutus-ledger-api
 
 library cat-prelude
   exposed-modules: Catagory.Prelude

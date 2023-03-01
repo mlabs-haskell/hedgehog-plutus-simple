@@ -8,7 +8,7 @@ module Hedgehog.Plutus.Adjunction (
 
 import Data.Kind (Type)
 
-import Hedgehog ((===))
+import Hedgehog (annotateShow, (===))
 import Hedgehog qualified
 
 data Adjunction b a = Adjunction
@@ -32,8 +32,10 @@ instance Category Adjunction where
 -- | Verify the adjunction of a layer.
 adjunctionTest ::
   forall (m :: Type -> Type) (a :: Type) (b :: Type).
-  (Hedgehog.MonadTest m, Eq a, Show a) =>
+  (Hedgehog.MonadTest m, Eq a, Show a, Show b) =>
   Adjunction b a ->
   a ->
   m ()
-adjunctionTest (Adjunction lower raise) a = a === raise (lower a)
+adjunctionTest (Adjunction lower raise) a = do
+  annotateShow (lower a)
+  a === raise (lower a)
