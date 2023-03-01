@@ -44,6 +44,7 @@ import Cardano.Ledger.Babbage (BabbageEra)
 import Cardano.Ledger.Block qualified as Ledger
 import Cardano.Ledger.Core (EraTxBody)
 import Cardano.Ledger.Core qualified as Core
+import Cardano.Ledger.Crypto (StandardCrypto)
 import Cardano.Ledger.SafeHash qualified as SafeHash
 import Cardano.Ledger.TxIn qualified as Ledger
 

@@ -148,6 +148,7 @@ test-suite examples
     , plutus-ledger-api
     , plutus-simple-model
     , plutus-tx
+    , prettyprinter
 
   other-modules:  AuctionExample
 
