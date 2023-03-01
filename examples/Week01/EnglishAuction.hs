@@ -16,7 +16,9 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE NoOverloadedRecordDot #-}
-{-# OPTIONS_GHC -Wno-missing-import-lists #-}
+{-# OPTIONS_GHC -Wno-missing-import-lists -Wno-missing-deriving-strategies -Wno-incomplete-uni-patterns #-}
+
+-- Disable warnings to allow minimizing change from the original
 
 module Week01.EnglishAuction (
   AuctionDatum (..),
@@ -30,7 +32,6 @@ module Week01.EnglishAuction (
 import GHC.Generics (Generic)
 
 import Cardano.Simple.PlutusLedgerApi.V1.Scripts (ValidatorHash (..))
-import GHC.Base (build)
 import Plutus.Model.V1 (Validator, txOutDatumHash)
 import Plutus.Model.V2 (TypedValidator, Versioned (..), unTypedValidator, validatorHash)
 import Plutus.Model.Validator.V1 (mkTypedValidator)
