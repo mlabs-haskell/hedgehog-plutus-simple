@@ -57,4 +57,4 @@ lovelaceValue :: Integer -> Plutus.Value
 lovelaceValue = Plutus.singleton Plutus.adaSymbol Plutus.adaToken
 
 nft :: Plutus.Value
-nft = Plutus.singleton (Plutus.CurrencySymbol "NFT") "" 1
+nft = Plutus.singleton (Plutus.CurrencySymbol "FFFF") "NFT" 1
