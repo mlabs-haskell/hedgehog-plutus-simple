@@ -32,12 +32,7 @@ import GHC.Generics (Generic)
 import Cardano.Simple.PlutusLedgerApi.V1.Scripts (ValidatorHash (..))
 import GHC.Base (build)
 import Plutus.Model.V1 (Validator, txOutDatumHash)
-import Plutus.Model.V2 (
-  TypedValidator,
-  Versioned (..),
-  unTypedValidator,
-  validatorHash,
- )
+import Plutus.Model.V2 (TypedValidator, Versioned (..), unTypedValidator, validatorHash)
 import Plutus.Model.Validator.V1 (mkTypedValidator)
 import PlutusLedgerApi.V1 (ScriptHash (..))
 import PlutusLedgerApi.V1.Address (pubKeyHashAddress, scriptHashAddress)
@@ -55,6 +50,8 @@ import PlutusLedgerApi.V2 (
   TxInfo (txInfoInputs, txInfoValidRange),
   TxOut (txOutAddress),
   Value,
+  adaSymbol,
+  adaToken,
   to,
  )
 import PlutusLedgerApi.V2.Contexts (
@@ -93,7 +90,7 @@ import Week01.Types (
  )
 
 lovelaceValueOf :: Integer -> Value
-lovelaceValueOf = Value.singleton "" ""
+lovelaceValueOf = Value.singleton adaSymbol adaToken
 
 -- can't build plutus-ledger to import this
 
@@ -136,15 +133,13 @@ mkAuctionValidator ad redeemer ctx =
 
     input :: TxInInfo
     input =
-      let
-        isScriptInput i = case (txOutDatumHash . txInInfoResolved) i of
-          Nothing -> False
-          Just _ -> True
-        xs = [i | i <- txInfoInputs info, isScriptInput i]
-       in
-        case xs of
-          [i] -> i
-          _ -> traceError "expected exactly one script input"
+      let isScriptInput i = case (txOutDatumHash . txInInfoResolved) i of
+            Nothing -> False
+            Just _ -> True
+          xs = [i | i <- txInfoInputs info, isScriptInput i]
+       in case xs of
+            [i] -> i
+            _ -> traceError "expected exactly one script input"
 
     inVal :: Value
     inVal = txOutValue . txInInfoResolved $ input
@@ -189,16 +184,14 @@ mkAuctionValidator ad redeemer ctx =
     correctBidRefund = case adHighestBid ad of
       Nothing -> True
       Just Bid {..} ->
-        let
-          os =
-            [ o
-            | o <- txInfoOutputs info
-            , txOutAddress o == pubKeyHashAddress bBidder -- Nothing
-            ]
-         in
-          case os of
-            [o] -> txOutValue o == lovelaceValueOf bBid
-            _ -> traceError "expected exactly one refund output"
+        let os =
+              [ o
+              | o <- txInfoOutputs info
+              , txOutAddress o == pubKeyHashAddress bBidder -- Nothing
+              ]
+         in case os of
+              [o] -> txOutValue o == lovelaceValueOf bBid
+              _ -> traceError "expected exactly one refund output"
 
     correctBidSlotRange :: Bool
     correctBidSlotRange = to (aDeadline auction) `contains` txInfoValidRange info
@@ -208,14 +201,12 @@ mkAuctionValidator ad redeemer ctx =
 
     getsValue :: PubKeyHash -> Value -> Bool
     getsValue h v =
-      let
-        [o] =
-          [ o'
-          | o' <- txInfoOutputs info
-          , txOutValue o' == v
-          ]
-       in
-        txOutAddress o == pubKeyHashAddress h -- Nothing
+      let [o] =
+            [ o'
+            | o' <- txInfoOutputs info
+            , txOutValue o' == v
+            ]
+       in txOutAddress o == pubKeyHashAddress h -- Nothing
 
 typedAuctionValidator :: TypedValidator AuctionDatum AuctionAction
 typedAuctionValidator =

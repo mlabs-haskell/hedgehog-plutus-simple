@@ -38,11 +38,11 @@ import Prelude qualified as P
 -- GHC stage restriction forces this to be in a seperate module
 
 data Auction = Auction
-  { aSeller :: !PubKeyHash
+  { aSeller :: PubKeyHash
   , aDeadline :: !POSIXTime
   , aMinBid :: !Integer
-  , aCurrency :: !CurrencySymbol
-  , aToken :: !TokenName
+  , aCurrency :: CurrencySymbol
+  , aToken :: TokenName
   }
   deriving stock (P.Eq, P.Show, Generic)
 
@@ -59,7 +59,7 @@ PlutusTx.unstableMakeIsData ''Auction
 PlutusTx.makeLift ''Auction
 
 data Bid = Bid
-  { bBidder :: !PubKeyHash
+  { bBidder :: PubKeyHash
   , bBid :: !Integer
   }
   deriving stock (P.Eq, P.Show, Generic)
