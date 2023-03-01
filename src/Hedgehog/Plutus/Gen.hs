@@ -3,17 +3,17 @@
 
 module Hedgehog.Plutus.Gen where
 
-import Data.Maybe (fromMaybe, isJust,mapMaybe)
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Maybe (fromMaybe, isJust, mapMaybe)
 import Data.Set qualified as Set
-import Data.Vector qualified as Vector
 import Data.String (IsString (fromString))
+import Data.Vector qualified as Vector
 
-import Control.Monad.State (MonadState (get), State, evalState, modify)
 import Control.Monad (replicateM, when)
 import Control.Monad.Reader (MonadReader, ReaderT (runReaderT))
 import Control.Monad.Reader.Class (asks)
+import Control.Monad.State (MonadState (get), State, evalState, modify)
 
 import Cardano.Binary qualified as CBOR
 import Cardano.Crypto.Hash qualified as Crypto
@@ -55,8 +55,6 @@ import GHC.Natural (Natural)
 import Hedgehog.Plutus.TestData (EitherOr, Good, ShouldBeNatural, TestData (generalise, validate))
 import Hedgehog.Range qualified as Range
 
-
-
 data User m = User
   { user :: !Model.User
   , userName :: !String
@@ -81,8 +79,8 @@ initMockState users scripts cfg = (`evalState` 0) $ do
   ss <- scripts'
   let userOutputs = fmap concat . mapM (.userOutputs) . Map.elems $ us
   let scriptOutputs = fmap concat . mapM snd . Map.elems $ ss
-  let outputs = fmap concat $ sequence [userOutputs, scriptOutputs]
-  return $ do
+  let outputs = concat <$> sequence [userOutputs, scriptOutputs]
+  pure $ do
     os <- outputs
     addrs <-
       fmap (Map.mapKeysMonotonic Plutus.pubKeyHashAddress)

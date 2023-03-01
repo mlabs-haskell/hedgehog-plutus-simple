@@ -3,9 +3,9 @@ import PlutusLedgerApi.V2 qualified as Plutus
 import Hedgehog qualified
 import Hedgehog.Main qualified as Hedgehog
 
-import Plutus.Model qualified as Model
 import AuctionGen (genAuctionDatum, genGoodAuctionTest)
 import Hedgehog.Plutus.Gen (runCtx)
+import Plutus.Model qualified as Model
 import Plutus.Model.Mock (initMock)
 import Plutus.Model.Pretty qualified as Model
 
@@ -17,11 +17,12 @@ import PlutusLedgerApi.V1.Value qualified as Value
 
 main :: IO ()
 main =
-  Hedgehog.defaultMain $
-    [ Hedgehog.checkParallel $
-        Hedgehog.Group
+  Hedgehog.defaultMain
+    [ Hedgehog.checkParallel
+        $ Hedgehog.Group
           "Auction example tests"
-          $ take 1 -- TODO remove when more tests run
+        $ take
+          1 -- TODO remove when more tests run
           [ ("good data adjuncts for bid", goodBidAdjunction)
           , ("good data adjuncts for close", _)
           , ("bad data adjuncts for bid", _)
