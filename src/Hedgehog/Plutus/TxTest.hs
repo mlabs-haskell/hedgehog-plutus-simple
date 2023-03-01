@@ -151,10 +151,11 @@ lowerSc
   ScriptContext
     { contextTxInfo
     , contextPurpose
+    , contextRedeemer
     } =
     ScriptTx
       { scriptTxPurpose = contextPurpose
-      , scriptTx = lowerScCore @r m scripts mps sp contextTxInfo
+      , scriptTx = lowerScCore m scripts mps sp contextRedeemer contextTxInfo
       }
     where
       sp = toPlutusSp contextPurpose
@@ -415,6 +416,7 @@ lowerScCore ::
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   Plutus.ScriptPurpose ->
+  r ->
   Plutus.TxInfo ->
   Model.Tx
 lowerScCore
@@ -429,7 +431,8 @@ lowerScCore
   scripts
   mps
   sp
-  ( resolveOmitted @r m scripts mps sp ->
+  r
+  ( resolveOmitted m scripts mps sp r ->
       Plutus.TxInfo
         { Plutus.txInfoInputs = txInputs
         , Plutus.txInfoReferenceInputs = referenceInputs
@@ -543,6 +546,7 @@ resolveOmitted ::
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
   Plutus.ScriptPurpose ->
+  r ->
   Plutus.TxInfo ->
   Plutus.TxInfo
 resolveOmitted
@@ -550,6 +554,7 @@ resolveOmitted
   scripts
   mps
   sp
+  r
   txinfo =
     resolved
     where
@@ -564,16 +569,16 @@ resolveOmitted
                     getCred utxos <$> inputs
                 ]
                   <> Plutus.txInfoSignatories txinfo
-          , Plutus.txInfoRedeemers = redeemers
+          , Plutus.txInfoRedeemers = redeemers'
           , Plutus.txInfoData = datums
           }
-      Model.Tx extra tx = lowerScCore @r mock scripts mps sp resolved
+      Model.Tx extra tx = lowerScCore mock scripts mps sp r resolved
       -- This should always halt because
       -- extra and tx are only used in the txInfoId
       -- an lowerScCore doesn't look at that field
       inputs :: [TxIn]
       inputs =
-        convertInInfo' mock redeemers scripts datums
+        convertInInfo' mock redeemers' scripts datums
           <$> inputs'
       inputs' :: [Plutus.TxInInfo]
       inputs' = Plutus.txInfoInputs txinfo <> extraInputs
@@ -600,7 +605,9 @@ resolveOmitted
                     Map.lookup txInRef utxos
           , Plutus.OutputDatumHash dh <- pure out
           ]
-      redeemers = error "TODO where do I get this?"
+      redeemers' =
+        PlutusTx.insert sp (Plutus.Redeemer $ Plutus.toBuiltinData r) $
+          Plutus.txInfoRedeemers txinfo
 
 txTestBadAdjunction ::
   ( Hedgehog.MonadTest m
