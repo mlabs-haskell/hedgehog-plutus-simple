@@ -8529,11 +8529,11 @@
         "plutus": "plutus_4"
       },
       "locked": {
-        "lastModified": 1677087276,
-        "narHash": "sha256-NREvTQ3rGwmA5mn+nKDMq9wI+DPrdE8w3XMxthqD8Ts=",
+        "lastModified": 1676568601,
+        "narHash": "sha256-SpaWDzk+6WweLAEPOrcOMo5Wh5+dongOQFFpupb36n8=",
         "owner": "mlabs-haskell",
         "repo": "mlabs-tooling.nix",
-        "rev": "864a435692610cc9b03b80fade0a2c82f6e0534d",
+        "rev": "097996e58595077b91f729c033ea893725827df7",
         "type": "github"
       },
       "original": {
