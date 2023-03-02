@@ -1,6 +1,5 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -32,13 +31,12 @@ import Data.Map qualified as Map
 import PlutusLedgerApi.V1.Address qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusLedgerApi.V2.Contexts qualified as Plutus
-import PlutusTx qualified
 
 import Plutus.Model qualified as Model
 
 import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction, lower, raise))
 import Hedgehog.Plutus.Diff (Diff' (Patch), diff, patch)
-import Hedgehog.Plutus.Generics (Generically (Generically), Simple (Simple))
+import Hedgehog.Plutus.Generics (Generically (Generically))
 import Hedgehog.Plutus.ScriptContext (
   ScriptContext (
     ScriptContext,
@@ -63,58 +61,13 @@ import Hedgehog.Plutus.TestData (
  )
 import Hedgehog.Plutus.TestData.Plutus ()
 import Hedgehog.Plutus.TxTest (TxTest, omitted, txTest)
-
---- Copied from pioneer program
-
-minLovelace :: Integer
-minLovelace = 2000000
-
-data Auction = Auction
-  { aSeller :: !Plutus.PubKeyHash
-  , aDeadline :: !Plutus.POSIXTime
-  , aMinBid :: !Integer
-  , aCurrency :: !Plutus.CurrencySymbol
-  , aToken :: !Plutus.TokenName
-  }
-  deriving stock (Eq, Show, GHC.Generic)
-  deriving (Diff') via (Generically Auction)
-
-deriving via (Simple Plutus.PubKeyHash) instance Diff' Plutus.PubKeyHash
-deriving via (Simple Plutus.CurrencySymbol) instance Diff' Plutus.CurrencySymbol
-deriving via (Simple Plutus.TokenName) instance Diff' Plutus.TokenName
-deriving via (Simple Plutus.POSIXTime) instance Diff' Plutus.POSIXTime
-deriving via (Simple Plutus.Value) instance Diff' Plutus.Value
-
-PlutusTx.unstableMakeIsData ''Auction
-PlutusTx.makeLift ''Auction
-
-data Bid = Bid
-  { bBidder :: !Plutus.PubKeyHash
-  , bBid :: !Integer
-  }
-  deriving stock (Eq, Show, GHC.Generic)
-  deriving (Diff') via (Generically Bid)
-
-PlutusTx.unstableMakeIsData ''Bid
-PlutusTx.makeLift ''Bid
-
-data AuctionAction = MkBid Bid | Close
-  deriving stock (Show)
-
-PlutusTx.unstableMakeIsData ''AuctionAction
-PlutusTx.makeLift ''AuctionAction
-
-data AuctionDatum = AuctionDatum
-  { adAuction :: !Auction
-  , adHighestBid :: !(Maybe Bid)
-  }
-  deriving stock (Eq, Show, GHC.Generic)
-  deriving (Diff') via (Generically AuctionDatum)
-
-PlutusTx.unstableMakeIsData ''AuctionDatum
-PlutusTx.makeLift ''AuctionDatum
-
----
+import Week01.EnglishAuction (
+  Auction,
+  AuctionAction (Close, MkBid),
+  AuctionDatum (AuctionDatum, adAuction, adHighestBid),
+  minLovelace,
+ )
+import Week01.Types (Auction (Auction, aCurrency, aMinBid, aSeller, aToken), Bid (Bid, bBid, bBidder))
 
 data AuctionTest = AuctionTest
   { stateRef :: !Plutus.TxOutRef

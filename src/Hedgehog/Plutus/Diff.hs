@@ -29,6 +29,14 @@ import Generics.SOP (
 import Generics.SOP.GGP (GCode, GFrom, GTo, gfrom, gto)
 
 import Hedgehog.Plutus.Generics (Generically (Generically), Simple (Simple))
+import PlutusLedgerApi.V1 (
+  CurrencySymbol,
+  POSIXTime,
+  PubKeyHash,
+  TokenName,
+  Value,
+ )
+import PlutusTx.Monoid (Group (inv))
 
 class Diff' a where
   type Patch a
@@ -128,5 +136,14 @@ instance
       patch' p (unSOP . gfrom $ c)
 
 deriving via (Simple Integer) instance Diff' Integer
+deriving via (Simple PubKeyHash) instance Diff' PubKeyHash
+deriving via (Simple POSIXTime) instance Diff' POSIXTime
+deriving via (Simple CurrencySymbol) instance Diff' CurrencySymbol
+deriving via (Simple TokenName) instance Diff' TokenName
+
+instance Diff' Value where
+  type Patch Value = Value
+  diff' a b = a <> inv b
+  patch' a b = a <> b
 
 deriving via (Generically (Maybe a)) instance (Eq a, Diff' a) => Diff' (Maybe a)

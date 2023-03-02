@@ -147,6 +147,7 @@ test-suite examples
   main-is:        Spec.hs
   hs-source-dirs: ./examples
   build-depends:
+    , aeson
     , bytestring
     , cardano-simple
     , containers
@@ -156,10 +157,14 @@ test-suite examples
     , plutus-ledger-api
     , plutus-simple-model
     , plutus-tx
+    , plutus-tx-plugin
+    , text
 
   other-modules:
     AuctionExample
     AuctionGen
+    Week01.EnglishAuction
+    Week01.Types
 
 library cat-prelude
   exposed-modules: Catagory.Prelude
