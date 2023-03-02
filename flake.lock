@@ -983,6 +983,23 @@
     "cardano-haskell-packages": {
       "flake": false,
       "locked": {
+        "lastModified": 1677668995,
+        "narHash": "sha256-ImazpNcspYvYJfLpkg7rAGy0zOoQJJ3fwxJH0Gr3TV4=",
+        "owner": "input-output-hk",
+        "repo": "cardano-haskell-packages",
+        "rev": "c4b144dd565d854e1237a58c86e9d5f1063186a8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "input-output-hk",
+        "ref": "repo",
+        "repo": "cardano-haskell-packages",
+        "type": "github"
+      }
+    },
+    "cardano-haskell-packages_2": {
+      "flake": false,
+      "locked": {
         "lastModified": 1670900592,
         "narHash": "sha256-SZlQp3W0WdxB00gO5A0krgDw7CLESm5jWZ6S+GPxCxA=",
         "owner": "input-output-hk",
@@ -997,7 +1014,7 @@
         "type": "github"
       }
     },
-    "cardano-haskell-packages_2": {
+    "cardano-haskell-packages_3": {
       "flake": false,
       "locked": {
         "lastModified": 1670900592,
@@ -3055,23 +3072,6 @@
       }
     },
     "ghc-next-packages": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1664165793,
-        "narHash": "sha256-J1MRJGY//HbLTqseX3v50KOwMJSb/86irn4gPWSuWjI=",
-        "owner": "input-output-hk",
-        "repo": "ghc-next-packages",
-        "rev": "62b7db48b3325d6d585ac079576733d3a76bae72",
-        "type": "github"
-      },
-      "original": {
-        "owner": "input-output-hk",
-        "ref": "repo",
-        "repo": "ghc-next-packages",
-        "type": "github"
-      }
-    },
-    "ghc-next-packages_2": {
       "flake": false,
       "locked": {
         "lastModified": 1664165793,
@@ -7510,17 +7510,16 @@
         "tooling": "tooling"
       },
       "locked": {
-        "lastModified": 1675688785,
-        "narHash": "sha256-wLVsGPoCmntA/2TMXaIU36YRHydY99g71PqjpDDMruE=",
+        "lastModified": 1675976388,
+        "narHash": "sha256-+LdMi2zKoRR12hifT8fck/+VpTzS4rOrlQN6pg8xhsU=",
         "owner": "Plutonomicon",
         "repo": "plutarch-plutus",
-        "rev": "f535a6894a25e6d46d16958273769bffa8880090",
+        "rev": "d3df05ce67d8b5a3d2ca851a6e5a1b8ff8cb358f",
         "type": "github"
       },
       "original": {
         "owner": "Plutonomicon",
         "repo": "plutarch-plutus",
-        "rev": "f535a6894a25e6d46d16958273769bffa8880090",
         "type": "github"
       }
     },
@@ -8448,25 +8447,24 @@
     },
     "tooling": {
       "inputs": {
+        "cardano-haskell-packages": "cardano-haskell-packages",
         "emanote": "emanote",
         "flake-parts": "flake-parts_2",
-        "ghc-next-packages": "ghc-next-packages",
         "haskell-nix": "haskell-nix",
         "iohk-nix": "iohk-nix",
         "nixpkgs": "nixpkgs_3",
         "plutus": "plutus"
       },
       "locked": {
-        "lastModified": 1666902999,
-        "narHash": "sha256-SEnfqMx+34jQ0docFibV15zOYwXm0a6Tfvu4MyUQxyw=",
+        "lastModified": 1677153910,
+        "narHash": "sha256-wHQfFUVQH4yl37aIjaA7nutHUoeyIbLka1QaYDAeNeY=",
         "owner": "mlabs-haskell",
         "repo": "mlabs-tooling.nix",
-        "rev": "56c8b9799a5b21399a4fd5b3c17291d940544aa1",
+        "rev": "fa04ff4c5cca8255202fff0b65ceee3e1e106343",
         "type": "github"
       },
       "original": {
         "owner": "mlabs-haskell",
-        "ref": "las/work",
         "repo": "mlabs-tooling.nix",
         "type": "github"
       }
@@ -8475,7 +8473,7 @@
       "inputs": {
         "emanote": "emanote_2",
         "flake-parts": "flake-parts_4",
-        "ghc-next-packages": "ghc-next-packages_2",
+        "ghc-next-packages": "ghc-next-packages",
         "haskell-nix": "haskell-nix_3",
         "iohk-nix": "iohk-nix_3",
         "nixpkgs": "nixpkgs_11",
@@ -8498,7 +8496,7 @@
     },
     "tooling_3": {
       "inputs": {
-        "cardano-haskell-packages": "cardano-haskell-packages",
+        "cardano-haskell-packages": "cardano-haskell-packages_2",
         "emanote": "emanote_3",
         "flake-parts": "flake-parts_6",
         "haskell-nix": "haskell-nix_5",
@@ -8522,7 +8520,7 @@
     },
     "tooling_4": {
       "inputs": {
-        "cardano-haskell-packages": "cardano-haskell-packages_2",
+        "cardano-haskell-packages": "cardano-haskell-packages_3",
         "emanote": "emanote_4",
         "flake-parts": "flake-parts_8",
         "haskell-nix": "haskell-nix_7",
@@ -8531,11 +8529,11 @@
         "plutus": "plutus_4"
       },
       "locked": {
-        "lastModified": 1677087276,
-        "narHash": "sha256-NREvTQ3rGwmA5mn+nKDMq9wI+DPrdE8w3XMxthqD8Ts=",
+        "lastModified": 1676568601,
+        "narHash": "sha256-SpaWDzk+6WweLAEPOrcOMo5Wh5+dongOQFFpupb36n8=",
         "owner": "mlabs-haskell",
         "repo": "mlabs-tooling.nix",
-        "rev": "864a435692610cc9b03b80fade0a2c82f6e0534d",
+        "rev": "097996e58595077b91f729c033ea893725827df7",
         "type": "github"
       },
       "original": {

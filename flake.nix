@@ -12,11 +12,11 @@
   inputs = {
     tooling.url = "github:mlabs-haskell/mlabs-tooling.nix";
     plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model/";
-    plutarch.url = "github:Plutonomicon/plutarch-plutus/?rev=f535a6894a25e6d46d16958273769bffa8880090";
-    # plutarch has a parse error on the newest commit right now
+    plutarch.url = "github:Plutonomicon/plutarch-plutus/";
   };
 
-  outputs = inputs@{ self, tooling, plutus-simple-model, plutarch, ... }: tooling.lib.mkFlake { inherit self; }
+  outputs = inputs@{ self, tooling, plutus-simple-model, plutarch, ... }: tooling.lib.mkFlake
+    { inherit self; }
     {
       imports = [
         (tooling.lib.mkHaskellFlakeModule1 {
@@ -39,6 +39,32 @@
             "cardano-crypto"
           ];
         })
+        ({
+          flake.config.herculesCI = {
+            onPush = {
+              mainChecks.outputs.mainCheck = self.packages.hps-main;
+              devChecks.outputs =
+                let
+                  removeMainOnly =
+                    builtins.mapAttrs
+                      (name: val:
+                        if name == "hps-production-flags"
+                        then { }
+                        else if builtins.isAttrs val then removeMainOnly val else val
+                      );
+                in
+                builtins.mapAttrs
+                  (name: { x86_64-linux ? { }, ... }: removeMainOnly x86_64-linux)
+                  self.outputs
+              ;
+            };
+          };
+        })
       ];
+      perSystem = { self', ... }: {
+        packages.hps-production-flags =
+          self'.packages."hedgehog-plutus-simple:lib:hedgehog-plutus-simple".override
+            { flags.dev = false; };
+      };
     };
 }
