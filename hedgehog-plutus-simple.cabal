@@ -169,6 +169,12 @@ test-suite examples
     , prettyprinter
     , text
 
+  other-modules:
+    AuctionExample
+    AuctionGen
+    Week01.EnglishAuction
+    Week01.Types
+
 test-suite hedgehog-plutus-simple
   import:         common-lang
   type:           exitcode-stdio-1.0

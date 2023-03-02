@@ -58,7 +58,12 @@ import Hedgehog.Plutus.TestData (
   shouldBeSingletonList,
  )
 import Hedgehog.Plutus.TestData.Plutus ()
-import Hedgehog.Plutus.TxTest (ChainState (..), TxTest, omitted, txTest)
+import Hedgehog.Plutus.TxTest (
+  ChainState (..),
+  TxTest,
+  omitted,
+  txTest,
+ )
 import Plutus.Model qualified as Model
 import Week01.EnglishAuction (
   Auction,
