@@ -11,7 +11,15 @@
 
 -}
 
-module AuctionExample (AuctionTest, AuctionDatum, auctionTest) where
+module AuctionExample (
+  auctionTest,
+  AuctionDatum (..),
+  AuctionTest (..),
+  AuctionTestRedeemer (..),
+  Auction (..),
+  Bid (..),
+  SelfOutput (..),
+) where
 
 import Data.Kind (Type)
 import GHC.Generics qualified as GHC

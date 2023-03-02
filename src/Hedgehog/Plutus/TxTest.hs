@@ -11,6 +11,7 @@ module Hedgehog.Plutus.TxTest (
   txTestGoodAdjunction,
   txTestBad,
   txTestGood,
+  scriptContext,
   ppChainState,
 ) where
 

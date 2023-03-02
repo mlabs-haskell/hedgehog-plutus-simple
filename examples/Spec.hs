@@ -3,9 +3,13 @@ module Main where
 import Hedgehog qualified
 import Hedgehog.Main qualified as Hedgehog
 
-import PlutusLedgerApi.V2 qualified as Plutus
+import AuctionGen (genAuctionDatum, genGoodAuctionTest)
+import Hedgehog.Plutus.Gen (runCtx)
+import Plutus.Model qualified as Model
+import Plutus.Model.Mock (initMock)
 
 import Hedgehog.Plutus.TxTest (
+  ChainState (..),
   txTestBad,
   txTestBadAdjunction,
   txTestGood,
@@ -13,6 +17,8 @@ import Hedgehog.Plutus.TxTest (
  )
 
 import AuctionExample (auctionTest)
+import Plutus.Model.V2 (defaultBabbage)
+import PlutusLedgerApi.V1.Value qualified as Value
 
 main :: IO ()
 main =
@@ -21,7 +27,7 @@ main =
         $ Hedgehog.Group
           "Auction example tests"
         $ take
-          1
+          1 -- TODO remove when more tests run
           [ ("good data adjuncts for bid", goodBidAdjunction)
           , ("good data adjuncts for close", goodCloseAdjunction)
           , ("bad data adjuncts for bid", badBidAdjunction)
@@ -35,10 +41,14 @@ main =
 
 goodBidAdjunction :: Hedgehog.Property
 goodBidAdjunction = Hedgehog.property $ do
-  initialState <- _
-  datum <- Hedgehog.forAll _
-  good <- Hedgehog.forAll _
-  txTestGoodAdjunction auctionTest initialState datum good
+  initialState <-
+    Hedgehog.forAllWith
+      Model.ppMock
+      (pure $ initMock defaultBabbage (Value.singleton "" "" 1_000_000))
+  datum <- Hedgehog.forAll $ runCtx initialState genAuctionDatum
+  good <- Hedgehog.forAll $ runCtx initialState genGoodAuctionTest
+  let chainState = ChainState initialState mempty mempty
+  txTestGoodAdjunction auctionTest chainState datum good
 
 goodCloseAdjunction :: Hedgehog.Property
 goodCloseAdjunction = Hedgehog.property $ do
@@ -88,6 +98,3 @@ badCloseScript = Hedgehog.property $ do
   datum <- Hedgehog.forAll _
   bad <- Hedgehog.forAll _
   txTestBad auctionTest initialState datum bad
-
-nft :: Plutus.Value
-nft = Plutus.singleton (Plutus.CurrencySymbol "FFFF") "NFT" 1
