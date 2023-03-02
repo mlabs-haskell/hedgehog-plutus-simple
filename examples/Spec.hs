@@ -1,4 +1,4 @@
-import PlutusLedgerApi.V2 qualified as Plutus
+module Main where
 
 import Hedgehog qualified
 import Hedgehog.Main qualified as Hedgehog
@@ -8,7 +8,13 @@ import Hedgehog.Plutus.Gen (runCtx)
 import Plutus.Model qualified as Model
 import Plutus.Model.Mock (initMock)
 
-import Hedgehog.Plutus.TxTest (ChainState (..), txTestGoodAdjunction)
+import Hedgehog.Plutus.TxTest (
+  ChainState (..),
+  txTestBad,
+  txTestBadAdjunction,
+  txTestGood,
+  txTestGoodAdjunction,
+ )
 
 import AuctionExample (auctionTest)
 import Plutus.Model.V2 (defaultBabbage)
@@ -22,20 +28,19 @@ main =
           "Auction example tests"
         $ take
           1 -- TODO remove when more tests run
-          [ ("goodAdjunction", goodAdjunction)
-          , -- , ("good data adjuncts for bid", goodBidAdjunction)
-            ("good data adjuncts for close", _)
-          , ("bad data adjuncts for bid", _)
-          , ("bad data adjuncts for close", _)
-          , ("good data succeeds for bid", _)
-          , ("good data succeeds for close", _)
-          , ("bad data fails for bid", _)
-          , ("bad data fails for close", _)
+          [ ("good data adjuncts for bid", goodBidAdjunction)
+          , ("good data adjuncts for close", goodCloseAdjunction)
+          , ("bad data adjuncts for bid", badBidAdjunction)
+          , ("bad data adjuncts for close", badCloseAdjunction)
+          , ("good data succeeds for bid", goodBidScript)
+          , ("good data succeeds for close", goodCloseScript)
+          , ("bad data fails for bid", badBidScript)
+          , ("bad data fails for close", badCloseScript)
           ]
     ]
 
-goodAdjunction :: Hedgehog.Property
-goodAdjunction = Hedgehog.property $ do
+goodBidAdjunction :: Hedgehog.Property
+goodBidAdjunction = Hedgehog.property $ do
   initialState <-
     Hedgehog.forAllWith
       Model.ppMock
@@ -45,35 +50,51 @@ goodAdjunction = Hedgehog.property $ do
   let chainState = ChainState initialState mempty mempty
   txTestGoodAdjunction auctionTest chainState datum good
 
--- goodBidAdjunction :: Hedgehog.Property
--- goodBidAdjunction = Hedgehog.property $ do
---  init <-
---    Hedgehog.forAllWith Model.ppMock $
---      element $
---        initMockState
---          mempty -- TODO generate users map
---          mempty -- TODO generate scripts map
---          Model.defaultAlonzo
---  mock2 <- Hedgehog.forAllWith Model.ppMock $ do
---    pure $
---      snd $
---        Model.runMock
---          ( do
---              seller <- Model.newUser (lovelaceValue 1 <> nft) -- seller
---              Model.newUser mempty -- old bidder
---              Model.newUser (lovelaceValue 100) -- new bidder
---              spend <- Model.spend seller (lovelaceValue 1 <> nft)
---              Model.submitTx
---                seller
---                ( Model.userSpend spend
---                    <> Model.payToScript _ _ (lovelaceValue 1 <> nft)
---                )
---          )
---          init
---  txTestGoodAdjunction auctionTest (_ mock2) _ _
+goodCloseAdjunction :: Hedgehog.Property
+goodCloseAdjunction = Hedgehog.property $ do
+  initialState <- _
+  datum <- Hedgehog.forAll _
+  good <- Hedgehog.forAll _
+  txTestGoodAdjunction auctionTest initialState datum good
 
-_lovelaceValue :: Integer -> Plutus.Value
-_lovelaceValue = Plutus.singleton Plutus.adaSymbol Plutus.adaToken
+badBidAdjunction :: Hedgehog.Property
+badBidAdjunction = Hedgehog.property $ do
+  initialState <- _
+  datum <- Hedgehog.forAll _
+  bad <- Hedgehog.forAll _
+  txTestBadAdjunction auctionTest initialState datum bad
 
-_nft :: Plutus.Value
-_nft = Plutus.singleton (Plutus.CurrencySymbol "FFFF") "NFT" 1
+badCloseAdjunction :: Hedgehog.Property
+badCloseAdjunction = Hedgehog.property $ do
+  initialState <- _
+  datum <- Hedgehog.forAll _
+  bad <- Hedgehog.forAll _
+  txTestBadAdjunction auctionTest initialState datum bad
+
+goodBidScript :: Hedgehog.Property
+goodBidScript = Hedgehog.property $ do
+  initialState <- _
+  datum <- Hedgehog.forAll _
+  good <- Hedgehog.forAll _
+  txTestGood auctionTest initialState datum good
+
+goodCloseScript :: Hedgehog.Property
+goodCloseScript = Hedgehog.property $ do
+  initialState <- _
+  datum <- Hedgehog.forAll _
+  good <- Hedgehog.forAll _
+  txTestGood auctionTest initialState datum good
+
+badBidScript :: Hedgehog.Property
+badBidScript = Hedgehog.property $ do
+  initialState <- _
+  datum <- Hedgehog.forAll _
+  bad <- Hedgehog.forAll _
+  txTestBad auctionTest initialState datum bad
+
+badCloseScript :: Hedgehog.Property
+badCloseScript = Hedgehog.property $ do
+  initialState <- _
+  datum <- Hedgehog.forAll _
+  bad <- Hedgehog.forAll _
+  txTestBad auctionTest initialState datum bad
