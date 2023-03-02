@@ -12,8 +12,7 @@
   inputs = {
     tooling.url = "github:mlabs-haskell/mlabs-tooling.nix";
     plutus-simple-model.url = "github:mlabs-haskell/plutus-simple-model/";
-    plutarch.url = "github:Plutonomicon/plutarch-plutus/?rev=f535a6894a25e6d46d16958273769bffa8880090";
-    # plutarch has a parse error on the newest commit right now
+    plutarch.url = "github:Plutonomicon/plutarch-plutus/";
   };
 
   outputs = inputs@{ self, tooling, plutus-simple-model, plutarch, ... }: tooling.lib.mkFlake
