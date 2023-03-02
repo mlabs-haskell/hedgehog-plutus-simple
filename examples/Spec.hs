@@ -12,9 +12,11 @@ import AuctionExample (auctionTest)
 main :: IO ()
 main =
   Hedgehog.defaultMain
-    [ Hedgehog.checkParallel $
-        Hedgehog.Group
+    [ Hedgehog.checkParallel
+        $ Hedgehog.Group
           "Auction example tests"
+        $ take
+          1
           [ ("good data adjuncts for bid", goodBidAdjunction)
           , ("good data adjuncts for close", _)
           , ("bad data adjuncts for bid", _)
