@@ -3,21 +3,18 @@
 
 module Hedgehog.Plutus.Gen where
 
-import Control.Monad ((>=>))
+import Control.Monad (replicateM, when, (>=>))
+import Control.Monad.Reader (MonadReader, ReaderT (runReaderT))
+import Control.Monad.Reader.Class (asks)
 import Control.Monad.State (MonadState (get), StateT, evalStateT, modify)
 import Control.Monad.Trans (lift)
-import Data.Maybe (mapMaybe)
 
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe, isJust, mapMaybe)
 import Data.Set qualified as Set
 import Data.String (IsString (fromString))
 import Data.Vector qualified as Vector
-
-import Control.Monad (replicateM, when)
-import Control.Monad.Reader (MonadReader, ReaderT (runReaderT))
-import Control.Monad.Reader.Class (asks)
 
 import Cardano.Binary qualified as CBOR
 import Cardano.Crypto.Hash qualified as Crypto
