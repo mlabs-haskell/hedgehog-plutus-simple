@@ -49,7 +49,7 @@ initMockState users scripts cfg = (`evalStateT` 0) $ do
   ss <- scripts'
   let outputs =
         concatMap (.userOutputs) (Map.elems us)
-          ++ concatMap snd (Map.elems ss)
+          <> concatMap snd (Map.elems ss)
   pure $
     Model.Mock
       { mockUsers = fmap (.user) us
