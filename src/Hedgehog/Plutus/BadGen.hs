@@ -91,11 +91,10 @@ shouldBeNaturalGen = fmap MightBeNegative
 instance (All2 TestGen (GCode a)) => TestGen (Generically a) where
   mutationPoints _ = nsPoints (Proxy @(GCode a))
     where
-      nsPoints :: forall xss. (All2 TestGen xss) => Proxy xss -> Double
+      nsPoints :: forall k (xss :: [[k]]). (All2 TestGen xss) => Proxy xss -> Double
       nsPoints _ =
         mean
-          . hcollapse
-          . id @(->) @(NP (K Double) xss)
+          . hcollapse @[k] @[[k]] @NP @xss @Double
           $ hcpure (Proxy @(All TestGen)) npPoints'
         where
           mean as =
@@ -105,11 +104,10 @@ instance (All2 TestGen (GCode a)) => TestGen (Generically a) where
           npPoints' :: forall xs. (All TestGen xs) => K Double xs
           npPoints' = K $ npPoints (Proxy @xs)
 
-npPoints :: forall xs. (All TestGen xs) => Proxy xs -> Double
+npPoints :: forall k (xs :: [k]). (All TestGen xs) => Proxy xs -> Double
 npPoints _ =
   sum
-    . hcollapse
-    . id @(->) @(NP (K Double) xs)
+    . hcollapse @k @[k] @NP @xs @Double
     $ hcpure (Proxy @TestGen) genPoints
   where
     genPoints :: forall x. (TestGen x) => K Double x
