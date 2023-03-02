@@ -19,15 +19,23 @@ source-repository head
   type:     git
   location: https://github.com/mlabs-haskell/hedgehog-plutus-simple.git
 
+flag dev
+  default: True
+
 -- Common sections
 
 common common-lang
   ghc-options:
     -Wall -Wcompat -Wincomplete-uni-patterns -Wno-unused-do-bind
-    -Wno-partial-type-signatures -Wmissing-export-lists
-    -Wincomplete-record-updates -Wmissing-deriving-strategies
-    -Wno-name-shadowing -Wunused-foralls -fprint-explicit-foralls
-    -fprint-explicit-kinds -fwarn-missing-import-lists -Werror
+    -Wno-partial-type-signatures -Wincomplete-record-updates
+    -Wmissing-deriving-strategies -Wno-name-shadowing -Wunused-foralls
+    -fprint-explicit-foralls -fprint-explicit-kinds -Werror
+
+  if flag(dev)
+    ghc-options: -fdefer-typed-holes -Wno-typed-holes
+
+  else
+    ghc-options: -fwarn-missing-import-lists -Wmissing-export-lists
 
   build-depends:      base >=4.14
   default-extensions:
