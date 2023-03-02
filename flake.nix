@@ -42,7 +42,7 @@
         ({
           flake.config.herculesCI = {
             onPush = {
-              mainChecks.outputs.mainCheck = self.packages.hps-production-flags;
+              mainChecks.outputs.mainCheck = self.packages.x86_64-linux.hps-production-flags;
               devChecks.outputs =
                 let
                   removeMainOnly =
