@@ -105,6 +105,7 @@ library
 
   exposed-modules:
     Hedgehog.Plutus.Adjunction
+    Hedgehog.Plutus.BadGen
     Hedgehog.Plutus.Diff
     Hedgehog.Plutus.Gen
     Hedgehog.Plutus.Generics

@@ -10,13 +10,13 @@ module Hedgehog.Plutus.TestData (
   TestData (validate, generalise),
   test,
   testDataAdjunction,
-  EitherOr,
+  EitherOr (EitherOr),
   eitherOr,
   shouldBeSingletonList,
   Shouldn'tExist (MaybeExists, maybeExists),
   shouldBe,
   ShouldEqual (MightNotEqual),
-  ShouldBeEqualTo,
+  ShouldBeEqualTo (val),
   Mempty,
   ShouldBeNatural (MightBeNegative),
 ) where
@@ -70,7 +70,7 @@ type ShouldEqual :: Type -> Type -> Type
 newtype ShouldEqual val a = MightNotEqual a
   deriving stock (Eq, Show)
 
-instance (Eq a, ShouldBeEqualTo val a) => TestData (ShouldEqual val a) where
+instance (ShouldBeEqualTo val a) => TestData (ShouldEqual val a) where
   type Good (ShouldEqual val a) = ()
 
   validate (MightNotEqual gen)
@@ -80,13 +80,13 @@ instance (Eq a, ShouldBeEqualTo val a) => TestData (ShouldEqual val a) where
   generalise () = MightNotEqual $ val (Proxy @val)
 
 type ShouldBeEqualTo :: Type -> Type -> Constraint
-class ShouldBeEqualTo val a | val -> a where
+class (Eq a) => ShouldBeEqualTo val a | val -> a where
   val :: Proxy val -> a
 
 type Mempty :: Type -> Type
 data Mempty a
 
-instance (Monoid a) => ShouldBeEqualTo (Mempty a) a where val _ = mempty
+instance (Eq a, Monoid a) => ShouldBeEqualTo (Mempty a) a where val _ = mempty
 
 {- | A 'TestData' instance representing either a fixed 'bad' value or a
  sub-'TestData' instance for 'good'.
