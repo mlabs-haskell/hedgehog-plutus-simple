@@ -3,12 +3,13 @@
 {- HLINT ignore "Redundant bracket" -}
 module Hedgehog.Plutus.TxTest (
   TxTest (TxTest),
-  txTest,
   omitted,
-  txTestBadAdjunction,
-  txTestGoodAdjunction,
+  resolveOmitted,
+  txTest,
   txTestBad,
+  txTestBadAdjunction,
   txTestGood,
+  txTestGoodAdjunction,
 ) where
 
 import PlutusLedgerApi.V2 qualified as Plutus
