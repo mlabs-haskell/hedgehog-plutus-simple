@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -58,7 +59,9 @@ import GHC.Natural (Natural)
 import Hedgehog.Plutus.TestData (
   EitherOr,
   Good,
+  Mempty,
   ShouldBeNatural,
+  ShouldEqual,
   TestData (generalise, validate),
  )
 
@@ -241,3 +244,12 @@ genTN = TokenName . toBuiltin <$> bytes (Range.linear 0 32)
 
 fromHexString :: (IsString b, MonadGen m) => Int -> m b
 fromHexString n = fromString <$> replicateM (2 * n) hexit
+
+class TestData a => GenGood a where
+  genGood :: GenContext (Good a)
+
+instance (Monoid a, Eq a) => GenGood (ShouldEqual (Mempty a) a) where
+  genGood = pure mempty
+
+instance GenGood good => GenGood (EitherOr bad good) where
+  genGood = genGood @good

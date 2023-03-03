@@ -159,6 +159,7 @@ test-suite examples
     , bytestring
     , cardano-simple
     , containers
+    , generics-sop
     , hedgehog
     , hedgehog-plutus-simple
     , mtl

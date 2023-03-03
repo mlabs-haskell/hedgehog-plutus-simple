@@ -19,6 +19,8 @@ module Hedgehog.Plutus.TestData (
   ShouldBeEqualTo,
   Mempty,
   ShouldBeNatural (MightBeNegative),
+  -- this seems needed
+  Good' (Good),
 ) where
 
 import Data.Coerce (coerce)

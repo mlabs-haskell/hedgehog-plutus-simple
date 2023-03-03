@@ -12,22 +12,28 @@ import Hedgehog.Plutus.Gen
 import AuctionExample (
   Auction (Auction),
   AuctionDatum (AuctionDatum),
-  AuctionTest (AuctionTest),
+  AuctionTest,
   AuctionTestRedeemer (TestRedeemerBid),
   Bid (Bid),
   SelfOutput (SelfOutput),
  )
 
-import Hedgehog.Plutus.TestData (Good, TestData (generalise))
+import Hedgehog.Plutus.TestData (Good, Good' (Good), TestData (generalise))
 import Hedgehog.Range qualified as Range
 
+import Generics.SOP qualified as SOP
+
 genGoodAuctionTest :: GenContext (Good AuctionTest)
-genGoodAuctionTest =
-  genValid @AuctionTest $
-    AuctionTest
-      <$> genTxOutRef
-      <*> pure (generalise ())
-      <*> genRed
+genGoodAuctionTest = do
+  ref <- genTxOutRef
+  red <- genValid genRed
+  pure $
+    SOP.SOP $
+      SOP.Z $
+        Good ref
+          SOP.:* Good mempty
+          SOP.:* Good red
+          SOP.:* SOP.Nil
 
 genRed :: GenContext AuctionTestRedeemer
 genRed =
