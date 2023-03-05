@@ -23,8 +23,6 @@ import PlutusLedgerApi.V1.Address qualified as Plutus
 import PlutusLedgerApi.V2 qualified as Plutus
 import PlutusLedgerApi.V2.Contexts qualified as Plutus
 
-import Plutus.Model qualified as Model
-
 import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction, lower, raise))
 import Hedgehog.Plutus.Diff (Diff' (Patch), diff, patch)
 import Hedgehog.Plutus.ScriptContext (
@@ -53,7 +51,13 @@ import Hedgehog.Plutus.TestData (
   shouldBeSingletonList,
  )
 import Hedgehog.Plutus.TestData.Plutus ()
-import Hedgehog.Plutus.TxTest (TxTest, omitted, txTest)
+import Hedgehog.Plutus.TxTest (
+  ChainState (..),
+  TxTest,
+  omitted,
+  txTest,
+ )
+import Plutus.Model qualified as Model
 import Week01.EnglishAuction (
   Auction,
   AuctionAction (Close, MkBid),
@@ -124,11 +128,11 @@ deriving stock instance (Show (CloseTest I))
 deriving stock instance (Show (CloseTest Good'))
 deriving via (HKD CloseTest) instance (TestData (CloseTest I))
 
-auctionTest :: TxTest ('Spend AuctionDatum) (HKD AuctionTest)
-auctionTest = txTest $ \mock datum ->
+auctionTest :: TxTest ('Spend AuctionDatum) AuctionTest
+auctionTest = txTest $ \cs datum ->
   Adjunction
-    { raise = raiseAuctionTest mock datum
-    , lower = lowerAuctionTest mock datum
+    { raise = raiseAuctionTest cs.csMock datum
+    , lower = lowerAuctionTest cs.csMock datum
     }
 
 raiseAuctionTest ::

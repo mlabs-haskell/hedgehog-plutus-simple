@@ -1,11 +1,12 @@
 {-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Hedgehog.Plutus.ScriptContext (
+  DatumOf,
+  ScriptContext (ScriptContext, contextRedeemer, contextPurpose, contextTxInfo),
+  ScriptPurpose (Spending, Minting, Rewarding, Certifying),
   ScriptTx (ScriptTx, scriptTx, scriptTxPurpose),
   ScriptType (Spend, Mint, Reward, Certify),
-  DatumOf,
-  ScriptPurpose (Spending, Minting, Rewarding, Certifying),
-  ScriptContext (ScriptContext, contextRedeemer, contextPurpose, contextTxInfo),
   plutusScriptContext,
   scriptTxValid,
 ) where
@@ -21,6 +22,8 @@ data ScriptTx st = ScriptTx
   , scriptTxPurpose :: ScriptPurpose st
   }
 
+deriving stock instance Show (ScriptPurpose st) => Show (ScriptTx st)
+
 data ScriptType = Spend Type | Mint | Reward | Certify
 
 type DatumOf :: ScriptType -> Type
@@ -35,6 +38,8 @@ data ScriptPurpose st where
   Rewarding :: Plutus.StakingCredential -> ScriptPurpose 'Reward
   Certifying :: Plutus.DCert -> ScriptPurpose 'Certify
 
+deriving stock instance Show (ScriptPurpose st)
+
 type ScriptContext :: Type -> ScriptType -> Type
 data ScriptContext redeemer st = ScriptContext
   { contextRedeemer :: !redeemer
@@ -42,8 +47,17 @@ data ScriptContext redeemer st = ScriptContext
   , contextTxInfo :: !Plutus.TxInfo
   }
 
-plutusScriptContext :: ScriptContext d st -> Plutus.ScriptContext
-plutusScriptContext = _
-
 scriptTxValid :: ScriptTx st -> Model.Mock -> Bool
 scriptTxValid = _
+
+plutusScriptContext :: ScriptContext d st -> Plutus.ScriptContext
+plutusScriptContext
+  ScriptContext
+    { contextTxInfo = txInfo
+    , contextPurpose = sp
+    } = Plutus.ScriptContext txInfo $
+    case sp of
+      Spending ref -> Plutus.Spending ref
+      Minting cs -> Plutus.Minting cs
+      Rewarding sc -> Plutus.Rewarding sc
+      Certifying cert -> Plutus.Certifying cert
