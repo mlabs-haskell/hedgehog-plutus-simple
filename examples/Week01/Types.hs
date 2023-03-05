@@ -24,7 +24,7 @@ module Week01.Types where
 import GHC.Generics (Generic)
 
 import Hedgehog.Plutus.Diff (Diff')
-import Hedgehog.Plutus.Generics (Generically (..), Simple (Simple))
+import Hedgehog.Plutus.Generics (Generically (..))
 import PlutusLedgerApi.V2 (
   CurrencySymbol,
   POSIXTime,
