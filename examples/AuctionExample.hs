@@ -128,7 +128,7 @@ deriving stock instance (Show (CloseTest I))
 deriving stock instance (Show (CloseTest Good'))
 deriving via (HKD CloseTest) instance (TestData (CloseTest I))
 
-auctionTest :: TxTest ('Spend AuctionDatum) AuctionTest
+auctionTest :: TxTest ('Spend AuctionDatum) (AuctionTest I)
 auctionTest = txTest $ \cs datum ->
   Adjunction
     { raise = raiseAuctionTest cs.csMock datum
@@ -139,7 +139,7 @@ raiseAuctionTest ::
   Model.Mock ->
   AuctionDatum ->
   ScriptContext AuctionAction ('Spend AuctionDatum) ->
-  HKD AuctionTest
+  AuctionTest I
 raiseAuctionTest
   Model.Mock {}
   inDatum@AuctionDatum {adHighestBid, adAuction = auction@Auction {aSeller}}
@@ -148,69 +148,68 @@ raiseAuctionTest
     , contextTxInfo = txi@Plutus.TxInfo {txInfoInputs, txInfoOutputs}
     , contextPurpose = Spending ref
     } =
-    HKD $
-      AuctionTest
-        { stateRef = I ref
-        , otherInputsWithDatum =
-            I $
-              MightNotEqual
-                ( filter
-                    ((/= Plutus.NoOutputDatum) . (.txInInfoResolved.txOutDatum))
-                    txInfoInputs
-                )
-        , auctionRedeemer =
-            case contextRedeemer of
-              MkBid bid@Bid {bBidder, bBid} ->
-                I $
-                  TestRedeemerBid
-                    { testRedeemerBidder = I bBidder
-                    , testRedeemerBidMagnitude =
-                        I $ MightBeNegative (bBid - minBid inDatum)
-                    , selfOutputs =
-                        I $
-                          selfOutput bid
-                            <$> shouldBeSingletonList
-                              (Plutus.getContinuingOutputs psc)
-                    , bidderOutputs =
-                        I $
-                          ( \o -> MaybeExists $ do
-                              Bid {bBid} <- adHighestBid
-                              (shouldBe (lovelaceValue bBid) o.txOutValue).maybeExists
-                          )
-                            <$> shouldBeSingletonList
-                              ( filter
-                                  ( (== Plutus.pubKeyHashAddress bBidder)
-                                      . (.txOutAddress)
-                                  )
-                                  txInfoOutputs
-                              )
-                    }
-              Close ->
-                I $
-                  TestRedeemerClose
-                    ( maybe
-                        ( I . AuctionFailure $
-                            I $
-                              shouldGetValue aSeller (token auction <> minValue)
+    AuctionTest
+      { stateRef = I ref
+      , otherInputsWithDatum =
+          I $
+            MightNotEqual
+              ( filter
+                  ((/= Plutus.NoOutputDatum) . (.txInInfoResolved.txOutDatum))
+                  txInfoInputs
+              )
+      , auctionRedeemer =
+          case contextRedeemer of
+            MkBid bid@Bid {bBidder, bBid} ->
+              I $
+                TestRedeemerBid
+                  { testRedeemerBidder = I bBidder
+                  , testRedeemerBidMagnitude =
+                      I $ MightBeNegative (bBid - minBid inDatum)
+                  , selfOutputs =
+                      I $
+                        selfOutput bid
+                          <$> shouldBeSingletonList
+                            (Plutus.getContinuingOutputs psc)
+                  , bidderOutputs =
+                      I $
+                        ( \o -> MaybeExists $ do
+                            Bid {bBid} <- adHighestBid
+                            (shouldBe (lovelaceValue bBid) o.txOutValue).maybeExists
                         )
-                        ( \Bid {bBidder, bBid} ->
-                            I $
-                              AuctionSuccess
-                                { bidderOutput =
-                                    I $
-                                      shouldGetValue
-                                        bBidder
-                                        (token auction <> minValue)
-                                , sellerOutput =
-                                    I $
-                                      shouldGetValue
-                                        aSeller
-                                        (lovelaceValue bBid)
-                                }
-                        )
-                        adHighestBid
-                    )
-        }
+                          <$> shouldBeSingletonList
+                            ( filter
+                                ( (== Plutus.pubKeyHashAddress bBidder)
+                                    . (.txOutAddress)
+                                )
+                                txInfoOutputs
+                            )
+                  }
+            Close ->
+              I $
+                TestRedeemerClose
+                  ( maybe
+                      ( I . AuctionFailure $
+                          I $
+                            shouldGetValue aSeller (token auction <> minValue)
+                      )
+                      ( \Bid {bBidder, bBid} ->
+                          I $
+                            AuctionSuccess
+                              { bidderOutput =
+                                  I $
+                                    shouldGetValue
+                                      bBidder
+                                      (token auction <> minValue)
+                              , sellerOutput =
+                                  I $
+                                    shouldGetValue
+                                      aSeller
+                                      (lovelaceValue bBid)
+                              }
+                      )
+                      adHighestBid
+                  )
+      }
     where
       psc :: Plutus.ScriptContext
       psc = plutusScriptContext sc
@@ -249,12 +248,12 @@ raiseAuctionTest
 lowerAuctionTest ::
   Model.Mock ->
   AuctionDatum ->
-  HKD AuctionTest ->
+  AuctionTest I ->
   ScriptContext AuctionAction ('Spend AuctionDatum)
 lowerAuctionTest
   Model.Mock {mockUtxos}
   inDatum@AuctionDatum {adAuction = auction@Auction {aSeller}, adHighestBid}
-  (HKD (AuctionTest (I ref) (I (MightNotEqual otherIns)) rdmr)) =
+  (AuctionTest (I ref) (I (MightNotEqual otherIns)) rdmr) =
     ScriptContext
       { contextRedeemer = redeemer
       , contextPurpose = Spending ref
