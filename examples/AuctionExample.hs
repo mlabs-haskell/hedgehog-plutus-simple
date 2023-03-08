@@ -39,13 +39,11 @@ import Hedgehog.Plutus.ScriptContext (
 import Hedgehog.Plutus.TestData (
   EitherOr,
   Good',
-  HKD (HKD),
   I (I),
   Mempty,
   ShouldBeNatural (MightBeNegative),
   ShouldEqual (MightNotEqual),
   Shouldn'tExist (MaybeExists, maybeExists),
-  TestData,
   eitherOr,
   shouldBe,
   shouldBeSingletonList,
@@ -77,7 +75,6 @@ deriving stock instance (Eq (AuctionTest I))
 deriving stock instance (Eq (AuctionTest Good'))
 deriving stock instance (Show (AuctionTest I))
 deriving stock instance (Show (AuctionTest Good'))
-deriving via (HKD AuctionTest) instance (TestData (AuctionTest I))
 
 data AuctionTestRedeemer q
   = TestRedeemerBid
@@ -95,7 +92,6 @@ deriving stock instance (Eq (AuctionTestRedeemer I))
 deriving stock instance (Eq (AuctionTestRedeemer Good'))
 deriving stock instance (Show (AuctionTestRedeemer I))
 deriving stock instance (Show (AuctionTestRedeemer Good'))
-deriving via (HKD AuctionTestRedeemer) instance (TestData (AuctionTestRedeemer I))
 
 data SelfOutput q = SelfOutput
   { selfDatum :: !(q (Shouldn'tExist (Patch AuctionDatum)))
@@ -107,7 +103,6 @@ deriving stock instance (Eq (SelfOutput I))
 deriving stock instance (Eq (SelfOutput Good'))
 deriving stock instance (Show (SelfOutput I))
 deriving stock instance (Show (SelfOutput Good'))
-deriving via (HKD SelfOutput) instance (TestData (SelfOutput I))
 
 {- | Invariant: If @datum.adHighestBid == Nothing@, then 'AuctionFailure', else
  'AuctionSuccess'
@@ -126,7 +121,6 @@ deriving stock instance (Eq (CloseTest I))
 deriving stock instance (Eq (CloseTest Good'))
 deriving stock instance (Show (CloseTest I))
 deriving stock instance (Show (CloseTest Good'))
-deriving via (HKD CloseTest) instance (TestData (CloseTest I))
 
 auctionTest :: TxTest ('Spend AuctionDatum) (AuctionTest I)
 auctionTest = txTest $ \cs datum ->

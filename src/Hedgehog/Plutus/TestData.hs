@@ -21,7 +21,6 @@ module Hedgehog.Plutus.TestData (
   ShouldBeEqualTo,
   Mempty,
   ShouldBeNatural (MightBeNegative),
-  HKD (HKD),
   I (I),
 ) where
 
@@ -145,12 +144,6 @@ newtype Good' a = G {unGood' :: Good a}
 deriving stock instance (Eq (Good a)) => Eq (Good' a)
 deriving stock instance (Show (Good a)) => Show (Good' a)
 
-newtype HKD d = HKD (d I)
-  deriving stock (GHC.Generic)
-
-deriving stock instance (Eq (d I)) => Eq (HKD d)
-deriving stock instance (Show (d I)) => Show (HKD d)
-
 instance
   forall d (xss :: [[Type]]).
   ( GHC.Generic (d I)
@@ -166,24 +159,22 @@ instance
   , AllZip2 V1 xss (GCode (d Good'))
   , AllZip2 V2 (GCode (d I)) xss
   ) =>
-  TestData (HKD d)
+  TestData (d I)
   where
-  type Good (HKD d) = d Good'
+  type Good (d I) = d Good'
 
-  validate :: HKD d -> Maybe (d Good')
-  validate (HKD d) =
+  validate :: d I -> Maybe (d Good')
+  validate =
     fmap gto
       . hsequence
       . htrans (Proxy @V1) (fmap G . validate . unI)
       . id @(->) @(SOP I xss)
       . htrans (Proxy @V2) (mapII unI)
       . gfrom
-      $ d
 
-  generalise :: d Good' -> HKD d
+  generalise :: d Good' -> d I
   generalise =
-    HKD
-      . gto
+    gto
       . htrans (Proxy @G2) (I . I . generalise . (.unGood'))
       . id @(->) @(SOP Good' xss)
       . htrans (Proxy @G1) unI
