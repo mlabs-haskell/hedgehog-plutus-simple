@@ -127,14 +127,6 @@ initMockState users scripts cfg = (`evalStateT` 0) $ do
     scripts' :: StateT Integer m (Map Plutus.ScriptHash (String, [Output]))
     scripts' = traverse (traverse mkOutputs) scripts
 
-    genesisTxId :: Plutus.TxId
-    genesisTxId =
-      Simple.fromTxId
-        . Ledger.TxId
-        . Ledger.unsafeMakeSafeHash
-        . Crypto.castHash
-        $ Crypto.hashWith CBOR.serialize' ()
-
     initStake =
       Model.Stake
         { stake'pools = Map.empty
@@ -142,3 +134,11 @@ initMockState users scripts cfg = (`evalStateT` 0) $ do
         , stake'stakes = Map.empty
         , stake'nextReward = 0
         }
+
+genesisTxId :: Plutus.TxId
+genesisTxId =
+  Simple.fromTxId
+    . Ledger.TxId
+    . Ledger.unsafeMakeSafeHash
+    . Crypto.castHash
+    $ Crypto.hashWith CBOR.serialize' ()

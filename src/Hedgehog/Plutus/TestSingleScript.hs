@@ -117,7 +117,6 @@ txRunScript
           )
           ( unsafeFromEither $
               Simple.toCardanoTx
-                (Simple.txScripts tx)
                 mockConfigNetworkId
                 params
                 extra

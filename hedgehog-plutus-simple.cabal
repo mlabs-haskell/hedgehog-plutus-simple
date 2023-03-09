@@ -113,7 +113,6 @@ library
     Hedgehog.Plutus.TestData
     Hedgehog.Plutus.TestData.Plutus
     Hedgehog.Plutus.TestSingleScript
-    Hedgehog.Plutus.TimeTest
     Hedgehog.Plutus.TxTest
 
   build-depends:
@@ -171,11 +170,22 @@ test-suite hedgehog-plutus-simple
   type:           exitcode-stdio-1.0
   main-is:        Spec.hs
   hs-source-dirs: ./test
+  other-modules:
+    Time
+    TxValid
+
   build-depends:
+    , cardano-ledger-core
     , cardano-simple
+    , containers
+    , data-default
     , hedgehog
     , hedgehog-plutus-simple
+    , plutarch
+    , plutus-core
     , plutus-ledger-api
+    , plutus-simple-model
+    , text
 
 library cat-prelude
   exposed-modules: Catagory.Prelude
