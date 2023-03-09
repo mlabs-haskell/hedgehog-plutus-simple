@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE QuantifiedConstraints #-}
@@ -7,6 +8,7 @@
 module Hedgehog.Plutus.TestData (
   Bad,
   Good,
+  Good',
   TestData (validate, generalise),
   test,
   testDataAdjunction,
@@ -19,6 +21,8 @@ module Hedgehog.Plutus.TestData (
   ShouldBeEqualTo,
   Mempty,
   ShouldBeNatural (MightBeNegative),
+  HKD (HKD),
+  I (I),
 ) where
 
 import Data.Coerce (coerce)
@@ -26,14 +30,13 @@ import Data.Kind (Constraint, Type)
 import GHC.Generics qualified as GHC
 
 import Control.Monad (guard)
-import Data.Proxy (Proxy (Proxy))
 import Numeric.Natural (Natural)
 
-import Generics.SOP qualified as SOP
-import Generics.SOP.GGP qualified as SOP
+import Generics.SOP
+import Generics.SOP.GGP
 
 import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction, lower, raise))
-import Hedgehog.Plutus.Generics (Generically (Generically), Simple (Simple))
+import Hedgehog.Plutus.Generics (Simple (Simple))
 
 type Bad :: Type -> Type
 newtype Bad a = Bad {getBad :: a}
@@ -42,7 +45,6 @@ newtype Bad a = Bad {getBad :: a}
 type TestData :: Type -> Constraint
 class TestData a where
   type Good a
-  type Good a = a
 
   validate :: a -> Maybe (Good a)
 
@@ -138,26 +140,63 @@ instance (Integral i) => TestData (ShouldBeNatural i) where
 
   generalise = MightBeNegative . fromIntegral
 
-newtype Good' a = Good {unGood' :: Good a}
+newtype Good' a = G {unGood' :: Good a}
 
 deriving stock instance (Eq (Good a)) => Eq (Good' a)
 deriving stock instance (Show (Good a)) => Show (Good' a)
 
+newtype HKD d = HKD (d I)
+  deriving stock (GHC.Generic)
+
+deriving stock instance (Eq (d I)) => Eq (HKD d)
+deriving stock instance (Show (d I)) => Show (HKD d)
+
 instance
-  ( GHC.Generic a
-  , SOP.GFrom a
-  , SOP.GTo a
-  , SOP.All2 TestData (SOP.GCode a)
+  forall d (xss :: [[Type]]).
+  ( GHC.Generic (d I)
+  , GHC.Generic (d Good')
+  , GFrom (d Good')
+  , GFrom (d I)
+  , GTo (d Good')
+  , GTo (d I)
+  , All2 TestData xss
+  , AllZip2 G1 (GCode (d Good')) xss
+  , AllZip2 G2 xss (GCode (d I))
+  , SListI2 (GCode (d Good'))
+  , AllZip2 V1 xss (GCode (d Good'))
+  , AllZip2 V2 (GCode (d I)) xss
   ) =>
-  TestData (Generically a)
+  TestData (HKD d)
   where
-  type Good (Generically a) = SOP.SOP Good' (SOP.GCode a)
+  type Good (HKD d) = d Good'
 
-  validate (Generically a) =
-    SOP.hctraverse' (Proxy @TestData) (\(SOP.I gen) -> Good <$> validate gen) $
-      SOP.gfrom a
+  validate :: HKD d -> Maybe (d Good')
+  validate (HKD d) =
+    fmap gto
+      . hsequence
+      . htrans (Proxy @V1) (fmap G . validate . unI)
+      . id @(->) @(SOP I xss)
+      . htrans (Proxy @V2) (mapII unI)
+      . gfrom
+      $ d
 
+  generalise :: d Good' -> HKD d
   generalise =
-    Generically
-      . SOP.gto
-      . SOP.hcmap (Proxy @TestData) (SOP.I . generalise . (.unGood'))
+    HKD
+      . gto
+      . htrans (Proxy @G2) (I . I . generalise . (.unGood'))
+      . id @(->) @(SOP Good' xss)
+      . htrans (Proxy @G1) unI
+      . gfrom
+
+class (x ~ Good' y) => G1 x y
+instance (x ~ Good' y) => G1 x y
+
+class (I x ~ y, TestData x) => G2 x y
+instance (I x ~ y, TestData x) => G2 x y
+
+class (Good' x ~ y, TestData x) => V1 x y
+instance (Good' x ~ y, TestData x) => V1 x y
+
+class (x ~ I y) => V2 x y
+instance (x ~ I y) => V2 x y
