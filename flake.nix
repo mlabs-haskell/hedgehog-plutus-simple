@@ -27,6 +27,11 @@
             "${plutus-simple-model}/psm"
             "${plutus-simple-model}/cardano-simple"
           ];
+          project.modules = [
+            ({ config, ... }: {
+              enableLibraryProfiling = true;
+            })
+          ];
           toHaddock = [
             "plutarch"
             "plutus-simple-model"
