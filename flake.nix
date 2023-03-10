@@ -30,6 +30,7 @@
           project.modules = [
             ({ config, ... }: {
               enableLibraryProfiling = true;
+              packages.plutus-core.ghcOptions = ["-fexcvs" ];
             })
           ];
           toHaddock = [
