@@ -29,7 +29,7 @@ common common-lang
     -Wall -Wcompat -Wincomplete-uni-patterns -Wno-unused-do-bind
     -Wno-partial-type-signatures -Wincomplete-record-updates
     -Wmissing-deriving-strategies -Wno-name-shadowing -Wunused-foralls
-    -fprint-explicit-foralls -fprint-explicit-kinds -Werror
+    -fprint-explicit-foralls -fprint-explicit-kinds -Werror -fprof-auto
 
   if flag(dev)
     ghc-options: -fdefer-typed-holes -Wno-typed-holes

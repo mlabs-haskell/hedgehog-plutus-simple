@@ -1,7 +1,4 @@
 packages: ./.
 
 tests: true
-
-package plutus-core
-  ghc-options:
-    -fexternal-interpreter
+profiling: True

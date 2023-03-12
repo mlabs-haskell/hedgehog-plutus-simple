@@ -26,6 +26,7 @@ import Hedgehog.Plutus.Gen (genesisTxId, initMockState)
 import Hedgehog.Plutus.ScriptContext (
   ScriptPurpose (Spending),
   ScriptTx (ScriptTx),
+  ScriptType (Spend),
   scriptTx,
   scriptTxPurpose,
   scriptTxValid,
@@ -38,40 +39,31 @@ txValidTests =
     [
       ( "valid script"
       , Hedgehog.property $ do
-          m <- Hedgehog.forAllWith Model.ppMock initMock
+          m <- Hedgehog.forAllWith Model.ppMock (initMock validHash)
           Hedgehog.assert $
             scriptTxValid
-              ( ScriptTx
-                  { scriptTx =
-                      Model.spendScript
-                        validScript
-                        (Plutus.TxOutRef genesisTxId 0)
-                        (Plutus.Redeemer $ Plutus.toBuiltinData ())
-                        (Plutus.Datum $ Plutus.toBuiltinData ())
-                  , scriptTxPurpose = Spending (Plutus.TxOutRef genesisTxId 0)
-                  }
-              )
+              (tx validScript)
               m
       )
-      -- ,
-      --   ( "invalid script"
-      --   , Hedgehog.property $ do
-      --       m <- Hedgehog.forAllWith Model.ppMock initMock
-      --       Hedgehog.assert . not $ scriptTxValid _ m
-      --   )
+    ,
+      ( "invalid script"
+      , Hedgehog.property $ do
+          m <- Hedgehog.forAllWith Model.ppMock (initMock invalidHash)
+          Hedgehog.assert . not $ scriptTxValid (tx invalidScript) m
+      )
     ]
 
-initMock :: Hedgehog.Gen Model.Mock
-initMock =
+initMock :: Model.ScriptHash -> Hedgehog.Gen Model.Mock
+initMock sh =
   initMockState
     Map.empty
     ( Map.singleton
-        validHash
+        sh
         ( "script output"
         , pure
             [
               ( Plutus.TxOut
-                  { Plutus.txOutAddress = Plutus.scriptHashAddress validHash
+                  { Plutus.txOutAddress = Plutus.scriptHashAddress sh
                   , Plutus.txOutValue = Model.adaValue 1
                   , Plutus.txOutDatum =
                       Plutus.OutputDatum
@@ -85,6 +77,18 @@ initMock =
     )
     Model.defaultBabbageV2
 
+tx :: Model.Versioned Model.Validator -> ScriptTx ('Spend a)
+tx v =
+  ScriptTx
+    { scriptTx =
+        Model.spendScript
+          v
+          (Plutus.TxOutRef genesisTxId 0)
+          (Plutus.Redeemer $ Plutus.toBuiltinData ())
+          (Plutus.Datum $ Plutus.toBuiltinData ())
+    , scriptTxPurpose = Spending (Plutus.TxOutRef genesisTxId 0)
+    }
+
 validScript :: Model.Versioned Model.Validator
 validScript =
   Model.Versioned Cardano.PlutusV2
@@ -94,5 +98,17 @@ validScript =
     . either (error . Text.unpack) id
     $ compile def (plam $ \_ _ _ -> pconstant ())
 
+invalidScript :: Model.Versioned Model.Validator
+invalidScript =
+  Model.Versioned Cardano.PlutusV2
+    . Simple.Validator
+    . Simple.Script
+    . Plutarch.unScript
+    . either (error . Text.unpack) id
+    $ compile def (plam $ \_ _ _ -> perror)
+
 validHash :: Model.ScriptHash
 validHash = Model.scriptHash validScript
+
+invalidHash :: Model.ScriptHash
+invalidHash = Model.scriptHash invalidScript

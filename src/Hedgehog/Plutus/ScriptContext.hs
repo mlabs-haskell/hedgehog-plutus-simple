@@ -18,9 +18,9 @@ import Data.Kind (Type)
 import PlutusLedgerApi.V2 qualified as Plutus
 
 import Data.Bifunctor (Bifunctor (second))
+import Data.Either (isRight)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Maybe (isNothing)
 
 import Prettyprinter (Pretty, pretty, vcat)
 
@@ -77,7 +77,7 @@ instance Pretty ChainState where
 
 scriptTxValid :: ScriptTx st -> Model.Mock -> Bool
 scriptTxValid ScriptTx {scriptTx, scriptTxPurpose} m =
-  isNothing $
+  isRight $
     txRunScript
       m
       scriptTx
