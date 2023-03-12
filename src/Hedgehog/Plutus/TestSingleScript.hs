@@ -248,4 +248,5 @@ evalScript lang pparams cm script args =
     toPlutusLang Ledger.PlutusV2 = Plutus.PlutusV2
 
 unsafeFromEither :: (Show a) => Either a b -> b
-unsafeFromEither = unsafeFromEither
+unsafeFromEither (Left a) = error $ "unsafeFromEither: " <> show a
+unsafeFromEither (Right b) = b

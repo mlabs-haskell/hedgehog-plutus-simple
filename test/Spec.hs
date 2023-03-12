@@ -1,8 +1,12 @@
+import Hedgehog (checkParallel)
+import Hedgehog.Main (defaultMain)
+
+import Time (timeTests)
 import TxValid (txValidTests)
 
 main :: IO ()
 main =
-  -- [ checkParallel timeTests
-  txValidTests
-
--- ]
+  defaultMain
+    [ checkParallel timeTests
+    , checkParallel txValidTests
+    ]

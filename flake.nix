@@ -30,7 +30,7 @@
           project.modules = [
             ({ config, ... }: {
               enableLibraryProfiling = true;
-              packages.plutus-core.ghcOptions = ["-fexternal-interpreter" ];
+              packages.plutus-core.ghcOptions = [ "-fexternal-interpreter" ];
             })
           ];
           toHaddock = [
