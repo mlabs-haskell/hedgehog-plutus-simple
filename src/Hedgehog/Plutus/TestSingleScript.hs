@@ -49,6 +49,7 @@ import PlutusLedgerApi.V2 qualified as Plutus hiding (evaluateScriptCounting)
 
 import Cardano.Simple.Cardano.Class qualified as Simple
 import Cardano.Simple.Cardano.Common qualified as Simple
+import Cardano.Simple.Eval (evalScript)
 import Cardano.Simple.Ledger.Tx qualified as Simple
 import Plutus.Model qualified as Model
 import Plutus.Model.Mock.ProtocolParameters qualified as Model
@@ -57,7 +58,7 @@ txRunScript ::
   Model.Mock ->
   Model.Tx ->
   Plutus.ScriptPurpose ->
-  Maybe Plutus.EvaluationError
+  Either Plutus.EvaluationError ()
 txRunScript
   Model.Mock
     { Model.mockConfig =
@@ -94,7 +95,7 @@ txRunScript
         , Simple.IsCardanoTx era
         ) =>
         Ledger.PParams era ->
-        Maybe Plutus.EvaluationError
+        Either Plutus.EvaluationError ()
       go params =
         txRunScript'
           params
@@ -117,7 +118,6 @@ txRunScript
           )
           ( unsafeFromEither $
               Simple.toCardanoTx
-                (Simple.txScripts tx)
                 mockConfigNetworkId
                 params
                 extra
@@ -173,18 +173,34 @@ txRunScript' ::
   Ledger.UTxO era ->
   Ledger.Tx era ->
   Ledger.ScriptPurpose (Ledger.Crypto era) ->
-  Maybe Plutus.EvaluationError
+  Either Plutus.EvaluationError ()
 txRunScript' pparams ei sysS utxo tx sp = do
   let scrs = tx ^. Ledger.witsTxL . Ledger.scriptWitsL
-  sh <- sp `lookup` Alonzo.scriptsNeeded utxo tx
-  (_, lang, scr') <- Alonzo.knownToNotBe1Phase scrs (sp, sh)
-  rptr <- Ledger.strictMaybeToMaybe $ Ledger.rdptr (tx ^. Ledger.bodyTxL) sp
-  evalScript
-    lang
-    pparams
-    (Alonzo.unCostModels pparams._costmdls Map.! lang)
-    scr'
-    =<< txGetData pparams ei sysS tx utxo lang sp rptr
+  sh <-
+    orError "script hash not found in scriptsNeeded" $
+      sp `lookup` Alonzo.scriptsNeeded utxo tx
+  (_, lang, scr') <-
+    orError
+      ( "script not found in non-Phase1 scripts\n"
+          <> "scrs: "
+          <> show scrs
+          <> "\n"
+      )
+      $ Alonzo.knownToNotBe1Phase scrs (sp, sh)
+  rptr <-
+    orError "Redeemer pointer not found" $
+      Ledger.strictMaybeToMaybe $
+        Ledger.rdptr (tx ^. Ledger.bodyTxL) sp
+  maybe (Right ()) Left $
+    evalScript
+      lang
+      pparams
+      (Alonzo.unCostModels pparams._costmdls Map.! lang)
+      scr'
+      =<< txGetData pparams ei sysS tx utxo lang sp rptr
+  where
+    orError :: String -> Maybe b -> Either a b
+    orError msg = maybe (error msg) Right
 
 txGetData ::
   ( Alonzo.ExtendedUTxO era
@@ -227,26 +243,6 @@ getData dats utxo inf sp rdmr = datum <> [rdmr, Alonzo.valContext inf sp]
           Ledger.NoDatum -> Nothing
       _ -> Nothing
 
-evalScript ::
-  (HasField "_protocolVersion" (Ledger.PParams era) Ledger.ProtVer) =>
-  Ledger.Language ->
-  Ledger.PParams era ->
-  Ledger.CostModel ->
-  Plutus.SerialisedScript ->
-  [Ledger.Data era] ->
-  Maybe Plutus.EvaluationError
-evalScript lang pparams cm script args =
-  either Just (const Nothing) . snd $
-    Plutus.evaluateScriptCounting
-      (toPlutusLang lang)
-      (Alonzo.transProtocolVersion pparams._protocolVersion)
-      Plutus.Verbose
-      (Alonzo.getEvaluationContext cm)
-      script
-      (Ledger.getPlutusData <$> args)
-  where
-    toPlutusLang Ledger.PlutusV1 = Plutus.PlutusV1
-    toPlutusLang Ledger.PlutusV2 = Plutus.PlutusV2
-
 unsafeFromEither :: (Show a) => Either a b -> b
-unsafeFromEither = unsafeFromEither
+unsafeFromEither (Left a) = error $ "unsafeFromEither: " <> show a
+unsafeFromEither (Right b) = b

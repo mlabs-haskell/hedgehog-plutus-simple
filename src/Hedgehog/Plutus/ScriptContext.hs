@@ -3,6 +3,8 @@
 
 module Hedgehog.Plutus.ScriptContext (
   DatumOf,
+  ChainState (ChainState, csMock, csScripts, csMps),
+  ppChainState,
   ScriptContext (ScriptContext, contextRedeemer, contextPurpose, contextTxInfo),
   ScriptPurpose (Spending, Minting, Rewarding, Certifying),
   ScriptTx (ScriptTx, scriptTx, scriptTxPurpose),
@@ -15,7 +17,16 @@ import Data.Kind (Type)
 
 import PlutusLedgerApi.V2 qualified as Plutus
 
+import Data.Bifunctor (Bifunctor (second))
+import Data.Either (isRight)
+import Data.Map (Map)
+import Data.Map qualified as Map
+
+import Prettyprinter (Pretty, pretty, vcat)
+
 import Plutus.Model qualified as Model
+
+import Hedgehog.Plutus.TestSingleScript (txRunScript)
 
 data ScriptTx st = ScriptTx
   { scriptTx :: Model.Tx
@@ -47,17 +58,40 @@ data ScriptContext redeemer st = ScriptContext
   , contextTxInfo :: !Plutus.TxInfo
   }
 
+data ChainState = ChainState
+  { csMock :: Model.Mock
+  , csScripts :: Map Plutus.ScriptHash (Model.Versioned Model.Validator)
+  , csMps :: Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy)
+  }
+
+ppChainState :: ChainState -> String
+ppChainState = show . pretty
+
+instance Pretty ChainState where
+  pretty (ChainState mock scripts mps) =
+    vcat
+      [ "mock    : " <> pretty mock
+      , "scripts : " <> pretty (second show <$> Map.toList scripts)
+      , "steps   : " <> pretty (second show <$> Map.toList mps)
+      ]
+
 scriptTxValid :: ScriptTx st -> Model.Mock -> Bool
-scriptTxValid = _
+scriptTxValid ScriptTx {scriptTx, scriptTxPurpose} m =
+  isRight $
+    txRunScript
+      m
+      scriptTx
+      (plutusScriptPurpose scriptTxPurpose)
 
 plutusScriptContext :: ScriptContext d st -> Plutus.ScriptContext
 plutusScriptContext
   ScriptContext
     { contextTxInfo = txInfo
     , contextPurpose = sp
-    } = Plutus.ScriptContext txInfo $
-    case sp of
-      Spending ref -> Plutus.Spending ref
-      Minting cs -> Plutus.Minting cs
-      Rewarding sc -> Plutus.Rewarding sc
-      Certifying cert -> Plutus.Certifying cert
+    } = Plutus.ScriptContext txInfo (plutusScriptPurpose sp)
+
+plutusScriptPurpose :: ScriptPurpose st -> Plutus.ScriptPurpose
+plutusScriptPurpose (Spending ref) = Plutus.Spending ref
+plutusScriptPurpose (Minting cs) = Plutus.Minting cs
+plutusScriptPurpose (Rewarding sc) = Plutus.Rewarding sc
+plutusScriptPurpose (Certifying cert) = Plutus.Certifying cert

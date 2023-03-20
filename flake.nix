@@ -27,6 +27,12 @@
             "${plutus-simple-model}/psm"
             "${plutus-simple-model}/cardano-simple"
           ];
+          project.modules = [
+            ({ config, ... }: {
+              enableLibraryProfiling = true;
+              packages.plutus-core.ghcOptions = [ "-fexternal-interpreter" ];
+            })
+          ];
           toHaddock = [
             "plutarch"
             "plutus-simple-model"

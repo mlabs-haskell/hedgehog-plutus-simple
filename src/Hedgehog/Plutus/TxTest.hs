@@ -14,14 +14,13 @@ module Hedgehog.Plutus.TxTest (
   ppChainState,
 ) where
 
-import Control.Arrow (Arrow (second), first)
+import Control.Arrow (first)
 import Data.List (find, sort)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
-import Prettyprinter (Pretty, pretty, vcat)
 
 import Plutus.Model qualified as Model
 import Plutus.Model qualified as Modele
@@ -51,10 +50,12 @@ import Cardano.Ledger.TxIn qualified as Ledger
 import Hedgehog qualified
 import Hedgehog.Plutus.Adjunction (Adjunction (..), adjunctionTest)
 import Hedgehog.Plutus.ScriptContext (
+  ChainState (ChainState, csMock, csMps, csScripts),
   DatumOf,
   ScriptContext (..),
   ScriptPurpose (..),
   ScriptTx (..),
+  ppChainState,
   scriptTxValid,
  )
 import Hedgehog.Plutus.TestData (
@@ -70,23 +71,6 @@ newtype TxTest st a
         DatumOf st ->
         Adjunction (ScriptTx st) (Either (Bad a) (Good a))
       )
-
-data ChainState = ChainState
-  { csMock :: Model.Mock
-  , csScripts :: Map Plutus.ScriptHash (Model.Versioned Model.Validator)
-  , csMps :: Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy)
-  }
-
-ppChainState :: ChainState -> String
-ppChainState = show . pretty
-
-instance Pretty ChainState where
-  pretty (ChainState mock scripts mps) =
-    vcat
-      [ "mock    : " <> pretty mock
-      , "scripts : " <> pretty (second show <$> Map.toList scripts)
-      , "steps   : " <> pretty (second show <$> Map.toList mps)
-      ]
 
 {- | Given an adjunction from a 'Generalised' to a 'ScriptContext', generate
 a 'TxTest.
@@ -133,7 +117,7 @@ scriptContext
     , csScripts = scripts
     , csMps = mps
     } =
-    Adjunction {lower = lowerSc m scripts mps, raise = raiseSc m scripts}
+    Adjunction {lower = lowerSc m scripts mps, raise = raiseSc m}
 
 lowerSc ::
   forall r st.
@@ -171,13 +155,11 @@ revLookup sp m = fst <$> find ((== sp) . snd) (Map.toList m)
 -- to be a problem
 
 getTxId ::
-  Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Model.Mock ->
   Tx ->
   Extra ->
   Plutus.TxId
 getTxId
-  scripts'
   Modele.Mock
     { Model.mockConfig =
       Model.MockConfig
@@ -198,10 +180,9 @@ getTxId
         Core.PParams era ->
         Ledger.TxId (Core.Crypto era)
       go params = Ledger.txid @era . getTxBody $
-        case toCardanoTx @era scripts network params extra tx of
+        case toCardanoTx @era network params extra tx of
           Left err -> error $ "toCardanoTx failed with: " <> err
           Right ctx -> ctx
-      scripts = Map.map (fmap getValidator) scripts'
 
 getCred :: Map Plutus.TxOutRef Plutus.TxOut -> TxIn -> Plutus.Credential
 getCred utxos TxIn {txInRef} = cred
@@ -314,7 +295,6 @@ getDatum datumTable = \case
 raiseSc ::
   Plutus.FromData r =>
   Model.Mock ->
-  Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   ScriptTx st ->
   ScriptContext r st
 raiseSc
@@ -325,7 +305,6 @@ raiseSc
         { Model.mockConfigSlotConfig = slotCfg
         }
     }
-  scripts
   ScriptTx
     { scriptTxPurpose
     , scriptTx =
@@ -373,7 +352,7 @@ raiseSc
                     )
                     <$> Map.toList txRedeemers
             , Plutus.txInfoData = PlutusTx.fromList $ Map.toList txData
-            , Plutus.txInfoId = getTxId scripts mock tx extra
+            , Plutus.txInfoId = getTxId mock tx extra
             }
       }
     where
@@ -559,7 +538,7 @@ resolveOmitted
     where
       resolved =
         txinfo
-          { Plutus.txInfoId = getTxId scripts mock tx extra
+          { Plutus.txInfoId = getTxId mock tx extra
           , Plutus.txInfoInputs = inputs'
           , Plutus.txInfoSignatories =
               Set.toList . Set.fromList $
@@ -646,8 +625,8 @@ txTestBad ::
   DatumOf st ->
   Bad a ->
   m ()
-txTestBad (TxTest f) cs datum bad =
-  Hedgehog.assert $ not (scriptTxValid ((f cs datum).lower (Left bad)) cs.csMock)
+txTestBad (TxTest f) cs@ChainState {csMock} datum bad =
+  Hedgehog.assert $ not (scriptTxValid ((f cs datum).lower (Left bad)) csMock)
 
 txTestGood ::
   (Hedgehog.MonadTest m) =>
@@ -656,5 +635,5 @@ txTestGood ::
   DatumOf st ->
   Good a ->
   m ()
-txTestGood (TxTest f) cs datum good =
-  Hedgehog.assert $ scriptTxValid ((f cs datum).lower (Right good)) cs.csMock
+txTestGood (TxTest f) cs@ChainState {csMock} datum good =
+  Hedgehog.assert $ scriptTxValid ((f cs datum).lower (Right good)) csMock
