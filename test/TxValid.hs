@@ -1,11 +1,14 @@
 module TxValid (txValidTests) where
 
+import Data.Functor.Identity (Identity (runIdentity))
+
 import Data.Map qualified as Map
 import Data.Text qualified as Text
 
 import Data.Default
 
-import Hedgehog qualified
+import Test.Tasty qualified as Tasty
+import Test.Tasty.HUnit qualified as Tasty
 
 import Cardano.Ledger.Language qualified as Cardano
 import PlutusLedgerApi.V1.Address qualified as Plutus
@@ -32,50 +35,51 @@ import Hedgehog.Plutus.ScriptContext (
   scriptTxValid,
  )
 
-txValidTests :: Hedgehog.Group
+txValidTests :: Tasty.TestTree
 txValidTests =
-  Hedgehog.Group
+  Tasty.testGroup
     "txValid"
-    [
-      ( "valid script"
-      , Hedgehog.property $ do
-          m <- Hedgehog.forAllWith Model.ppMock (initMock validHash)
-          Hedgehog.assert $
+    [ Tasty.testCase
+        "valid script"
+        ( Tasty.assertBool "Valid script fails" $
             scriptTxValid
               (tx validScript)
-              m
-      )
-    ,
-      ( "invalid script"
-      , Hedgehog.property $ do
-          m <- Hedgehog.forAllWith Model.ppMock (initMock invalidHash)
-          Hedgehog.assert . not $ scriptTxValid (tx invalidScript) m
-      )
+              (initMock validHash)
+        )
+    , Tasty.testCase
+        "invalid script"
+        ( Tasty.assertBool "invalid script passes" $
+            not $
+              scriptTxValid
+                (tx invalidScript)
+                (initMock invalidHash)
+        )
     ]
 
-initMock :: Model.ScriptHash -> Hedgehog.Gen Model.Mock
+initMock :: Model.ScriptHash -> Model.Mock
 initMock sh =
-  initMockState
-    Map.empty
-    ( Map.singleton
-        sh
-        ( "script output"
-        , pure
-            [
-              ( Plutus.TxOut
-                  { Plutus.txOutAddress = Plutus.scriptHashAddress sh
-                  , Plutus.txOutValue = Model.adaValue 1
-                  , Plutus.txOutDatum =
-                      Plutus.OutputDatum
-                        (Plutus.Datum $ Plutus.toBuiltinData ())
-                  , Plutus.txOutReferenceScript = Nothing
-                  }
-              , Nothing
-              )
-            ]
-        )
-    )
-    Model.defaultBabbageV2
+  runIdentity $
+    initMockState
+      Map.empty
+      ( Map.singleton
+          sh
+          ( "script output"
+          , pure
+              [
+                ( Plutus.TxOut
+                    { Plutus.txOutAddress = Plutus.scriptHashAddress sh
+                    , Plutus.txOutValue = Model.adaValue 1
+                    , Plutus.txOutDatum =
+                        Plutus.OutputDatum
+                          (Plutus.Datum $ Plutus.toBuiltinData ())
+                    , Plutus.txOutReferenceScript = Nothing
+                    }
+                , Nothing
+                )
+              ]
+          )
+      )
+      Model.defaultBabbageV2
 
 tx :: Model.Versioned Model.Validator -> ScriptTx ('Spend a)
 tx v =

@@ -185,6 +185,9 @@ test-suite hedgehog-plutus-simple
     , plutus-core
     , plutus-ledger-api
     , plutus-simple-model
+    , tasty
+    , tasty-hedgehog
+    , tasty-hunit
     , text
 
 library cat-prelude
