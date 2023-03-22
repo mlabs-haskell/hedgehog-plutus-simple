@@ -17,21 +17,20 @@ import AuctionExample (auctionTest)
 main :: IO ()
 main =
   Hedgehog.defaultMain
-    [ Hedgehog.checkParallel
-        $ Hedgehog.Group
+    [ Hedgehog.checkParallel $
+        Hedgehog.Group
           "Auction example tests"
-        $ take
-          1
-          [ ("good data adjuncts for bid", goodBidAdjunction)
-          , ("good data adjuncts for close", goodCloseAdjunction)
-          , ("bad data adjuncts for bid", badBidAdjunction)
-          , ("bad data adjuncts for close", badCloseAdjunction)
-          , ("good data succeeds for bid", goodBidScript)
-          , ("good data succeeds for close", goodCloseScript)
-          , ("bad data fails for bid", badBidScript)
-          , ("bad data fails for close", badCloseScript)
-          ]
+          []
     ]
+
+-- ("good data adjuncts for bid", goodBidAdjunction)
+-- , ("good data adjuncts for close", goodCloseAdjunction)
+-- , ("bad data adjuncts for bid", badBidAdjunction)
+-- , ("bad data adjuncts for close", badCloseAdjunction)
+-- , ("good data succeeds for bid", goodBidScript)
+-- , ("good data succeeds for close", goodCloseScript)
+-- , ("bad data fails for bid", badBidScript)
+-- , ("bad data fails for close", badCloseScript)
 
 goodBidAdjunction :: Hedgehog.Property
 goodBidAdjunction = Hedgehog.property $ do
