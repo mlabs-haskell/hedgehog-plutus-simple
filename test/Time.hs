@@ -3,6 +3,8 @@ module Time where
 import Hedgehog (Gen, Group (Group), Property, forAll, property)
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
+import Test.Tasty qualified as Tasty
+import Test.Tasty.Hedgehog qualified as Tasty
 
 import Cardano.Simple.Ledger.Slot (Slot, SlotRange)
 import Cardano.Simple.Ledger.TimeSlot (
@@ -20,13 +22,14 @@ import PlutusLedgerApi.V2 (
 
 import Hedgehog.Plutus.Adjunction (Adjunction (Adjunction), adjunctionTest)
 
-timeTests :: Group
+timeTests :: Tasty.TestTree
 timeTests =
-  Group
-    "time adjunction"
-    [ ("from POSIX", fromPosix)
-    , ("from Slot", fromSlot)
-    ]
+  Tasty.fromGroup $
+    Group
+      "time adjunction"
+      [ ("from POSIX", fromPosix)
+      , ("from Slot", fromSlot)
+      ]
 
 fromPosix :: Property
 fromPosix = property $ do

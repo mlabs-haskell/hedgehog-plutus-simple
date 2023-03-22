@@ -1,12 +1,13 @@
-import Hedgehog (checkParallel)
-import Hedgehog.Main (defaultMain)
+import Test.Tasty
 
 import Time (timeTests)
 import TxValid (txValidTests)
 
 main :: IO ()
 main =
-  defaultMain
-    [ checkParallel timeTests
-    , checkParallel txValidTests
-    ]
+  defaultMain $
+    testGroup
+      "implementation tests"
+      [ timeTests
+      , txValidTests
+      ]
