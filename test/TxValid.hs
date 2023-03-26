@@ -81,7 +81,7 @@ initMock sh =
       )
       Model.defaultBabbageV2
 
-tx :: Model.Versioned Model.Validator -> ScriptTx ('Spend a)
+tx :: forall (a :: Type). Model.Versioned Model.Validator -> ScriptTx ('Spend a)
 tx v =
   ScriptTx
     { scriptTx =

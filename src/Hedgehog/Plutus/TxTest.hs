@@ -23,7 +23,6 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 
 import Plutus.Model qualified as Model
-import Plutus.Model qualified as Modele
 import Plutus.Model.Mock.ProtocolParameters (PParams (..))
 import Plutus.Model.V1 qualified as Plutus
 import PlutusLedgerApi.V1.Value qualified as Value
@@ -47,6 +46,7 @@ import Cardano.Ledger.Crypto (StandardCrypto)
 import Cardano.Ledger.SafeHash qualified as SafeHash
 import Cardano.Ledger.TxIn qualified as Ledger
 
+import Data.Kind (Type)
 import Hedgehog qualified
 import Hedgehog.Plutus.Adjunction (Adjunction (..), adjunctionTest)
 import Hedgehog.Plutus.ScriptContext (
@@ -55,6 +55,7 @@ import Hedgehog.Plutus.ScriptContext (
   ScriptContext (..),
   ScriptPurpose (..),
   ScriptTx (..),
+  ScriptType,
   ppChainState,
   scriptTxValid,
  )
@@ -65,6 +66,7 @@ import Hedgehog.Plutus.TestData (
   testDataAdjunction,
  )
 
+type TxTest :: ScriptType -> Type -> Type
 newtype TxTest st a
   = TxTest
       ( ChainState ->
@@ -91,7 +93,7 @@ details, which will be supplied for you:
 Just pass empty lists/maps. For 'txInfoId', you can use the 'omitted' function.
 -}
 txTest ::
-  forall r a st.
+  forall (r :: Type) (a :: Type) (st :: ScriptType).
   (TestData a, Plutus.IsData r) =>
   ( ChainState ->
     DatumOf st ->
@@ -107,7 +109,7 @@ txTest f = TxTest $ \cs datum ->
 -- the POSIXTimeRange doesn't coresponds to a SlotRange exactly
 -- the fee contains non-ada value
 scriptContext ::
-  forall r st.
+  forall (r :: Type) (st :: ScriptType).
   Plutus.IsData r =>
   ChainState ->
   Adjunction (ScriptTx st) (ScriptContext r st)
@@ -120,7 +122,7 @@ scriptContext
     Adjunction {lower = lowerSc m scripts mps, raise = raiseSc m}
 
 lowerSc ::
-  forall r st.
+  forall (r :: Type) (st :: ScriptType).
   Plutus.ToData r =>
   Model.Mock ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
@@ -160,7 +162,7 @@ getTxId ::
   Extra ->
   Plutus.TxId
 getTxId
-  Modele.Mock
+  Model.Mock
     { Model.mockConfig =
       Model.MockConfig
         { Model.mockConfigNetworkId = network
@@ -175,7 +177,7 @@ getTxId
         BabbageParams params -> go @(BabbageEra StandardCrypto) params
     where
       go ::
-        forall era.
+        forall (era :: Type).
         (IsCardanoTx era, EraTxBody era) =>
         Core.PParams era ->
         Ledger.TxId (Core.Crypto era)
@@ -230,7 +232,7 @@ mkRedMap stake cert mint inputs = mconcat [spends, mints, certs, stakes]
         | (i, sc) <- sortAndLabel $ fst <$> PlutusTx.toList stake
         ]
 
-sortAndLabel :: Ord a => [a] -> [(Integer, a)]
+sortAndLabel :: forall (a :: Type). Ord a => [a] -> [(Integer, a)]
 sortAndLabel = zip [0 ..] . sort
 
 convertInInfo' ::
@@ -259,6 +261,7 @@ convertInInfo'
     } =
     TxIn {txInRef, txInType}
     where
+      txInType :: Maybe TxInType
       txInType = Just $ case cred of
         Plutus.PubKeyCredential _pkh ->
           ConsumePublicKeyAddress
@@ -293,7 +296,8 @@ getDatum datumTable = \case
   Plutus.NoOutputDatum -> error "No output datum"
 
 raiseSc ::
-  Plutus.FromData r =>
+  forall (r :: Type) (st :: ScriptType).
+  (Plutus.FromData r) =>
   Model.Mock ->
   ScriptTx st ->
   ScriptContext r st
@@ -380,7 +384,7 @@ raiseSc
           fromMaybe (error "redeemer ptr not found") $
             Map.lookup redeemerPtr txRedeemers
 
-toPlutusSp :: ScriptPurpose st -> Plutus.ScriptPurpose
+toPlutusSp :: forall (st :: ScriptType). ScriptPurpose st -> Plutus.ScriptPurpose
 toPlutusSp = \case
   Spending ref -> Plutus.Spending ref
   Minting cs -> Plutus.Minting cs
@@ -388,8 +392,8 @@ toPlutusSp = \case
   Certifying dc -> Plutus.Certifying dc
 
 lowerScCore ::
-  forall r.
-  Plutus.ToData r =>
+  forall (r :: Type).
+  (Plutus.ToData r) =>
   Model.Mock ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
@@ -518,8 +522,8 @@ omitted :: Plutus.TxId
 omitted = error "You shouldn't read this"
 
 resolveOmitted ::
-  forall r.
-  Plutus.ToData r =>
+  forall (r :: Type).
+  (Plutus.ToData r) =>
   Model.Mock ->
   Map Plutus.ScriptHash (Model.Versioned Model.Validator) ->
   Map Plutus.CurrencySymbol (Model.Versioned Model.MintingPolicy) ->
@@ -536,6 +540,7 @@ resolveOmitted
   txinfo =
     resolved
     where
+      resolved :: Plutus.TxInfo
       resolved =
         txinfo
           { Plutus.txInfoId = getTxId mock tx extra
@@ -550,6 +555,7 @@ resolveOmitted
           , Plutus.txInfoRedeemers = redeemers'
           , Plutus.txInfoData = datums
           }
+      tx :: Tx
       Model.Tx extra tx = lowerScCore mock scripts mps sp r resolved
       -- This should always halt because
       -- extra and tx are only used in the txInfoId
@@ -558,8 +564,11 @@ resolveOmitted
       inputs =
         convertInInfo' mock redeemers' scripts datums
           <$> inputs'
+
       inputs' :: [Plutus.TxInInfo]
       inputs' = Plutus.txInfoInputs txinfo <> extraInputs
+
+      extraInputs :: [Plutus.TxInInfo]
       extraInputs =
         case sp of
           Plutus.Spending ref ->
@@ -571,6 +580,8 @@ resolveOmitted
                       Map.lookup ref utxos
                 }
           _ -> []
+
+      datums :: PlutusTx.Map Plutus.DatumHash Plutus.Datum
       datums =
         PlutusTx.fromList
           [ ( dh
@@ -583,11 +594,14 @@ resolveOmitted
                     Map.lookup txInRef utxos
           , Plutus.OutputDatumHash dh <- pure out
           ]
+
+      redeemers' :: PlutusTx.Map Plutus.ScriptPurpose Plutus.Redeemer
       redeemers' =
         PlutusTx.insert sp (Plutus.Redeemer $ Plutus.toBuiltinData r) $
           Plutus.txInfoRedeemers txinfo
 
 txTestBadAdjunction ::
+  forall (m :: Type -> Type) (a :: Type) (st :: ScriptType).
   ( Hedgehog.MonadTest m
   , Eq (Bad a)
   , Eq (Good a)
@@ -603,6 +617,7 @@ txTestBadAdjunction ::
 txTestBadAdjunction (TxTest f) cs datum = adjunctionTest (f cs datum) . Left
 
 txTestGoodAdjunction ::
+  forall (m :: Type -> Type) (a :: Type) (st :: ScriptType).
   ( Hedgehog.MonadTest m
   , Eq (Bad a)
   , Eq (Good a)
@@ -619,6 +634,7 @@ txTestGoodAdjunction (TxTest f) mock datum =
   adjunctionTest (f mock datum) . Right
 
 txTestBad ::
+  forall (m :: Type -> Type) (a :: Type) (st :: ScriptType).
   (Hedgehog.MonadTest m) =>
   TxTest st a ->
   ChainState ->

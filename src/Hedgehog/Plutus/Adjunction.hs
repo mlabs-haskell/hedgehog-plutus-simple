@@ -11,6 +11,7 @@ import Data.Kind (Type)
 import Hedgehog (annotateShow, (===))
 import Hedgehog qualified
 
+type Adjunction :: Type -> Type -> Type
 data Adjunction b a = Adjunction
   { lower :: !(a -> b)
   , raise :: !(b -> a)

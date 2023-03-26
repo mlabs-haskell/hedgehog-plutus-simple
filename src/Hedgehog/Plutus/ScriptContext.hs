@@ -28,6 +28,7 @@ import Plutus.Model qualified as Model
 
 import Hedgehog.Plutus.TestSingleScript (txRunScript)
 
+type ScriptTx :: ScriptType -> Type
 data ScriptTx st = ScriptTx
   { scriptTx :: Model.Tx
   , scriptTxPurpose :: ScriptPurpose st
@@ -35,6 +36,7 @@ data ScriptTx st = ScriptTx
 
 deriving stock instance Show (ScriptPurpose st) => Show (ScriptTx st)
 
+type ScriptType :: Type
 data ScriptType = Spend Type | Mint | Reward | Certify
 
 type DatumOf :: ScriptType -> Type
@@ -58,6 +60,7 @@ data ScriptContext redeemer st = ScriptContext
   , contextTxInfo :: !Plutus.TxInfo
   }
 
+type ChainState :: Type
 data ChainState = ChainState
   { csMock :: Model.Mock
   , csScripts :: Map Plutus.ScriptHash (Model.Versioned Model.Validator)
@@ -75,7 +78,7 @@ instance Pretty ChainState where
       , "steps   : " <> pretty (second show <$> Map.toList mps)
       ]
 
-scriptTxValid :: ScriptTx st -> Model.Mock -> Bool
+scriptTxValid :: forall (st :: ScriptType). ScriptTx st -> Model.Mock -> Bool
 scriptTxValid ScriptTx {scriptTx, scriptTxPurpose} m =
   isRight $
     txRunScript
@@ -83,14 +86,20 @@ scriptTxValid ScriptTx {scriptTx, scriptTxPurpose} m =
       scriptTx
       (plutusScriptPurpose scriptTxPurpose)
 
-plutusScriptContext :: ScriptContext d st -> Plutus.ScriptContext
+plutusScriptContext ::
+  forall (d :: Type) (st :: ScriptType).
+  ScriptContext d st ->
+  Plutus.ScriptContext
 plutusScriptContext
   ScriptContext
     { contextTxInfo = txInfo
     , contextPurpose = sp
     } = Plutus.ScriptContext txInfo (plutusScriptPurpose sp)
 
-plutusScriptPurpose :: ScriptPurpose st -> Plutus.ScriptPurpose
+plutusScriptPurpose ::
+  forall (st :: ScriptType).
+  ScriptPurpose st ->
+  Plutus.ScriptPurpose
 plutusScriptPurpose (Spending ref) = Plutus.Spending ref
 plutusScriptPurpose (Minting cs) = Plutus.Minting cs
 plutusScriptPurpose (Rewarding sc) = Plutus.Rewarding sc

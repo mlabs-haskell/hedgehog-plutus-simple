@@ -8544,11 +8544,11 @@
         "plutus": "plutus_4"
       },
       "locked": {
-        "lastModified": 1676568601,
-        "narHash": "sha256-SpaWDzk+6WweLAEPOrcOMo5Wh5+dongOQFFpupb36n8=",
+        "lastModified": 1678298798,
+        "narHash": "sha256-9eYQR57xTRt2THnobaqKjX9RpHGfpSqar7W5Bpp/ftg=",
         "owner": "mlabs-haskell",
         "repo": "mlabs-tooling.nix",
-        "rev": "097996e58595077b91f729c033ea893725827df7",
+        "rev": "f99926babf96ccab095e918b4997e9054ea4e960",
         "type": "github"
       },
       "original": {

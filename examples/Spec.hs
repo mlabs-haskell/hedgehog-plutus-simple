@@ -1,18 +1,23 @@
 module Main where
 
+import Data.Map qualified as Map
+
 import Hedgehog qualified
 import Hedgehog.Main qualified as Hedgehog
 
 import PlutusLedgerApi.V2 qualified as Plutus
 
+import Hedgehog.Plutus.Gen
+import Hedgehog.Plutus.TestData
 import Hedgehog.Plutus.TxTest (
+  ChainState (ChainState, csMock, csMps, csScripts),
   txTestBad,
   txTestBadAdjunction,
   txTestGood,
   txTestGoodAdjunction,
  )
 
-import AuctionExample (auctionTest)
+import AuctionExample
 
 main :: IO ()
 main =
@@ -20,7 +25,7 @@ main =
     [ Hedgehog.checkParallel $
         Hedgehog.Group
           "Auction example tests"
-          []
+          [("good data adjuncts for bid", goodBidAdjunction)]
     ]
 
 -- ("good data adjuncts for bid", goodBidAdjunction)
@@ -34,9 +39,33 @@ main =
 
 goodBidAdjunction :: Hedgehog.Property
 goodBidAdjunction = Hedgehog.property $ do
-  initialState <- _
+  initMock <- initMockState _ _ _
+  let initialState =
+        ChainState
+          { csMock = initMock
+          , csScripts = _
+          , csMps = Map.empty
+          }
   datum <- Hedgehog.forAll _
-  good <- Hedgehog.forAll _
+  good <- Hedgehog.forAll $ do
+    pure $
+      AuctionTest
+        { stateRef = G _
+        , otherInputsWithDatum = G ()
+        , auctionRedeemer =
+            G $
+              TestRedeemerBid
+                { testRedeemerBidder = G _
+                , testRedeemerBidMagnitude = G _
+                , selfOutputs =
+                    G $
+                      SelfOutput
+                        { selfDatum = G ()
+                        , selfValue = G ()
+                        }
+                , bidderOutputs = G ()
+                }
+        }
   txTestGoodAdjunction auctionTest initialState datum good
 
 goodCloseAdjunction :: Hedgehog.Property

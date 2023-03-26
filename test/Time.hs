@@ -1,5 +1,7 @@
 module Time where
 
+import Data.Kind (Type)
+
 import Hedgehog (Gen, Group (Group), Property, forAll, property)
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
@@ -60,7 +62,7 @@ genSlotRange = do
 genSlot :: Gen Slot
 genSlot = Gen.integral $ Range.linear 0 1_000_000
 
-genExtended :: Gen a -> Gen (Extended a)
+genExtended :: forall (a :: Type). Gen a -> Gen (Extended a)
 genExtended gen =
   Gen.choice
     [ pure NegInf

@@ -158,6 +158,7 @@ txRunScript
       outs = fmap ((mockUtxos Map.!) . Simple.txInRef) ins
 
 txRunScript' ::
+  forall (era :: Type).
   ( Alonzo.ExtendedUTxO era
   , Ledger.AlonzoEraTx era
   , Ledger.Script era ~ Alonzo.AlonzoScript era
@@ -199,10 +200,11 @@ txRunScript' pparams ei sysS utxo tx sp = do
       scr'
       =<< txGetData pparams ei sysS tx utxo lang sp rptr
   where
-    orError :: String -> Maybe b -> Either a b
+    orError :: forall (a :: Type) (b :: Type). String -> Maybe b -> Either a b
     orError msg = maybe (error msg) Right
 
 txGetData ::
+  forall (era :: Type).
   ( Alonzo.ExtendedUTxO era
   , Ledger.AlonzoEraTx era
   , Ledger.Script era ~ Alonzo.AlonzoScript era
@@ -217,14 +219,16 @@ txGetData ::
   Ledger.RdmrPtr ->
   Maybe [Ledger.Data era]
 txGetData pparams ei sysS tx utxo lang sp rptr = do
-  let ws = tx ^. Ledger.witsTxL
-      rdmr = fst $ Ledger.unRedeemers (ws ^. Ledger.rdmrsWitsL) Map.! rptr
-      dats = Ledger.unTxDats $ ws ^. Ledger.datsWitsL
+  let
+    ws = tx ^. Ledger.witsTxL
+    rdmr = fst $ Ledger.unRedeemers (ws ^. Ledger.rdmrsWitsL) Map.! rptr
+    dats = Ledger.unTxDats $ ws ^. Ledger.datsWitsL
   info <-
     either (const Nothing) Just $ Alonzo.txInfo pparams lang ei sysS utxo tx
   pure $ getData dats utxo info sp rdmr
 
 getData ::
+  forall (era :: Type).
   (Alonzo.ExtendedUTxO era) =>
   Map (Ledger.DataHash (Ledger.Crypto era)) (Ledger.Data era) ->
   Ledger.UTxO era ->
@@ -243,6 +247,6 @@ getData dats utxo inf sp rdmr = datum <> [rdmr, Alonzo.valContext inf sp]
           Ledger.NoDatum -> Nothing
       _ -> Nothing
 
-unsafeFromEither :: (Show a) => Either a b -> b
+unsafeFromEither :: forall (a :: Type) (b :: Type). (Show a) => Either a b -> b
 unsafeFromEither (Left a) = error $ "unsafeFromEither: " <> show a
 unsafeFromEither (Right b) = b

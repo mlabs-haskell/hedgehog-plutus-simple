@@ -2,6 +2,8 @@
 
 module Hedgehog.Plutus.Gen where
 
+import Data.Kind (Type)
+
 import Control.Monad ((>=>))
 import Control.Monad.State (MonadState (get), StateT, evalStateT, modify)
 import Control.Monad.Trans (lift)
@@ -25,12 +27,14 @@ import Cardano.Simple.Ledger.Slot qualified as Simple
 import Plutus.Model qualified as Model
 import Plutus.Model.Stake qualified as Model
 
+type User :: Type
 data User = User
   { user :: !Model.User
   , userName :: !String
   , userOutputs :: ![Output]
   }
 
+type Output :: Type
 data Output = Output
   { outputRef :: !Plutus.TxOutRef
   , output :: !Plutus.TxOut
@@ -38,7 +42,7 @@ data Output = Output
   }
 
 initMockState ::
-  forall m.
+  forall (m :: Type -> Type).
   (Monad m) =>
   Map String (Plutus.PubKeyHash -> m [(Plutus.TxOut, Maybe Plutus.Datum)]) ->
   Map Plutus.ScriptHash (String, m [(Plutus.TxOut, Maybe Plutus.Datum)]) ->
@@ -127,6 +131,7 @@ initMockState users scripts cfg = (`evalStateT` 0) $ do
     scripts' :: StateT Integer m (Map Plutus.ScriptHash (String, [Output]))
     scripts' = traverse (traverse mkOutputs) scripts
 
+    initStake :: Model.Stake
     initStake =
       Model.Stake
         { stake'pools = Map.empty

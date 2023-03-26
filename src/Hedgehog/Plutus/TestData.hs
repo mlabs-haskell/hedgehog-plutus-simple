@@ -8,7 +8,7 @@
 module Hedgehog.Plutus.TestData (
   Bad,
   Good,
-  Good',
+  Good' (G),
   TestData (validate, generalise),
   test,
   testDataAdjunction,

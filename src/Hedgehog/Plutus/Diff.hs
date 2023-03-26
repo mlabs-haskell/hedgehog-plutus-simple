@@ -8,6 +8,7 @@ module Hedgehog.Plutus.Diff (
   patch,
 ) where
 
+import Data.Kind (Constraint, Type)
 import GHC.Generics qualified as GHC
 
 import Data.Coerce (coerce)
@@ -38,6 +39,7 @@ import PlutusLedgerApi.V1 (
  )
 import PlutusTx.Monoid (Group (inv))
 
+type Diff' :: Type -> Constraint
 class Diff' a where
   type Patch a
 
@@ -45,15 +47,16 @@ class Diff' a where
 
   patch' :: Patch a -> a -> a
 
+type Diff :: Type -> Constraint
 class (Eq a, Diff' a) => Diff a
 instance (Eq a, Diff' a) => Diff a
 
-diff :: (Diff a) => a -> a -> Maybe (Patch a)
+diff :: forall (a :: Type). (Diff a) => a -> a -> Maybe (Patch a)
 diff a b
   | a == b = Nothing
   | otherwise = Just (diff' a b)
 
-patch :: (Diff' a) => Maybe (Patch a) -> a -> a
+patch :: forall (a :: Type). (Diff' a) => Maybe (Patch a) -> a -> a
 patch mp c = maybe c (`patch'` c) mp
 
 instance Diff' (Simple a) where
@@ -62,6 +65,7 @@ instance Diff' (Simple a) where
   diff' _ = coerce
   patch' b _ = Simple b
 
+type Patch' :: Type -> Type
 newtype Patch' a = Patch' (Maybe (Patch a))
 
 deriving stock instance (Eq (Patch a)) => Eq (Patch' a)
@@ -73,6 +77,7 @@ instance (All Diff as) => Diff' (NP I as) where
   diff' = hcliftA2 (Proxy @Diff) (\(I a) (I b) -> Patch' $ diff a b)
   patch' = hcliftA2 (Proxy @Diff) (\(Patch' p) (I c) -> I $ patch p c)
 
+type ConsPatch :: [Type] -> Type
 data ConsPatch xs = ConsPatch (NP I xs) (Maybe (Patch (NP I xs)))
 
 deriving stock instance
@@ -107,8 +112,10 @@ instance (All2 Diff xss) => Diff' (NS (NP I) xss) where
   patch' ((S ps)) (S cs) = S $ patch' ps cs
   patch' ps _ = hmap (\(ConsPatch bs _) -> bs) ps
 
+type Pair :: (k -> Type) -> k -> Type
 data Pair f a = Pair (f a) (f a)
 
+type SOPPatch :: Type -> Type
 newtype SOPPatch a = SOPPatch (NS ConsPatch (GCode a))
 
 deriving stock instance

@@ -11,7 +11,29 @@
 
 -}
 
-module AuctionExample (AuctionTest, AuctionDatum, auctionTest) where
+module AuctionExample (
+  AuctionTest (
+    AuctionTest,
+    stateRef,
+    otherInputsWithDatum,
+    auctionRedeemer
+  ),
+  AuctionTestRedeemer (
+    TestRedeemerBid,
+    testRedeemerBidder,
+    testRedeemerBidMagnitude,
+    selfOutputs,
+    bidderOutputs,
+    TestRedeemerClose
+  ),
+  SelfOutput (
+    SelfOutput,
+    selfDatum,
+    selfValue
+  ),
+  AuctionDatum,
+  auctionTest,
+) where
 
 import GHC.Generics qualified as GHC
 
