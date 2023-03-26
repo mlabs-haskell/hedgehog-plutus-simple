@@ -19,18 +19,27 @@ source-repository head
   type:     git
   location: https://github.com/mlabs-haskell/hedgehog-plutus-simple.git
 
+flag dev
+  default: True
+
 -- Common sections
 
 common common-lang
   ghc-options:
     -Wall -Wcompat -Wincomplete-uni-patterns -Wno-unused-do-bind
-    -Wno-partial-type-signatures -Wmissing-export-lists
-    -Wincomplete-record-updates -Wmissing-deriving-strategies
-    -Wno-name-shadowing -Wunused-foralls -fprint-explicit-foralls
-    -fprint-explicit-kinds -fwarn-missing-import-lists -Werror
+    -Wno-partial-type-signatures -Wincomplete-record-updates
+    -Wmissing-deriving-strategies -Wno-name-shadowing -Wunused-foralls
+    -fprint-explicit-foralls -fprint-explicit-kinds -Werror -fprof-auto
+
+  if flag(dev)
+    ghc-options: -fdefer-typed-holes -Wno-typed-holes
+
+  else
+    ghc-options: -fwarn-missing-import-lists -Wmissing-export-lists
 
   build-depends:      base >=4.14
   default-extensions:
+    NoFieldSelectors
     NoStarIsType
     BangPatterns
     BinaryLiterals
@@ -70,7 +79,6 @@ common common-lang
     NumericUnderscores
     OverloadedRecordDot
     OverloadedStrings
-    PartialTypeSignatures
     PatternGuards
     PolyKinds
     PostfixOperators
@@ -91,18 +99,96 @@ common common-lang
 
 library
   import:          common-lang
-  exposed-modules: Hedgehog.Plutus.Simple
   mixins:
     base hiding (Prelude),
     cat-prelude (Catagory.Prelude as Prelude)
 
+  exposed-modules:
+    Hedgehog.Plutus.Adjunction
+    Hedgehog.Plutus.Diff
+    Hedgehog.Plutus.Gen
+    Hedgehog.Plutus.Generics
+    Hedgehog.Plutus.ScriptContext
+    Hedgehog.Plutus.Simple
+    Hedgehog.Plutus.TestData
+    Hedgehog.Plutus.TestData.Plutus
+    Hedgehog.Plutus.TestSingleScript
+    Hedgehog.Plutus.TxTest
+
   build-depends:
+    , array
+    , cardano-binary
+    , cardano-crypto-class
+    , cardano-ledger-alonzo
+    , cardano-ledger-babbage
+    , cardano-ledger-core
+    , cardano-ledger-shelley
+    , cardano-simple
+    , cardano-slotting
     , cat-prelude
+    , containers
+    , generics-sop
     , hedgehog
+    , microlens
+    , mtl
+    , plutus-core
     , plutus-ledger-api
     , plutus-simple-model
+    , plutus-tx
+    , prettyprinter
+    , text
+    , time
+    , vector
 
   hs-source-dirs:  src
+
+test-suite examples
+  import:         common-lang
+  type:           exitcode-stdio-1.0
+  main-is:        Spec.hs
+  hs-source-dirs: ./examples
+  build-depends:
+    , aeson
+    , cardano-simple
+    , containers
+    , hedgehog
+    , hedgehog-plutus-simple
+    , plutus-ledger-api
+    , plutus-simple-model
+    , plutus-tx
+    , plutus-tx-plugin
+    , prettyprinter
+    , text
+
+  other-modules:
+    AuctionExample
+    Week01.EnglishAuction
+    Week01.Types
+
+test-suite hedgehog-plutus-simple
+  import:         common-lang
+  type:           exitcode-stdio-1.0
+  main-is:        Spec.hs
+  hs-source-dirs: ./test
+  other-modules:
+    Time
+    TxValid
+
+  build-depends:
+    , cardano-ledger-core
+    , cardano-simple
+    , containers
+    , data-default
+    , hedgehog
+    , hedgehog-plutus-simple
+    , plutarch
+    , plutus-core
+    , plutus-ledger-api
+    , plutus-simple-model
+    , tasty
+    , tasty-hedgehog
+    , tasty-hunit
+    , text
 
 library cat-prelude
   exposed-modules: Catagory.Prelude
